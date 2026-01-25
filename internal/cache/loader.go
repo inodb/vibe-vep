@@ -6,12 +6,41 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 )
+
+// LoaderType indicates the type of cache backend.
+type LoaderType int
+
+const (
+	// LoaderTypeSereal uses the VEP Sereal cache format.
+	LoaderTypeSereal LoaderType = iota
+	// LoaderTypeDuckDB uses a DuckDB database.
+	LoaderTypeDuckDB
+)
+
+// TranscriptLoader defines the interface for loading transcript data.
+type TranscriptLoader interface {
+	// Load loads all transcripts for a chromosome into the cache.
+	Load(c *Cache, chrom string) error
+	// LoadAll loads all transcripts into the cache.
+	LoadAll(c *Cache) error
+}
+
+// DetectLoaderType determines the cache type from a path.
+// Returns LoaderTypeDuckDB for .duckdb/.db files or S3 URLs,
+// otherwise returns LoaderTypeSereal.
+func DetectLoaderType(path string) LoaderType {
+	if IsDuckDB(path) {
+		return LoaderTypeDuckDB
+	}
+	return LoaderTypeSereal
+}
 
 // Loader loads transcript data from VEP cache files.
 type Loader struct {
@@ -191,13 +220,27 @@ func (l *Loader) loadRegionFile(c *Cache, path string) error {
 	}
 	defer gz.Close()
 
-	// Try to parse as JSON first (for test data)
-	// In production, this would use Sereal decoder
+	// Read all decompressed data
+	data, err := io.ReadAll(gz)
+	if err != nil {
+		return fmt.Errorf("read gzip data: %w", err)
+	}
+
 	var transcripts []*Transcript
-	if err := json.NewDecoder(gz).Decode(&transcripts); err != nil {
-		// If JSON fails, try Sereal format
-		// For now, just return the error since we don't have Sereal support yet
-		return fmt.Errorf("decode transcripts (JSON): %w", err)
+
+	// Detect format and decode
+	if IsSereal(data) {
+		// Extract chromosome from path (e.g., .../12/25000001-26000000.gz -> "12")
+		chrom := filepath.Base(filepath.Dir(path))
+		transcripts, err = DecodeSereal(data, chrom)
+		if err != nil {
+			return fmt.Errorf("decode sereal: %w", err)
+		}
+	} else {
+		// JSON fallback for test data
+		if err := json.Unmarshal(data, &transcripts); err != nil {
+			return fmt.Errorf("decode json: %w", err)
+		}
 	}
 
 	for _, t := range transcripts {

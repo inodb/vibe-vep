@@ -70,3 +70,8 @@ func (c *Cache) Chromosomes() []string {
 	sort.Strings(chroms)
 	return chroms
 }
+
+// FindTranscriptsByChrom returns all transcripts for a chromosome.
+func (c *Cache) FindTranscriptsByChrom(chrom string) []*Transcript {
+	return c.transcripts[chrom]
+}

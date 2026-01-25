@@ -53,6 +53,8 @@ func run() int {
 	switch args[0] {
 	case "annotate":
 		return runAnnotate(args[1:])
+	case "convert":
+		return runConvert(args[1:])
 	case "help":
 		printUsage()
 		return ExitSuccess
@@ -71,6 +73,7 @@ Usage:
 
 Commands:
   annotate    Annotate variants in a VCF file
+  convert     Convert VEP cache to DuckDB format
   help        Show this help message
 
 Global Options:
@@ -86,8 +89,14 @@ Examples:
   # Use VCF output format
   vibe-vep annotate -f vcf input.vcf
 
-  # Specify cache directory
+  # Use VEP Sereal cache directory
   vibe-vep annotate --cache-dir ~/.vep input.vcf
+
+  # Use DuckDB cache file
+  vibe-vep annotate --cache transcripts.duckdb input.vcf
+
+  # Convert VEP cache to DuckDB
+  vibe-vep convert --input ~/.vep --output transcripts.duckdb
 
 For more information on a command, use:
   vibe-vep <command> --help
@@ -98,6 +107,7 @@ func runAnnotate(args []string) int {
 	fs := flag.NewFlagSet("annotate", flag.ExitOnError)
 
 	var (
+		cachePath     string
 		cacheDir      string
 		species       string
 		assembly      string
@@ -106,7 +116,8 @@ func runAnnotate(args []string) int {
 		canonicalOnly bool
 	)
 
-	fs.StringVar(&cacheDir, "cache-dir", defaultCacheDir(), "VEP cache directory")
+	fs.StringVar(&cachePath, "cache", "", "Cache file (DuckDB) or directory (Sereal)")
+	fs.StringVar(&cacheDir, "cache-dir", defaultCacheDir(), "VEP cache directory (Sereal format)")
 	fs.StringVar(&species, "species", "homo_sapiens", "Species name")
 	fs.StringVar(&assembly, "assembly", "GRCh38", "Genome assembly")
 	fs.StringVar(&outputFormat, "f", "tab", "Output format: tab, vcf")
@@ -130,6 +141,7 @@ Options:
 		fmt.Fprintf(os.Stderr, `
 Examples:
   vibe-vep annotate input.vcf
+  vibe-vep annotate --cache transcripts.duckdb input.vcf
   vibe-vep annotate -f vcf -o output.vcf input.vcf
   cat input.vcf | vibe-vep annotate -
 `)
@@ -158,13 +170,38 @@ Examples:
 	}
 	defer parser.Close()
 
-	// Load cache
-	c, err := loadCache(cacheDir, species, assembly)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading cache: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Hint: Download VEP cache with: vep_install -a cf -s %s -y %s -c %s\n",
-			species, assembly, cacheDir)
-		return ExitError
+	// Determine cache path
+	effectiveCachePath := cachePath
+	if effectiveCachePath == "" {
+		effectiveCachePath = cacheDir
+	}
+
+	// Load cache (DuckDB or Sereal based on path)
+	var c *cache.Cache
+	var duckLoader *cache.DuckDBLoader
+	if cache.IsDuckDB(effectiveCachePath) {
+		// Use DuckDB cache
+		duckLoader, err = cache.NewDuckDBLoader(effectiveCachePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error opening DuckDB cache: %v\n", err)
+			return ExitError
+		}
+		defer duckLoader.Close()
+
+		c = cache.New()
+		if err := duckLoader.LoadAll(c); err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading DuckDB cache: %v\n", err)
+			return ExitError
+		}
+	} else {
+		// Use Sereal cache
+		c, err = loadCache(effectiveCachePath, species, assembly)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading cache: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Hint: Download VEP cache with: vep_install -a cf -s %s -y %s -c %s\n",
+				species, assembly, effectiveCachePath)
+			return ExitError
+		}
 	}
 
 	// Create annotator
