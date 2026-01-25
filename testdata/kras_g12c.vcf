@@ -1,0 +1,6 @@
+##fileformat=VCFv4.2
+##reference=GRCh38
+##contig=<ID=12,length=133275309>
+##INFO=<ID=DP,Number=1,Type=Integer,Description="Total Depth">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+12	25245351	.	C	A	100	PASS	DP=50
