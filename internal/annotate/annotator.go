@@ -10,15 +10,20 @@ import (
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
 
+// TranscriptLookup defines the interface for finding transcripts at a position.
+type TranscriptLookup interface {
+	FindTranscripts(chrom string, pos int64) []*cache.Transcript
+}
+
 // Annotator annotates variants with consequence predictions.
 type Annotator struct {
-	cache        *cache.Cache
+	cache         TranscriptLookup
 	canonicalOnly bool
-	warnings     io.Writer
+	warnings      io.Writer
 }
 
 // NewAnnotator creates a new annotator with the given cache.
-func NewAnnotator(c *cache.Cache) *Annotator {
+func NewAnnotator(c TranscriptLookup) *Annotator {
 	return &Annotator{
 		cache: c,
 	}
@@ -100,7 +105,8 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 }
 
 // AnnotateAll annotates all variants from a parser.
-func (a *Annotator) AnnotateAll(parser *vcf.Parser, writer AnnotationWriter) error {
+// The parser can be any type that implements vcf.VariantParser (VCF, MAF, etc.).
+func (a *Annotator) AnnotateAll(parser vcf.VariantParser, writer AnnotationWriter) error {
 	variantCount := 0
 
 	for {

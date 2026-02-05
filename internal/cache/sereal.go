@@ -24,6 +24,16 @@ func IsSereal(data []byte) bool {
 		matchMagic(data[:4], serealMagicHighBit)
 }
 
+// IsPerlStorable checks if data is in Perl Storable format.
+// VEP cache files may use Storable format (magic: "pst0") instead of Sereal.
+func IsPerlStorable(data []byte) bool {
+	if len(data) < 4 {
+		return false
+	}
+	// Perl Storable magic bytes
+	return data[0] == 'p' && data[1] == 's' && data[2] == 't' && data[3] == '0'
+}
+
 // matchMagic compares two byte slices for equality.
 func matchMagic(a, b []byte) bool {
 	if len(a) != len(b) {

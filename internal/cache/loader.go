@@ -146,8 +146,23 @@ func (l *Loader) LoadRegion(c *Cache, chrom string, start, end int64) error {
 
 // speciesPath returns the path to the species/assembly directory.
 func (l *Loader) speciesPath() string {
-	// VEP cache structure: ~/.vep/homo_sapiens/115_GRCh38/
-	// We simplify to: {cacheDir}/{species}/{species}_{assembly}/
+	// VEP cache structure varies:
+	// - Ensembl format: ~/.vep/homo_sapiens/112_GRCh37/
+	// - Alternative: ~/.vep/homo_sapiens/homo_sapiens_GRCh37/
+	speciesDir := filepath.Join(l.cacheDir, l.species)
+
+	// Try to find the correct version directory by scanning for *_{assembly} pattern
+	entries, err := os.ReadDir(speciesDir)
+	if err == nil {
+		suffix := "_" + l.assembly
+		for _, entry := range entries {
+			if entry.IsDir() && strings.HasSuffix(entry.Name(), suffix) {
+				return filepath.Join(speciesDir, entry.Name())
+			}
+		}
+	}
+
+	// Fallback to legacy format
 	assemblyDir := fmt.Sprintf("%s_%s", l.species, l.assembly)
 	return filepath.Join(l.cacheDir, l.species, assemblyDir)
 }
@@ -236,6 +251,9 @@ func (l *Loader) loadRegionFile(c *Cache, path string) error {
 		if err != nil {
 			return fmt.Errorf("decode sereal: %w", err)
 		}
+	} else if IsPerlStorable(data) {
+		// VEP cache uses Perl Storable format which we don't support yet
+		return fmt.Errorf("VEP cache is in Perl Storable format (not supported). Use VEP's cache installer with --convert flag to convert to JSON, or download a pre-converted cache")
 	} else {
 		// JSON fallback for test data
 		if err := json.Unmarshal(data, &transcripts); err != nil {
