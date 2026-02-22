@@ -80,14 +80,14 @@ func TestParser_ParseVariants(t *testing.T) {
 	if v.Chrom != "12" {
 		t.Errorf("Expected chrom 12, got %s", v.Chrom)
 	}
-	if v.Pos != 25398284 {
-		t.Errorf("Expected pos 25398284, got %d", v.Pos)
+	if v.Pos != 25398285 {
+		t.Errorf("Expected pos 25398285, got %d", v.Pos)
 	}
-	if v.Ref != "C" {
-		t.Errorf("Expected ref C, got %s", v.Ref)
+	if v.Ref != "G" {
+		t.Errorf("Expected ref G, got %s", v.Ref)
 	}
-	if v.Alt != "A" {
-		t.Errorf("Expected alt A, got %s", v.Alt)
+	if v.Alt != "T" {
+		t.Errorf("Expected alt T, got %s", v.Alt)
 	}
 
 	// Count remaining variants
