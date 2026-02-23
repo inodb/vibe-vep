@@ -208,6 +208,125 @@ func TestPredictConsequence_FrameshiftVariant(t *testing.T) {
 	}
 }
 
+func TestSpliceSiteType(t *testing.T) {
+	// KRAS is reverse strand. Exon 2: Start=25245274, End=25245395
+	// Reverse strand: before exon.Start = donor, after exon.End = acceptor
+	transcript := createKRASTranscript()
+
+	tests := []struct {
+		name     string
+		pos      int64
+		expected string
+	}{
+		// After exon.End (25245395): reverse strand → acceptor
+		{"end_plus1", 25245396, ConsequenceSpliceAcceptor},
+		{"end_plus2", 25245397, ConsequenceSpliceAcceptor},
+		{"end_plus3_not_splice", 25245398, ""},
+
+		// Before exon.Start (25245274): reverse strand → donor
+		{"start_minus1", 25245273, ConsequenceSpliceDonor},
+		{"start_minus2", 25245272, ConsequenceSpliceDonor},
+		{"start_minus3_not_splice", 25245271, ""},
+
+		// In exon or deep intron → not a splice site
+		{"in_exon", 25245350, ""},
+		{"deep_intron", 25235000, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := spliceSiteType(tt.pos, transcript)
+			if got != tt.expected {
+				t.Errorf("spliceSiteType(%d) = %q, want %q", tt.pos, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSpliceSiteType_ForwardStrand(t *testing.T) {
+	// Minimal forward strand transcript to verify donor/acceptor assignment
+	transcript := &cache.Transcript{
+		ID:     "ENST_FWD",
+		Chrom:  "1",
+		Start:  1000,
+		End:    5000,
+		Strand: 1, // Forward
+		Exons: []cache.Exon{
+			{Number: 1, Start: 1000, End: 1200},
+			{Number: 2, Start: 2000, End: 2300},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		pos      int64
+		expected string
+	}{
+		// After exon 1 End (1200): forward strand → donor
+		{"exon1_end_plus1", 1201, ConsequenceSpliceDonor},
+		{"exon1_end_plus2", 1202, ConsequenceSpliceDonor},
+
+		// Before exon 2 Start (2000): forward strand → acceptor
+		{"exon2_start_minus1", 1999, ConsequenceSpliceAcceptor},
+		{"exon2_start_minus2", 1998, ConsequenceSpliceAcceptor},
+
+		// Not splice site
+		{"exon1_end_plus3", 1203, ""},
+		{"exon2_start_minus3", 1997, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := spliceSiteType(tt.pos, transcript)
+			if got != tt.expected {
+				t.Errorf("spliceSiteType(%d) = %q, want %q", tt.pos, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestPredictConsequence_SpliceDonor(t *testing.T) {
+	// KRAS reverse strand: position before exon.Start = splice donor
+	// Exon 2 Start = 25245274, so pos 25245273 = Start-1 → splice_donor_variant
+	v := &vcf.Variant{
+		Chrom: "12",
+		Pos:   25245273,
+		Ref:   "A",
+		Alt:   "G",
+	}
+
+	transcript := createKRASTranscript()
+	result := PredictConsequence(v, transcript)
+
+	if result.Consequence != ConsequenceSpliceDonor {
+		t.Errorf("Expected %s, got %s", ConsequenceSpliceDonor, result.Consequence)
+	}
+	if result.Impact != ImpactHigh {
+		t.Errorf("Expected HIGH impact, got %s", result.Impact)
+	}
+}
+
+func TestPredictConsequence_SpliceAcceptor(t *testing.T) {
+	// KRAS reverse strand: position after exon.End = splice acceptor
+	// Exon 2 End = 25245395, so pos 25245396 = End+1 → splice_acceptor_variant
+	v := &vcf.Variant{
+		Chrom: "12",
+		Pos:   25245396,
+		Ref:   "A",
+		Alt:   "G",
+	}
+
+	transcript := createKRASTranscript()
+	result := PredictConsequence(v, transcript)
+
+	if result.Consequence != ConsequenceSpliceAcceptor {
+		t.Errorf("Expected %s, got %s", ConsequenceSpliceAcceptor, result.Consequence)
+	}
+	if result.Impact != ImpactHigh {
+		t.Errorf("Expected HIGH impact, got %s", result.Impact)
+	}
+}
+
 func TestIsSpliceRegion(t *testing.T) {
 	transcript := createKRASTranscript()
 	// Exon 2: Start=25245274, End=25245395

@@ -53,8 +53,11 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 	// Check if in exon
 	exon := t.FindExon(v.Pos)
 	if exon == nil {
-		// Intronic
-		if isSpliceRegion(v.Pos, t) {
+		// Intronic - check splice sites (±1-2bp), then splice region (±3-8bp)
+		if spliceSite := spliceSiteType(v.Pos, t); spliceSite != "" {
+			result.Consequence = spliceSite
+			result.Impact = GetImpact(spliceSite)
+		} else if isSpliceRegion(v.Pos, t) {
 			result.Consequence = ConsequenceSpliceRegion + "," + ConsequenceIntronVariant
 			result.Impact = GetImpact(ConsequenceSpliceRegion)
 		} else {
@@ -280,6 +283,32 @@ func CDSToCodonPosition(cdsPos int64) (codonNumber int64, positionInCodon int) {
 	codonNumber = (cdsPos-1)/3 + 1
 	positionInCodon = int((cdsPos - 1) % 3)
 	return
+}
+
+// spliceSiteType returns the splice site consequence (splice_donor_variant or
+// splice_acceptor_variant) if the position is at ±1-2bp on the intron side of
+// an exon boundary, or empty string if not at a splice site.
+//
+// Forward strand: exon.End+1/+2 = donor, exon.Start-1/-2 = acceptor
+// Reverse strand: exon.Start-1/-2 = donor, exon.End+1/+2 = acceptor
+func spliceSiteType(pos int64, t *cache.Transcript) string {
+	for _, exon := range t.Exons {
+		// Positions after exon.End (intron side): +1, +2
+		if pos == exon.End+1 || pos == exon.End+2 {
+			if t.IsForwardStrand() {
+				return ConsequenceSpliceDonor
+			}
+			return ConsequenceSpliceAcceptor
+		}
+		// Positions before exon.Start (intron side): -1, -2
+		if pos == exon.Start-1 || pos == exon.Start-2 {
+			if t.IsForwardStrand() {
+				return ConsequenceSpliceAcceptor
+			}
+			return ConsequenceSpliceDonor
+		}
+	}
+	return ""
 }
 
 // isSpliceRegion checks if a position is within a splice region of any exon.
