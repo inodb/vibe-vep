@@ -30,9 +30,11 @@ type Exon struct {
 	Frame    int   // Reading frame (0, 1, or 2), -1 if non-coding
 }
 
-// IsProteinCoding returns true if the transcript is protein-coding.
+// IsProteinCoding returns true if the transcript has a coding sequence.
+// This includes protein_coding, nonsense_mediated_decay, IG/TR gene segments,
+// protein_coding_LoF, and any other biotype with CDS features in GENCODE.
 func (t *Transcript) IsProteinCoding() bool {
-	return t.Biotype == "protein_coding" && t.CDSStart > 0
+	return t.CDSStart > 0 && t.CDSEnd > 0
 }
 
 // IsForwardStrand returns true if the transcript is on the forward strand.

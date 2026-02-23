@@ -142,14 +142,17 @@ func normalizeConsequence(conseq string) string {
 	}
 
 	// Split on comma, normalize each term, then sort for consistent comparison
-	terms := strings.Split(conseq, ",")
-	for i, term := range terms {
+	var terms []string
+	for _, term := range strings.Split(conseq, ",") {
 		term = strings.TrimSpace(term)
 		if mapped, ok := mappings[term]; ok {
-			terms[i] = mapped
-		} else {
-			terms[i] = term
+			term = mapped
 		}
+		// Drop modifier-only biotype terms that don't change actual consequence
+		if term == "non_coding_transcript_variant" {
+			continue
+		}
+		terms = append(terms, term)
 	}
 	sort.Strings(terms)
 	return strings.Join(terms, ",")

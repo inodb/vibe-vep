@@ -68,12 +68,18 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 
 		result := PredictConsequence(v, t)
 
+		// Append biotype-specific modifier terms per VEP convention
+		consequence := result.Consequence
+		if t.Biotype == "nonsense_mediated_decay" {
+			consequence += ",NMD_transcript_variant"
+		}
+
 		ann := &Annotation{
 			VariantID:       FormatVariantID(v.Chrom, v.Pos, v.Ref, v.Alt),
 			TranscriptID:    t.ID,
 			GeneName:        t.GeneName,
 			GeneID:          t.GeneID,
-			Consequence:     result.Consequence,
+			Consequence:     consequence,
 			Impact:          result.Impact,
 			CDSPosition:     result.CDSPosition,
 			ProteinPosition: result.ProteinPosition,
