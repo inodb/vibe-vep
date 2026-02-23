@@ -1,6 +1,7 @@
 package annotate
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/inodb/vibe-vep/internal/cache"
@@ -204,6 +205,146 @@ func TestPredictConsequence_FrameshiftVariant(t *testing.T) {
 
 	if result.Impact != ImpactHigh {
 		t.Errorf("Expected HIGH impact, got %s", result.Impact)
+	}
+}
+
+func TestIsSpliceRegion(t *testing.T) {
+	transcript := createKRASTranscript()
+	// Exon 2: Start=25245274, End=25245395
+
+	tests := []struct {
+		name     string
+		pos      int64
+		expected bool
+	}{
+		// Exon side: within 3bp of exon.End (25245395)
+		{"exon_side_end_0bp", 25245395, true},
+		{"exon_side_end_1bp", 25245394, true},
+		{"exon_side_end_2bp", 25245393, true},
+		{"exon_side_end_3bp", 25245392, false},
+
+		// Exon side: within 3bp of exon.Start (25245274)
+		{"exon_side_start_0bp", 25245274, true},
+		{"exon_side_start_1bp", 25245275, true},
+		{"exon_side_start_2bp", 25245276, true},
+		{"exon_side_start_3bp", 25245277, false},
+
+		// Intron side: 3-8bp after exon.End (25245395)
+		{"intron_after_end_1bp", 25245396, false}, // splice donor/acceptor
+		{"intron_after_end_2bp", 25245397, false}, // splice donor/acceptor
+		{"intron_after_end_3bp", 25245398, true},  // splice region
+		{"intron_after_end_5bp", 25245400, true},  // splice region
+		{"intron_after_end_8bp", 25245403, true},  // splice region
+		{"intron_after_end_9bp", 25245404, false}, // too far
+
+		// Intron side: 3-8bp before exon.Start (25245274)
+		{"intron_before_start_1bp", 25245273, false}, // splice donor/acceptor
+		{"intron_before_start_2bp", 25245272, false}, // splice donor/acceptor
+		{"intron_before_start_3bp", 25245271, true},  // splice region
+		{"intron_before_start_5bp", 25245269, true},  // splice region
+		{"intron_before_start_8bp", 25245266, true},  // splice region
+		{"intron_before_start_9bp", 25245265, false}, // too far
+
+		// Middle of exon - not splice region
+		{"mid_exon", 25245350, false},
+
+		// Far into intron
+		{"deep_intron", 25235000, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isSpliceRegion(tt.pos, transcript)
+			if got != tt.expected {
+				t.Errorf("isSpliceRegion(%d) = %v, want %v", tt.pos, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestPredictConsequence_SpliceRegionIntronic(t *testing.T) {
+	// Variant 5bp into intron after exon 2 End (25245395)
+	// Position 25245400 = 5bp after exon boundary → splice_region_variant,intron_variant
+	v := &vcf.Variant{
+		Chrom: "12",
+		Pos:   25245400,
+		Ref:   "A",
+		Alt:   "G",
+	}
+
+	transcript := createKRASTranscript()
+	result := PredictConsequence(v, transcript)
+
+	expected := "splice_region_variant,intron_variant"
+	if result.Consequence != expected {
+		t.Errorf("Expected %s, got %s", expected, result.Consequence)
+	}
+	if result.Impact != "LOW" {
+		t.Errorf("Expected LOW impact, got %s", result.Impact)
+	}
+}
+
+func TestPredictConsequence_SpliceRegionCoding(t *testing.T) {
+	// Variant at exon 2 End boundary (25245395) - 0bp from boundary, exon side
+	// This is within the CDS (CDSEnd=25245384... wait, 25245395 > 25245384)
+	// Actually 25245395 > CDSEnd 25245384, so this would be 5'UTR on reverse strand
+	// Use exon 2 Start boundary instead: pos 25245274 is CDS (CDSStart=25245274)
+	// On reverse strand, CDSStart < CDSEnd, and pos >= CDSStart and pos <= CDSEnd → in CDS
+	v := &vcf.Variant{
+		Chrom: "12",
+		Pos:   25245274, // exon.Start, within 3bp of boundary, in CDS
+		Ref:   "C",
+		Alt:   "T",
+	}
+
+	transcript := createKRASTranscript()
+	result := PredictConsequence(v, transcript)
+
+	// Should have splice_region_variant appended to coding consequence
+	if !strings.Contains(result.Consequence, "splice_region_variant") {
+		t.Errorf("Expected consequence to contain splice_region_variant, got %s", result.Consequence)
+	}
+	// Primary consequence should be a coding type
+	if !strings.Contains(result.Consequence, "missense_variant") &&
+		!strings.Contains(result.Consequence, "synonymous_variant") {
+		t.Errorf("Expected coding consequence + splice_region_variant, got %s", result.Consequence)
+	}
+}
+
+func TestPredictConsequence_NoSpliceRegionMidExon(t *testing.T) {
+	// KRAS G12C at position 25245351 - middle of exon, should NOT have splice_region
+	v := &vcf.Variant{
+		Chrom: "12",
+		Pos:   25245351,
+		Ref:   "C",
+		Alt:   "A",
+	}
+
+	transcript := createKRASTranscript()
+	result := PredictConsequence(v, transcript)
+
+	if strings.Contains(result.Consequence, "splice_region_variant") {
+		t.Errorf("Expected no splice_region_variant for mid-exon variant, got %s", result.Consequence)
+	}
+	if result.Consequence != "missense_variant" {
+		t.Errorf("Expected missense_variant, got %s", result.Consequence)
+	}
+}
+
+func TestPredictConsequence_NoSpliceRegionDeepIntron(t *testing.T) {
+	// Variant deep in intron (25235000) - should be plain intron_variant
+	v := &vcf.Variant{
+		Chrom: "12",
+		Pos:   25235000,
+		Ref:   "A",
+		Alt:   "G",
+	}
+
+	transcript := createKRASTranscript()
+	result := PredictConsequence(v, transcript)
+
+	if result.Consequence != "intron_variant" {
+		t.Errorf("Expected intron_variant, got %s", result.Consequence)
 	}
 }
 

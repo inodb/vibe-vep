@@ -4,6 +4,7 @@ package output
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -116,6 +117,7 @@ func (v *ValidationWriter) WriteSummary(w io.Writer) {
 
 // normalizeConsequence normalizes consequence terms for comparison.
 // MAF and VEP may use slightly different terms for the same consequence.
+// Comma-separated terms are individually normalized and sorted for consistent comparison.
 func normalizeConsequence(conseq string) string {
 	conseq = strings.ToLower(strings.TrimSpace(conseq))
 
@@ -139,9 +141,16 @@ func normalizeConsequence(conseq string) string {
 		"5'flank":                  "upstream_gene_variant",
 	}
 
-	if mapped, ok := mappings[conseq]; ok {
-		return mapped
+	// Split on comma, normalize each term, then sort for consistent comparison
+	terms := strings.Split(conseq, ",")
+	for i, term := range terms {
+		term = strings.TrimSpace(term)
+		if mapped, ok := mappings[term]; ok {
+			terms[i] = mapped
+		} else {
+			terms[i] = term
+		}
 	}
-
-	return conseq
+	sort.Strings(terms)
+	return strings.Join(terms, ",")
 }

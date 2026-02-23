@@ -54,9 +54,13 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 	exon := t.FindExon(v.Pos)
 	if exon == nil {
 		// Intronic
-		result.Consequence = ConsequenceIntronVariant
-		result.Impact = GetImpact(result.Consequence)
-		// TODO: Check for splice region
+		if isSpliceRegion(v.Pos, t) {
+			result.Consequence = ConsequenceSpliceRegion + "," + ConsequenceIntronVariant
+			result.Impact = GetImpact(ConsequenceSpliceRegion)
+		} else {
+			result.Consequence = ConsequenceIntronVariant
+			result.Impact = GetImpact(ConsequenceIntronVariant)
+		}
 		return result
 	}
 
@@ -98,7 +102,14 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 	}
 
 	// Variant is in CDS - calculate coding effect
-	return predictCodingConsequence(v, t, exon, result)
+	result = predictCodingConsequence(v, t, exon, result)
+
+	// Append splice_region_variant if near exon boundary
+	if isSpliceRegion(v.Pos, t) {
+		result.Consequence += "," + ConsequenceSpliceRegion
+	}
+
+	return result
 }
 
 // predictCodingConsequence calculates the effect on coding sequence.
@@ -269,6 +280,35 @@ func CDSToCodonPosition(cdsPos int64) (codonNumber int64, positionInCodon int) {
 	codonNumber = (cdsPos-1)/3 + 1
 	positionInCodon = int((cdsPos - 1) % 3)
 	return
+}
+
+// isSpliceRegion checks if a position is within a splice region of any exon.
+// Per SO:0001630, splice_region_variant = within 3bp exon side or 3-8bp intron
+// side of a splice site. The 1-2bp immediately into the intron are splice
+// donor/acceptor territory, not splice region.
+func isSpliceRegion(pos int64, t *cache.Transcript) bool {
+	for _, exon := range t.Exons {
+		// Near exon Start boundary
+		// Exon side: exon.Start, exon.Start+1, exon.Start+2
+		if pos >= exon.Start && pos <= exon.Start+2 {
+			return true
+		}
+		// Intron side: 3-8bp before exon start (skip ±1,±2 = splice donor/acceptor)
+		if pos >= exon.Start-8 && pos <= exon.Start-3 {
+			return true
+		}
+
+		// Near exon End boundary
+		// Exon side: exon.End-2, exon.End-1, exon.End
+		if pos >= exon.End-2 && pos <= exon.End {
+			return true
+		}
+		// Intron side: 3-8bp after exon end
+		if pos >= exon.End+3 && pos <= exon.End+8 {
+			return true
+		}
+	}
+	return false
 }
 
 // formatCodonChange formats the codon change string with lowercase mutated base.
