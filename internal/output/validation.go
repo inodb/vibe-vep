@@ -194,19 +194,42 @@ func normalizeConsequence(conseq string) string {
 		"5'flank":                  "upstream_gene_variant",
 	}
 
-	// Split on comma, normalize each term, then sort for consistent comparison
+	// Split on comma, normalize each term
 	var terms []string
 	for _, term := range strings.Split(conseq, ",") {
 		term = strings.TrimSpace(term)
 		if mapped, ok := mappings[term]; ok {
 			term = mapped
 		}
-		// Drop modifier-only biotype terms that don't change actual consequence
-		if term == "non_coding_transcript_variant" || term == "nmd_transcript_variant" {
+		// Drop modifier-only terms that don't change the primary consequence
+		switch term {
+		case "non_coding_transcript_variant", "nmd_transcript_variant",
+			"coding_sequence_variant",
+			"splice_polypyrimidine_tract_variant", "splice_donor_region_variant",
+			"splice_donor_5th_base_variant":
 			continue
 		}
 		terms = append(terms, term)
 	}
+
+	// Drop intron_variant when a higher-impact splice term is present
+	hasSpliceSite := false
+	for _, t := range terms {
+		if t == "splice_donor_variant" || t == "splice_acceptor_variant" {
+			hasSpliceSite = true
+			break
+		}
+	}
+	if hasSpliceSite {
+		filtered := terms[:0]
+		for _, t := range terms {
+			if t != "intron_variant" {
+				filtered = append(filtered, t)
+			}
+		}
+		terms = filtered
+	}
+
 	sort.Strings(terms)
 	return strings.Join(terms, ",")
 }

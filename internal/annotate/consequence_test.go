@@ -327,6 +327,111 @@ func TestPredictConsequence_SpliceAcceptor(t *testing.T) {
 	}
 }
 
+func TestPredictConsequence_IndelSpanningSpliceSite(t *testing.T) {
+	transcript := createKRASTranscript()
+	// KRAS is reverse strand. Exon 2: Start=25245274, End=25245395
+	// Splice donor at exon.Start-1 (25245273), exon.Start-2 (25245272)
+	// Splice acceptor at exon.End+1 (25245396), exon.End+2 (25245397)
+
+	tests := []struct {
+		name       string
+		pos        int64
+		ref        string
+		alt        string
+		wantSplice bool
+		wantType   string
+	}{
+		{
+			// Deletion starting in splice region (5bp from boundary), spanning into splice site
+			// pos=25245269 (splice region), ref=6bp, end=25245274 → hits exon.Start
+			// But exon.Start is exon side, not splice site. Need to span to Start-1 or Start-2.
+			// pos=25245268, ref=6bp, end=25245273 → hits Start-1 (splice donor for reverse)
+			name:       "intron_del_spanning_donor",
+			pos:        25245268,
+			ref:        "AAAAAA",
+			alt:        "A",
+			wantSplice: true,
+			wantType:   ConsequenceSpliceDonor,
+		},
+		{
+			// Deletion starting in splice region after exon end, spanning into splice acceptor
+			// pos=25245398 (splice region), ref=AAAA (4bp), end=25245401
+			// But we need to span back to 25245396 or 25245397 (acceptor sites)
+			// pos=25245395 (exon end), ref=AAAA (4bp), end=25245398 → doesn't hit +1/+2 from start pos
+			// pos=25245394, ref=AAAAAA (6bp), end=25245399 → covers 25245396 (End+1=acceptor)
+			// Actually for intronic start: pos=25245398, ref is 6bp → end=25245403
+			// That doesn't hit 25245396/25245397. Let me pick a start that spans.
+			// pos=25245393, ref=AAAAAAAAA (9bp), end=25245401 → covers 25245396 (acceptor)
+			// But 25245393 is in the exon, not intronic.
+			// For a truly intronic start that spans acceptor:
+			// pos=25245400 (intron, splice region), ref=AAAAAA → too far right
+			// Actually let's use: deletion starting 8bp out that spans to End+1
+			// pos=25245390 (in exon), ref=8bp, end=25245397 → covers 25245396,25245397 (acceptor)
+			name:       "exon_del_spanning_acceptor",
+			pos:        25245390,
+			ref:        "AAAAAAAA",
+			alt:        "A",
+			wantSplice: true,
+			wantType:   ConsequenceSpliceAcceptor,
+		},
+		{
+			// Short deletion fully within intron, not reaching splice site
+			name:       "intron_del_no_splice",
+			pos:        25245265,
+			ref:        "AAA",
+			alt:        "A",
+			wantSplice: false,
+		},
+		{
+			// SNV - should not trigger indel splice detection
+			name:       "snv_at_splice_region",
+			pos:        25245400,
+			ref:        "A",
+			alt:        "G",
+			wantSplice: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &vcf.Variant{Chrom: "12", Pos: tt.pos, Ref: tt.ref, Alt: tt.alt}
+			got := indelSpliceSiteType(v, transcript)
+			if tt.wantSplice {
+				if got != tt.wantType {
+					t.Errorf("indelSpliceSiteType() = %q, want %q", got, tt.wantType)
+				}
+			} else {
+				if got != "" {
+					t.Errorf("indelSpliceSiteType() = %q, want empty", got)
+				}
+			}
+		})
+	}
+}
+
+func TestPredictConsequence_DeletionSpanningSpliceDonor(t *testing.T) {
+	// KRAS reverse strand. Deletion starting in intron near exon 2 Start boundary,
+	// spanning into the splice donor site (exon.Start-1, exon.Start-2).
+	// Exon 2 Start = 25245274. Donor at 25245273, 25245272.
+	// Deletion: pos=25245268, ref=6bp → end=25245273, hits donor site.
+	v := &vcf.Variant{
+		Chrom: "12",
+		Pos:   25245268,
+		Ref:   "AAAAAA",
+		Alt:   "A",
+	}
+
+	transcript := createKRASTranscript()
+	result := PredictConsequence(v, transcript)
+
+	if result.Consequence != ConsequenceSpliceDonor {
+		t.Errorf("Expected %s, got %s", ConsequenceSpliceDonor, result.Consequence)
+	}
+	if result.Impact != ImpactHigh {
+		t.Errorf("Expected HIGH impact, got %s", result.Impact)
+	}
+}
+
 func TestIsSpliceRegion(t *testing.T) {
 	transcript := createKRASTranscript()
 	// Exon 2: Start=25245274, End=25245395

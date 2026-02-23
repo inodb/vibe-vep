@@ -54,7 +54,11 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 	exon := t.FindExon(v.Pos)
 	if exon == nil {
 		// Intronic - check splice sites (±1-2bp), then splice region (±3-8bp)
-		if spliceSite := spliceSiteType(v.Pos, t); spliceSite != "" {
+		// For indels, check the entire span for splice site overlap
+		if spliceSite := indelSpliceSiteType(v, t); spliceSite != "" {
+			result.Consequence = spliceSite
+			result.Impact = GetImpact(spliceSite)
+		} else if spliceSite := spliceSiteType(v.Pos, t); spliceSite != "" {
 			result.Consequence = spliceSite
 			result.Impact = GetImpact(spliceSite)
 		} else if isSpliceRegion(v.Pos, t) {
@@ -107,8 +111,12 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 	// Variant is in CDS - calculate coding effect
 	result = predictCodingConsequence(v, t, exon, result)
 
-	// Append splice_region_variant if near exon boundary
-	if isSpliceRegion(v.Pos, t) {
+	// For indels spanning into a splice site, upgrade to splice donor/acceptor
+	if spliceSite := indelSpliceSiteType(v, t); spliceSite != "" {
+		result.Consequence = spliceSite
+		result.Impact = GetImpact(spliceSite)
+	} else if isSpliceRegion(v.Pos, t) {
+		// Append splice_region_variant if near exon boundary
 		result.Consequence += "," + ConsequenceSpliceRegion
 	}
 
@@ -306,6 +314,24 @@ func spliceSiteType(pos int64, t *cache.Transcript) string {
 				return ConsequenceSpliceAcceptor
 			}
 			return ConsequenceSpliceDonor
+		}
+	}
+	return ""
+}
+
+// indelSpliceSiteType checks if an indel's span overlaps a splice site.
+// For deletions, the affected range is [pos, pos+len(ref)-1]. If any position
+// in that range hits a ±1-2bp splice site, returns the splice consequence.
+// Returns empty string for SNVs or if no splice site is hit.
+func indelSpliceSiteType(v *vcf.Variant, t *cache.Transcript) string {
+	if !v.IsIndel() || len(v.Ref) <= 1 {
+		return ""
+	}
+
+	endPos := v.Pos + int64(len(v.Ref)) - 1
+	for pos := v.Pos; pos <= endPos; pos++ {
+		if site := spliceSiteType(pos, t); site != "" {
+			return site
 		}
 	}
 	return ""
