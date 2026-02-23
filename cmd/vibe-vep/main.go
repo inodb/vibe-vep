@@ -239,7 +239,7 @@ Examples:
 			return ExitError
 		}
 		transcriptCache = c
-	} else if gtfPath, fastaPath, found := FindGENCODEFiles(assembly); found {
+	} else if gtfPath, fastaPath, canonicalPath, found := FindGENCODEFiles(assembly); found {
 		// Use GENCODE cache (auto-detected)
 		fmt.Fprintf(os.Stderr, "Using GENCODE cache for %s\n", assembly)
 		fmt.Fprintf(os.Stderr, "  GTF: %s\n", gtfPath)
@@ -249,6 +249,19 @@ Examples:
 
 		c := cache.New()
 		loader := cache.NewGENCODELoader(gtfPath, fastaPath)
+
+		// Load canonical transcript overrides if available
+		if canonicalPath != "" {
+			fmt.Fprintf(os.Stderr, "  Canonical overrides: %s\n", canonicalPath)
+			overrides, err := cache.LoadCanonicalOverrides(canonicalPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not load canonical overrides: %v\n", err)
+			} else {
+				loader.SetCanonicalOverrides(overrides)
+				fmt.Fprintf(os.Stderr, "  Loaded %d canonical overrides\n", len(overrides))
+			}
+		}
+
 		if err := loader.Load(c); err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading GENCODE cache: %v\n", err)
 			return ExitError

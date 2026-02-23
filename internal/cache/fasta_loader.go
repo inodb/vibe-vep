@@ -7,13 +7,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 )
 
 // FASTALoader loads CDS sequences from GENCODE FASTA files.
 type FASTALoader struct {
 	path      string
-	sequences map[string]string // transcript_id -> sequence
+	sequences map[string]string    // transcript_id -> full sequence
+	cdsRanges map[string][2]int    // transcript_id -> [cdsStart, cdsEnd] (1-based from header)
 }
 
 // NewFASTALoader creates a new FASTA loader.
@@ -21,6 +23,7 @@ func NewFASTALoader(path string) *FASTALoader {
 	return &FASTALoader{
 		path:      path,
 		sequences: make(map[string]string),
+		cdsRanges: make(map[string][2]int),
 	}
 }
 
@@ -70,6 +73,10 @@ func (l *FASTALoader) parseFASTA(reader io.Reader) error {
 
 			// Parse new header
 			currentID = l.parseHeader(line)
+			// Parse and store CDS range from header
+			if cdsStart, cdsEnd, ok := parseCDSRange(line); ok {
+				l.cdsRanges[currentID] = [2]int{cdsStart, cdsEnd}
+			}
 			currentSeq.Reset()
 		} else {
 			// Accumulate sequence
@@ -115,16 +122,56 @@ func (l *FASTALoader) parseHeader(header string) string {
 	return stripVersion(header)
 }
 
+// parseCDSRange extracts CDS start and end positions from a GENCODE FASTA header.
+// Header format: >ENST...|...|CDS:90-920|...
+// Returns 1-based start and end positions.
+func parseCDSRange(header string) (start, end int, ok bool) {
+	// Look for CDS:start-end pattern in pipe-delimited fields
+	for _, field := range strings.Split(header, "|") {
+		field = strings.TrimSpace(field)
+		if !strings.HasPrefix(field, "CDS:") {
+			continue
+		}
+		rangeStr := field[4:] // strip "CDS:"
+		parts := strings.SplitN(rangeStr, "-", 2)
+		if len(parts) != 2 {
+			return 0, 0, false
+		}
+		s, err1 := strconv.Atoi(parts[0])
+		e, err2 := strconv.Atoi(parts[1])
+		if err1 != nil || err2 != nil {
+			return 0, 0, false
+		}
+		return s, e, true
+	}
+	return 0, 0, false
+}
+
 // GetSequence returns the CDS sequence for a transcript ID.
+// If CDS boundaries were parsed from the FASTA header, only the CDS portion is returned.
 // The ID should be without version suffix (e.g., "ENST00000311936").
 func (l *FASTALoader) GetSequence(transcriptID string) string {
 	// Try without version first
 	id := stripVersion(transcriptID)
-	if seq, ok := l.sequences[id]; ok {
-		return seq
+	seq, ok := l.sequences[id]
+	if !ok {
+		seq, ok = l.sequences[transcriptID]
+		if !ok {
+			return ""
+		}
+		id = transcriptID
 	}
-	// Try original ID
-	return l.sequences[transcriptID]
+
+	// Extract CDS portion if boundaries are known
+	if cdsRange, hasCDS := l.cdsRanges[id]; hasCDS {
+		start := cdsRange[0] - 1 // Convert 1-based to 0-based
+		end := cdsRange[1]
+		if start >= 0 && end <= len(seq) && start < end {
+			return seq[start:end]
+		}
+	}
+
+	return seq
 }
 
 // SequenceCount returns the number of loaded sequences.

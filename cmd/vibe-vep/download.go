@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/inodb/vibe-vep/internal/cache"
 )
 
 // GENCODE FTP URLs
@@ -117,6 +119,14 @@ After downloading, vibe-vep will automatically detect and use these files.
 			fmt.Fprintf(os.Stderr, "Error downloading FASTA: %v\n", err)
 			return ExitError
 		}
+	}
+
+	// Download Genome Nexus canonical transcript overrides
+	canonicalURL := cache.CanonicalFileURL(assembly)
+	canonicalFile := filepath.Join(destDir, cache.CanonicalFileName())
+	if err := downloadFile(canonicalURL, canonicalFile); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not download canonical transcript overrides: %v\n", err)
+		// Non-fatal: tool still works without overrides
 	}
 
 	fmt.Printf("\nDownload complete!\n")
@@ -237,11 +247,11 @@ func DefaultGENCODEPath(assembly string) string {
 }
 
 // FindGENCODEFiles looks for GENCODE files in the default location.
-// Returns gtfPath, fastaPath, and whether files were found.
-func FindGENCODEFiles(assembly string) (gtfPath, fastaPath string, found bool) {
+// Returns gtfPath, fastaPath, canonicalPath, and whether files were found.
+func FindGENCODEFiles(assembly string) (gtfPath, fastaPath, canonicalPath string, found bool) {
 	dir := DefaultGENCODEPath(assembly)
 	if dir == "" {
-		return "", "", false
+		return "", "", "", false
 	}
 
 	// Look for GTF file
@@ -255,7 +265,7 @@ func FindGENCODEFiles(assembly string) (gtfPath, fastaPath string, found bool) {
 
 	matches, err := filepath.Glob(filepath.Join(dir, gtfPattern))
 	if err != nil || len(matches) == 0 {
-		return "", "", false
+		return "", "", "", false
 	}
 	gtfPath = matches[0]
 
@@ -268,11 +278,15 @@ func FindGENCODEFiles(assembly string) (gtfPath, fastaPath string, found bool) {
 	}
 
 	matches, err = filepath.Glob(filepath.Join(dir, fastaPattern))
-	if err != nil || len(matches) == 0 {
-		// GTF found but no FASTA - still usable
-		return gtfPath, "", true
+	if err == nil && len(matches) > 0 {
+		fastaPath = matches[0]
 	}
-	fastaPath = matches[0]
 
-	return gtfPath, fastaPath, true
+	// Look for canonical transcript overrides
+	cPath := filepath.Join(dir, cache.CanonicalFileName())
+	if _, err := os.Stat(cPath); err == nil {
+		canonicalPath = cPath
+	}
+
+	return gtfPath, fastaPath, canonicalPath, true
 }

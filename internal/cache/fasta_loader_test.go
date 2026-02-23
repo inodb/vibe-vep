@@ -120,3 +120,82 @@ ATGACTGAA
 		}
 	}
 }
+
+func TestFASTALoader_CDSExtraction(t *testing.T) {
+	// Full mRNA with UTR5 + CDS + UTR3; CDS is positions 11-19 (1-based)
+	// UTR5: AAAAAAAAAA (10 bases), CDS: ATGCCCGAA (9 bases), UTR3: TTTTTTTTTT (10 bases)
+	fastaContent := `>ENST00000999999.1|ENSG00000999999.1|GENE-201|GENE|29|UTR5:1-10|CDS:11-19|UTR3:20-29|
+AAAAAAAAAAATGCCCGAATTTTTTTTTT
+`
+
+	loader := NewFASTALoader("")
+	if err := loader.parseFASTA(strings.NewReader(fastaContent)); err != nil {
+		t.Fatalf("parseFASTA() error = %v", err)
+	}
+
+	seq := loader.GetSequence("ENST00000999999")
+	expected := "ATGCCCGAA"
+	if seq != expected {
+		t.Errorf("GetSequence(ENST00000999999) = %q, want %q (CDS only)", seq, expected)
+	}
+}
+
+func TestFASTALoader_CDSExtractionNoCDSAnnotation(t *testing.T) {
+	// Header without CDS annotation — should return the full sequence
+	fastaContent := `>ENST00000888888.1|ENSG00000888888.1|GENE2-201|GENE2|30|
+ATGCCCGAAATGCCCGAAATGCCCGAATTT
+`
+
+	loader := NewFASTALoader("")
+	if err := loader.parseFASTA(strings.NewReader(fastaContent)); err != nil {
+		t.Fatalf("parseFASTA() error = %v", err)
+	}
+
+	seq := loader.GetSequence("ENST00000888888")
+	expected := "ATGCCCGAAATGCCCGAAATGCCCGAATTT"
+	if seq != expected {
+		t.Errorf("GetSequence(ENST00000888888) = %q, want %q (full sequence)", seq, expected)
+	}
+}
+
+func TestFASTALoader_CDSExtractionNoUTR(t *testing.T) {
+	// CDS:1-N (no UTR) — should return the entire sequence unchanged
+	fastaContent := `>ENST00000777777.1|ENSG00000777777.1|GENE3-201|GENE3|12|CDS:1-12|
+ATGCCCGAATAA
+`
+
+	loader := NewFASTALoader("")
+	if err := loader.parseFASTA(strings.NewReader(fastaContent)); err != nil {
+		t.Fatalf("parseFASTA() error = %v", err)
+	}
+
+	seq := loader.GetSequence("ENST00000777777")
+	expected := "ATGCCCGAATAA"
+	if seq != expected {
+		t.Errorf("GetSequence(ENST00000777777) = %q, want %q", seq, expected)
+	}
+}
+
+func TestParseCDSRange(t *testing.T) {
+	tests := []struct {
+		header    string
+		wantStart int
+		wantEnd   int
+		wantOK    bool
+	}{
+		{">ENST00000456328.2|ENSG001|GENE|459|UTR5:1-200|CDS:201-459|UTR3:460-1657|", 201, 459, true},
+		{">ENST00000311936.8|ENSG002|KRAS|567|CDS:1-567|", 1, 567, true},
+		{">ENST00000311936.8|ENSG002|KRAS|567|", 0, 0, false},
+		{">ENST00000311936.8 simple header", 0, 0, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.header, func(t *testing.T) {
+			start, end, ok := parseCDSRange(tt.header)
+			if ok != tt.wantOK || start != tt.wantStart || end != tt.wantEnd {
+				t.Errorf("parseCDSRange(%q) = (%d, %d, %v), want (%d, %d, %v)",
+					tt.header, start, end, ok, tt.wantStart, tt.wantEnd, tt.wantOK)
+			}
+		})
+	}
+}

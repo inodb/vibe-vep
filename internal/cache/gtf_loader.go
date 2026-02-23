@@ -348,10 +348,11 @@ func normalizeChrom(chrom string) string {
 
 // GENCODELoader combines GTF and FASTA loaders for complete annotation data.
 type GENCODELoader struct {
-	gtfPath   string
-	fastaPath string
-	gtf       *GTFLoader
-	fasta     *FASTALoader
+	gtfPath            string
+	fastaPath          string
+	gtf                *GTFLoader
+	fasta              *FASTALoader
+	canonicalOverrides CanonicalOverrides
 }
 
 // NewGENCODELoader creates a loader for GENCODE GTF + FASTA files.
@@ -363,11 +364,23 @@ func NewGENCODELoader(gtfPath, fastaPath string) *GENCODELoader {
 	}
 }
 
+// SetCanonicalOverrides sets Genome Nexus canonical transcript overrides.
+// When applied, for each gene with an override, the matching transcript is marked
+// as canonical and other transcripts for that gene are unmarked.
+func (l *GENCODELoader) SetCanonicalOverrides(overrides CanonicalOverrides) {
+	l.canonicalOverrides = overrides
+}
+
 // Load loads all transcripts and sequences into the cache.
 func (l *GENCODELoader) Load(c *Cache) error {
 	// Load GTF annotations
 	if err := l.gtf.Load(c); err != nil {
 		return fmt.Errorf("load GTF: %w", err)
+	}
+
+	// Apply canonical overrides if set
+	if len(l.canonicalOverrides) > 0 {
+		l.applyCanonicalOverrides(c)
 	}
 
 	// Load FASTA sequences if provided
@@ -388,6 +401,45 @@ func (l *GENCODELoader) Load(c *Cache) error {
 	}
 
 	return nil
+}
+
+// applyCanonicalOverrides applies Genome Nexus canonical transcript overrides.
+func (l *GENCODELoader) applyCanonicalOverrides(c *Cache) {
+	// Group transcripts by gene name
+	geneTranscripts := make(map[string][]*Transcript)
+	for _, chrom := range c.Chromosomes() {
+		for _, t := range c.FindTranscriptsByChrom(chrom) {
+			if t.GeneName != "" {
+				geneTranscripts[t.GeneName] = append(geneTranscripts[t.GeneName], t)
+			}
+		}
+	}
+
+	// Apply overrides
+	for gene, canonicalID := range l.canonicalOverrides {
+		transcripts, ok := geneTranscripts[gene]
+		if !ok {
+			continue
+		}
+
+		// Check if the canonical transcript exists for this gene
+		found := false
+		for _, t := range transcripts {
+			if t.ID == canonicalID {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			continue
+		}
+
+		// Set the override: mark only the canonical transcript
+		for _, t := range transcripts {
+			t.IsCanonical = (t.ID == canonicalID)
+		}
+	}
 }
 
 // LoadAll implements TranscriptLoader interface.
