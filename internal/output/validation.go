@@ -192,6 +192,9 @@ func normalizeConsequence(conseq string) string {
 		"igr":                      "intergenic_variant",
 		"3'flank":                  "downstream_gene_variant",
 		"5'flank":                  "upstream_gene_variant",
+		"protein_altering_variant": "inframe_variant", // generic MAF term for in-frame changes
+		"inframe_deletion":         "inframe_variant",
+		"inframe_insertion":        "inframe_variant",
 	}
 
 	// Split on comma, normalize each term
@@ -201,31 +204,42 @@ func normalizeConsequence(conseq string) string {
 		if mapped, ok := mappings[term]; ok {
 			term = mapped
 		}
+		// Normalize splice sub-types to splice_region_variant
+		switch term {
+		case "splice_donor_region_variant", "splice_donor_5th_base_variant":
+			term = "splice_region_variant"
+		}
 		// Drop modifier-only terms that don't change the primary consequence
 		switch term {
 		case "non_coding_transcript_variant", "nmd_transcript_variant",
 			"coding_sequence_variant",
-			"splice_polypyrimidine_tract_variant", "splice_donor_region_variant",
-			"splice_donor_5th_base_variant":
+			"splice_polypyrimidine_tract_variant":
 			continue
 		}
 		terms = append(terms, term)
 	}
 
-	// Drop intron_variant when a higher-impact splice term is present
+	// Drop lower-impact modifiers when a higher-impact term is present
 	hasSpliceSite := false
+	hasPrimary := false
 	for _, t := range terms {
 		if t == "splice_donor_variant" || t == "splice_acceptor_variant" {
 			hasSpliceSite = true
-			break
+		}
+		if t != "intron_variant" && t != "splice_region_variant" {
+			hasPrimary = true
 		}
 	}
-	if hasSpliceSite {
+	if hasSpliceSite || hasPrimary {
 		filtered := terms[:0]
 		for _, t := range terms {
-			if t != "intron_variant" {
-				filtered = append(filtered, t)
+			if hasSpliceSite && t == "intron_variant" {
+				continue
 			}
+			if hasPrimary && t == "splice_region_variant" {
+				continue
+			}
+			filtered = append(filtered, t)
 		}
 		terms = filtered
 	}
