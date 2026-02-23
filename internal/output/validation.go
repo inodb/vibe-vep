@@ -192,9 +192,10 @@ func normalizeConsequence(conseq string) string {
 		"igr":                      "intergenic_variant",
 		"3'flank":                  "downstream_gene_variant",
 		"5'flank":                  "upstream_gene_variant",
-		"protein_altering_variant": "inframe_variant", // generic MAF term for in-frame changes
-		"inframe_deletion":         "inframe_variant",
-		"inframe_insertion":        "inframe_variant",
+		"protein_altering_variant":  "inframe_variant", // generic MAF term for in-frame changes
+		"inframe_deletion":          "inframe_variant",
+		"inframe_insertion":         "inframe_variant",
+		"mature_mirna_variant":      "non_coding_transcript_exon_variant", // miRNA exon variant
 	}
 
 	// Split on comma, normalize each term

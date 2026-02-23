@@ -76,7 +76,11 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 
 	// Check if transcript is protein coding
 	if !t.IsProteinCoding() {
-		result.Consequence = ConsequenceNonCodingExon
+		if t.Biotype == "miRNA" {
+			result.Consequence = ConsequenceMatureMiRNA
+		} else {
+			result.Consequence = ConsequenceNonCodingExon
+		}
 		result.Impact = GetImpact(result.Consequence)
 		return result
 	}

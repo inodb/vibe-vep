@@ -38,6 +38,7 @@ const (
 	ConsequenceDownstreamGene      = "downstream_gene_variant"
 	ConsequenceIntergenicVariant   = "intergenic_variant"
 	ConsequenceNonCodingExon       = "non_coding_transcript_exon_variant"
+	ConsequenceMatureMiRNA         = "mature_miRNA_variant"
 )
 
 // Annotation represents the predicted effect of a variant on a transcript.
