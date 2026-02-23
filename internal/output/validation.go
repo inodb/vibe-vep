@@ -115,21 +115,25 @@ func (v *ValidationWriter) WriteSummary(w io.Writer) {
 func selectBestAnnotation(mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotation) *annotate.Annotation {
 	var bestAnn *annotate.Annotation
 
-	// Pass 1: exact transcript ID match
+	// Pass 1: exact transcript ID match (skip if transcript biotype changed
+	// between GENCODE versions, e.g. was protein_coding but now retained_intron)
 	if mafAnn.TranscriptID != "" {
 		for _, ann := range vepAnns {
 			if strings.HasPrefix(ann.TranscriptID, mafAnn.TranscriptID) {
+				if isCodingConsequence(mafAnn.Consequence) && !isProteinCodingBiotype(ann.Biotype) {
+					break // transcript biotype changed, fall through to gene match
+				}
 				return ann
 			}
 		}
 	}
 
-	// Pass 2: same gene, prefer canonical
+	// Pass 2: same gene, prefer canonical > protein-coding > higher impact
 	var sameGene *annotate.Annotation
 	if mafAnn.HugoSymbol != "" {
 		for _, ann := range vepAnns {
 			if ann.GeneName == mafAnn.HugoSymbol {
-				if sameGene == nil || ann.IsCanonical {
+				if sameGene == nil || annotationBetter(ann, sameGene) {
 					sameGene = ann
 				}
 			}
@@ -139,13 +143,58 @@ func selectBestAnnotation(mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotat
 		return sameGene
 	}
 
-	// Pass 3: any canonical, then first
+	// Pass 3: prefer canonical > protein-coding > higher impact
 	for _, ann := range vepAnns {
-		if bestAnn == nil || ann.IsCanonical {
+		if bestAnn == nil || annotationBetter(ann, bestAnn) {
 			bestAnn = ann
 		}
 	}
 	return bestAnn
+}
+
+// annotationBetter returns true if ann is a better pick than current for validation.
+// Priority: canonical > protein-coding biotype > higher impact.
+func annotationBetter(ann, current *annotate.Annotation) bool {
+	if ann.IsCanonical != current.IsCanonical {
+		return ann.IsCanonical
+	}
+	annCoding := isProteinCodingBiotype(ann.Biotype)
+	curCoding := isProteinCodingBiotype(current.Biotype)
+	if annCoding != curCoding {
+		return annCoding
+	}
+	return annotate.ImpactRank(ann.Impact) > annotate.ImpactRank(current.Impact)
+}
+
+// isProteinCodingBiotype returns true if the biotype has coding potential.
+func isProteinCodingBiotype(biotype string) bool {
+	switch biotype {
+	case "protein_coding", "nonsense_mediated_decay", "non_stop_decay",
+		"IG_V_gene", "IG_D_gene", "IG_J_gene", "IG_C_gene",
+		"TR_V_gene", "TR_D_gene", "TR_J_gene", "TR_C_gene",
+		"protein_coding_LoF":
+		return true
+	}
+	return false
+}
+
+// isCodingConsequence returns true if the consequence implies a protein-coding transcript.
+func isCodingConsequence(conseq string) bool {
+	conseq = strings.ToLower(conseq)
+	for _, term := range strings.Split(conseq, ",") {
+		switch strings.TrimSpace(term) {
+		case "missense_variant", "missense_mutation",
+			"synonymous_variant", "silent",
+			"frameshift_variant", "frame_shift_del", "frame_shift_ins",
+			"nonsense_mutation", "stop_gained", "stop_lost", "nonstop_mutation",
+			"start_lost", "translation_start_site",
+			"inframe_deletion", "inframe_insertion", "in_frame_del", "in_frame_ins",
+			"protein_altering_variant", "stop_retained_variant",
+			"splice_site":
+			return true
+		}
+	}
+	return false
 }
 
 // consequencesMatch checks if MAF and VEP consequences should be considered matching.

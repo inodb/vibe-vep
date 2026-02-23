@@ -83,15 +83,15 @@ func GetImpact(consequence string) string {
 		default:
 			impact = ImpactModifier
 		}
-		if impactRank(impact) > impactRank(best) {
+		if ImpactRank(impact) > ImpactRank(best) {
 			best = impact
 		}
 	}
 	return best
 }
 
-// impactRank returns numeric rank for impact comparison (higher = more severe).
-func impactRank(impact string) int {
+// ImpactRank returns numeric rank for impact comparison (higher = more severe).
+func ImpactRank(impact string) int {
 	switch impact {
 	case ImpactHigh:
 		return 3
