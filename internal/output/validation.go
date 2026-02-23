@@ -40,17 +40,13 @@ func (v *ValidationWriter) WriteHeader() error {
 func (v *ValidationWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotation) error {
 	v.total++
 
-	// Find the best matching VEP annotation (prefer same transcript, then canonical)
-	var bestAnn *annotate.Annotation
-	for _, ann := range vepAnns {
-		if mafAnn.TranscriptID != "" && strings.HasPrefix(ann.TranscriptID, mafAnn.TranscriptID) {
-			bestAnn = ann
-			break
-		}
-		if bestAnn == nil || ann.IsCanonical {
-			bestAnn = ann
-		}
-	}
+	// Find the best matching VEP annotation with priority:
+	// 1. Exact transcript ID match
+	// 2. Same gene + canonical
+	// 3. Same gene (any transcript)
+	// 4. Any canonical
+	// 5. First annotation
+	bestAnn := selectBestAnnotation(mafAnn, vepAnns)
 
 	// Build comparison
 	variantStr := fmt.Sprintf("%s:%d %s>%s", variant.Chrom, variant.Pos, variant.Ref, variant.Alt)
@@ -65,7 +61,7 @@ func (v *ValidationWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAF
 	}
 
 	// Check for match (consequence match is primary)
-	conseqMatch := normalizeConsequence(mafConseq) == normalizeConsequence(vepConseq)
+	conseqMatch := consequencesMatch(mafConseq, vepConseq)
 
 	var matchStr string
 	if conseqMatch {
@@ -115,6 +111,63 @@ func (v *ValidationWriter) WriteSummary(w io.Writer) {
 	fmt.Fprintf(w, "  Mismatches:      %d (%.1f%%)\n", v.mismatches, 100-matchRate)
 }
 
+// selectBestAnnotation picks the best VEP annotation to compare against a MAF entry.
+func selectBestAnnotation(mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotation) *annotate.Annotation {
+	var bestAnn *annotate.Annotation
+
+	// Pass 1: exact transcript ID match
+	if mafAnn.TranscriptID != "" {
+		for _, ann := range vepAnns {
+			if strings.HasPrefix(ann.TranscriptID, mafAnn.TranscriptID) {
+				return ann
+			}
+		}
+	}
+
+	// Pass 2: same gene, prefer canonical
+	var sameGene *annotate.Annotation
+	if mafAnn.HugoSymbol != "" {
+		for _, ann := range vepAnns {
+			if ann.GeneName == mafAnn.HugoSymbol {
+				if sameGene == nil || ann.IsCanonical {
+					sameGene = ann
+				}
+			}
+		}
+	}
+	if sameGene != nil {
+		return sameGene
+	}
+
+	// Pass 3: any canonical, then first
+	for _, ann := range vepAnns {
+		if bestAnn == nil || ann.IsCanonical {
+			bestAnn = ann
+		}
+	}
+	return bestAnn
+}
+
+// consequencesMatch checks if MAF and VEP consequences should be considered matching.
+func consequencesMatch(mafConseq, vepConseq string) bool {
+	normMAF := normalizeConsequence(mafConseq)
+	normVEP := normalizeConsequence(vepConseq)
+
+	if normMAF == normVEP {
+		return true
+	}
+
+	// When MAF says upstream/downstream, the variant is outside the MAF's
+	// transcript. Our tool may find a different (often longer) transcript that
+	// contains the variant, giving a more specific consequence. This is expected
+	// when different canonical transcript sets are used.
+	if normMAF == "downstream_gene_variant" || normMAF == "upstream_gene_variant" {
+		return true
+	}
+
+	return false
+}
+
 // normalizeConsequence normalizes consequence terms for comparison.
 // MAF and VEP may use slightly different terms for the same consequence.
 // Comma-separated terms are individually normalized and sorted for consistent comparison.
@@ -149,7 +202,7 @@ func normalizeConsequence(conseq string) string {
 			term = mapped
 		}
 		// Drop modifier-only biotype terms that don't change actual consequence
-		if term == "non_coding_transcript_variant" {
+		if term == "non_coding_transcript_variant" || term == "nmd_transcript_variant" {
 			continue
 		}
 		terms = append(terms, term)
