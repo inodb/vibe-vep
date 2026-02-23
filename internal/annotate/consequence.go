@@ -183,7 +183,11 @@ func predictCodingConsequence(v *vcf.Variant, t *cache.Transcript, exon *cache.E
 
 	// Determine consequence type
 	if result.RefAA == result.AltAA {
-		result.Consequence = ConsequenceSynonymousVariant
+		if result.RefAA == '*' {
+			result.Consequence = ConsequenceStopRetained
+		} else {
+			result.Consequence = ConsequenceSynonymousVariant
+		}
 	} else if result.AltAA == '*' {
 		result.Consequence = ConsequenceStopGained
 		result.AminoAcidChange = fmt.Sprintf("%c%d*", result.RefAA, codonNum)
@@ -208,20 +212,89 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 	altLen := len(v.Alt)
 	diff := altLen - refLen
 
+	// Check if the indel overlaps the stop codon
+	stopCodonCDSPos := int64(0)
+	if len(t.CDSSequence) >= 3 {
+		stopCodonCDSPos = int64(len(t.CDSSequence)) - 2 // 1-based start of last codon
+	}
+
 	if diff%3 == 0 {
 		// In-frame
 		if diff > 0 {
 			result.Consequence = ConsequenceInframeInsertion
+			// Check if in-frame insertion creates a stop codon
+			if indelCreatesStop(v, t, result.CDSPosition) {
+				result.Consequence = ConsequenceStopGained
+				result.Impact = GetImpact(result.Consequence)
+				return result
+			}
 		} else {
 			result.Consequence = ConsequenceInframeDeletion
 		}
 	} else {
 		// Frameshift
 		result.Consequence = ConsequenceFrameshiftVariant
+		// Check if frameshift overlaps stop codon (stop_lost)
+		if stopCodonCDSPos > 0 && result.CDSPosition > 0 {
+			indelEndCDS := result.CDSPosition + int64(refLen) - 1
+			if indelEndCDS >= stopCodonCDSPos {
+				result.Consequence = ConsequenceFrameshiftVariant + "," + ConsequenceStopLost
+			}
+		}
 	}
 
 	result.Impact = GetImpact(result.Consequence)
 	return result
+}
+
+// indelCreatesStop checks if an indel creates a stop codon near the variant site.
+// It reconstructs the local CDS around the indel and checks the first few codons.
+func indelCreatesStop(v *vcf.Variant, t *cache.Transcript, cdsPos int64) bool {
+	if len(t.CDSSequence) == 0 || cdsPos < 1 {
+		return false
+	}
+
+	// Build the mutant CDS by splicing the alt allele into the CDS
+	// VCF indels share a prefix base: REF=A ALT=ATAC means insert TAC after pos
+	// For deletion: REF=ATAC ALT=A means delete TAC after pos
+	cdsIdx := int(cdsPos - 1) // 0-based index in CDS
+
+	// Determine the ref/alt on the coding strand
+	ref := v.Ref
+	alt := v.Alt
+	if t.IsReverseStrand() {
+		ref = ReverseComplement(ref)
+		alt = ReverseComplement(alt)
+	}
+
+	// Reconstruct local mutant sequence: take CDS before variant, insert alt, then CDS after ref
+	endIdx := cdsIdx + len(ref)
+	if endIdx > len(t.CDSSequence) {
+		endIdx = len(t.CDSSequence)
+	}
+
+	mutCDS := t.CDSSequence[:cdsIdx] + alt + t.CDSSequence[endIdx:]
+
+	// Find the codon-aligned start position for the variant
+	codonStart := (cdsIdx / 3) * 3
+
+	// Check only the codon containing the variant for a new stop codon.
+	// This catches cases like in-frame insertions that create a stop codon
+	// at the exact variant position (e.g., TAC → TAG|TAC).
+	if codonStart+3 <= len(mutCDS) {
+		codon := mutCDS[codonStart : codonStart+3]
+		if TranslateCodon(codon) == '*' {
+			// Only report if this is a NEW stop (not present in original)
+			if codonStart+3 <= len(t.CDSSequence) {
+				origCodon := t.CDSSequence[codonStart : codonStart+3]
+				if TranslateCodon(origCodon) == '*' {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	return false
 }
 
 // GenomicToCDS converts a genomic position to CDS position within a transcript.

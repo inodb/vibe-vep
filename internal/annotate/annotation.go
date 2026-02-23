@@ -1,6 +1,8 @@
 // Package annotate provides variant effect prediction functionality.
 package annotate
 
+import "strings"
+
 // Impact levels for variant consequences.
 const (
 	ImpactHigh     = "HIGH"
@@ -62,20 +64,43 @@ type Annotation struct {
 }
 
 // GetImpact returns the impact level for a given consequence type.
+// For comma-separated consequences, returns the highest impact among all terms.
 func GetImpact(consequence string) string {
-	switch consequence {
-	case ConsequenceStopGained, ConsequenceFrameshiftVariant,
-		ConsequenceStopLost, ConsequenceStartLost,
-		ConsequenceSpliceAcceptor, ConsequenceSpliceDonor:
-		return ImpactHigh
-	case ConsequenceMissenseVariant, ConsequenceInframeInsertion,
-		ConsequenceInframeDeletion:
-		return ImpactModerate
-	case ConsequenceSynonymousVariant, ConsequenceSpliceRegion,
-		ConsequenceStopRetained, ConsequenceStartRetained:
-		return ImpactLow
+	best := ImpactModifier
+	for _, term := range strings.Split(consequence, ",") {
+		var impact string
+		switch strings.TrimSpace(term) {
+		case ConsequenceStopGained, ConsequenceFrameshiftVariant,
+			ConsequenceStopLost, ConsequenceStartLost,
+			ConsequenceSpliceAcceptor, ConsequenceSpliceDonor:
+			impact = ImpactHigh
+		case ConsequenceMissenseVariant, ConsequenceInframeInsertion,
+			ConsequenceInframeDeletion:
+			impact = ImpactModerate
+		case ConsequenceSynonymousVariant, ConsequenceSpliceRegion,
+			ConsequenceStopRetained, ConsequenceStartRetained:
+			impact = ImpactLow
+		default:
+			impact = ImpactModifier
+		}
+		if impactRank(impact) > impactRank(best) {
+			best = impact
+		}
+	}
+	return best
+}
+
+// impactRank returns numeric rank for impact comparison (higher = more severe).
+func impactRank(impact string) int {
+	switch impact {
+	case ImpactHigh:
+		return 3
+	case ImpactModerate:
+		return 2
+	case ImpactLow:
+		return 1
 	default:
-		return ImpactModifier
+		return 0
 	}
 }
 
