@@ -3,8 +3,8 @@ package annotate
 
 import (
 	"fmt"
-	"io"
-	"log"
+
+	"go.uber.org/zap"
 
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/vcf"
@@ -19,13 +19,14 @@ type TranscriptLookup interface {
 type Annotator struct {
 	cache         TranscriptLookup
 	canonicalOnly bool
-	warnings      io.Writer
+	logger        *zap.Logger
 }
 
 // NewAnnotator creates a new annotator with the given cache.
 func NewAnnotator(c TranscriptLookup) *Annotator {
 	return &Annotator{
-		cache: c,
+		cache:  c,
+		logger: zap.NewNop(),
 	}
 }
 
@@ -34,9 +35,9 @@ func (a *Annotator) SetCanonicalOnly(canonical bool) {
 	a.canonicalOnly = canonical
 }
 
-// SetWarnings sets the writer for warning messages.
-func (a *Annotator) SetWarnings(w io.Writer) {
-	a.warnings = w
+// SetLogger sets the logger for warning and info messages.
+func (a *Annotator) SetLogger(l *zap.Logger) {
+	a.logger = l
 }
 
 // Annotate annotates a single variant and returns all annotations.
@@ -133,10 +134,10 @@ func (a *Annotator) AnnotateAll(parser vcf.VariantParser, writer AnnotationWrite
 		for _, variant := range variants {
 			annotations, err := a.Annotate(variant)
 			if err != nil {
-				if a.warnings != nil {
-					log.New(a.warnings, "", 0).Printf("Warning: failed to annotate %s:%d: %v\n",
-						variant.Chrom, variant.Pos, err)
-				}
+				a.logger.Warn("failed to annotate variant",
+					zap.String("chrom", variant.Chrom),
+					zap.Int64("pos", variant.Pos),
+					zap.Error(err))
 				continue
 			}
 
@@ -150,8 +151,8 @@ func (a *Annotator) AnnotateAll(parser vcf.VariantParser, writer AnnotationWrite
 		variantCount++
 	}
 
-	if variantCount == 0 && a.warnings != nil {
-		log.New(a.warnings, "", 0).Println("Info: 0 variants processed")
+	if variantCount == 0 {
+		a.logger.Info("0 variants processed")
 	}
 
 	return writer.Flush()

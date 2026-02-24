@@ -3,6 +3,9 @@ package cache
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseAttributes(t *testing.T) {
@@ -34,9 +37,7 @@ func TestParseAttributes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parseAttributes(tt.input)
 			for key, want := range tt.expected {
-				if got := result[key]; got != want {
-					t.Errorf("parseAttributes()[%q] = %q, want %q", key, got, want)
-				}
+				assert.Equal(t, want, result[key], "parseAttributes()[%q]", key)
 			}
 		})
 	}
@@ -54,19 +55,13 @@ func TestStripVersion(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := stripVersion(tt.input); got != tt.expected {
-			t.Errorf("stripVersion(%q) = %q, want %q", tt.input, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, stripVersion(tt.input), "stripVersion(%q)", tt.input)
 	}
 }
 
 func TestParseStrand(t *testing.T) {
-	if got := parseStrand("+"); got != 1 {
-		t.Errorf("parseStrand(+) = %d, want 1", got)
-	}
-	if got := parseStrand("-"); got != -1 {
-		t.Errorf("parseStrand(-) = %d, want -1", got)
-	}
+	assert.Equal(t, int8(1), parseStrand("+"))
+	assert.Equal(t, int8(-1), parseStrand("-"))
 }
 
 func TestGTFLoader_ParseGTF(t *testing.T) {
@@ -83,74 +78,45 @@ chr12	HAVANA	stop_codon	25245274	25245276	.	-	0	gene_id "ENSG00000133703"; trans
 
 	loader := &GTFLoader{}
 	transcripts, err := loader.parseGTF(strings.NewReader(gtfContent), "")
-	if err != nil {
-		t.Fatalf("parseGTF() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(transcripts) != 1 {
-		t.Fatalf("parseGTF() returned %d transcripts, want 1", len(transcripts))
-	}
+	require.Len(t, transcripts, 1)
 
 	tr := transcripts["ENST00000311936"]
-	if tr == nil {
-		t.Fatal("parseGTF() did not return ENST00000311936")
-	}
+	require.NotNil(t, tr, "parseGTF() did not return ENST00000311936")
 
 	// Check transcript fields
-	if tr.GeneName != "KRAS" {
-		t.Errorf("GeneName = %q, want KRAS", tr.GeneName)
-	}
-	if tr.Chrom != "12" {
-		t.Errorf("Chrom = %q, want 12", tr.Chrom)
-	}
-	if tr.Strand != -1 {
-		t.Errorf("Strand = %d, want -1", tr.Strand)
-	}
-	if !tr.IsCanonical {
-		t.Error("IsCanonical = false, want true")
-	}
-	if tr.Biotype != "protein_coding" {
-		t.Errorf("Biotype = %q, want protein_coding", tr.Biotype)
-	}
+	assert.Equal(t, "KRAS", tr.GeneName)
+	assert.Equal(t, "12", tr.Chrom)
+	assert.Equal(t, int8(-1), tr.Strand)
+	assert.True(t, tr.IsCanonical)
+	assert.Equal(t, "protein_coding", tr.Biotype)
 
 	// Check exons
-	if len(tr.Exons) != 2 {
-		t.Fatalf("len(Exons) = %d, want 2", len(tr.Exons))
-	}
+	require.Len(t, tr.Exons, 2)
 
 	// Check CDS boundaries
-	if tr.CDSStart == 0 || tr.CDSEnd == 0 {
-		t.Errorf("CDS not set: CDSStart=%d, CDSEnd=%d", tr.CDSStart, tr.CDSEnd)
-	}
+	assert.NotZero(t, tr.CDSStart, "CDSStart should be set")
+	assert.NotZero(t, tr.CDSEnd, "CDSEnd should be set")
 }
 
 func TestGTFLoader_LoadFile(t *testing.T) {
 	loader := NewGTFLoader("../../testdata/sample.gtf")
 	c := New()
 
-	if err := loader.Load(c); err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	require.NoError(t, loader.Load(c))
 
 	// Should have loaded KRAS transcript
 	tr := c.GetTranscript("ENST00000311936")
-	if tr == nil {
-		t.Fatal("GetTranscript(ENST00000311936) returned nil")
-	}
+	require.NotNil(t, tr, "GetTranscript(ENST00000311936) returned nil")
 
-	if tr.GeneName != "KRAS" {
-		t.Errorf("GeneName = %q, want KRAS", tr.GeneName)
-	}
+	assert.Equal(t, "KRAS", tr.GeneName)
 
 	// Check exon count - KRAS has 6 exons
-	if len(tr.Exons) != 6 {
-		t.Errorf("len(Exons) = %d, want 6", len(tr.Exons))
-	}
+	assert.Len(t, tr.Exons, 6)
 
 	// Check CDS is protein coding
-	if !tr.IsProteinCoding() {
-		t.Error("IsProteinCoding() = false, want true")
-	}
+	assert.True(t, tr.IsProteinCoding())
 }
 
 func TestGTFLoader_FilterChromosome(t *testing.T) {
@@ -164,15 +130,9 @@ chr1	HAVANA	exon	100000	100100	.	+	.	gene_id "ENSG00000000001"; transcript_id "E
 
 	// Filter to chr12 only
 	transcripts, err := loader.parseGTF(strings.NewReader(gtfContent), "chr12")
-	if err != nil {
-		t.Fatalf("parseGTF() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(transcripts) != 1 {
-		t.Fatalf("parseGTF() with filter returned %d transcripts, want 1", len(transcripts))
-	}
+	require.Len(t, transcripts, 1)
 
-	if _, ok := transcripts["ENST00000311936"]; !ok {
-		t.Error("parseGTF() did not return ENST00000311936 for chr12 filter")
-	}
+	assert.Contains(t, transcripts, "ENST00000311936")
 }

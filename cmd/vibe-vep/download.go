@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/spf13/cobra"
 )
@@ -36,7 +38,7 @@ func getGENCODEURLs(assembly string) (gtfURL, fastaURL string) {
 	return
 }
 
-func newDownloadCmd() *cobra.Command {
+func newDownloadCmd(verbose *bool) *cobra.Command {
 	var (
 		assembly  string
 		outputDir string
@@ -57,7 +59,12 @@ func newDownloadCmd() *cobra.Command {
   vibe-vep download --output /data/gencode`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDownload(assembly, outputDir, gtfOnly)
+			logger, err := newLogger(*verbose)
+			if err != nil {
+				return fmt.Errorf("creating logger: %w", err)
+			}
+			defer logger.Sync()
+			return runDownload(logger, assembly, outputDir, gtfOnly)
 		},
 	}
 
@@ -68,7 +75,7 @@ func newDownloadCmd() *cobra.Command {
 	return cmd
 }
 
-func runDownload(assembly, outputDir string, gtfOnly bool) error {
+func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) error {
 	// Determine output directory
 	if outputDir == "" {
 		home, err := os.UserHomeDir()
@@ -109,7 +116,7 @@ func runDownload(assembly, outputDir string, gtfOnly bool) error {
 	canonicalURL := cache.CanonicalFileURL(assembly)
 	canonicalFile := filepath.Join(destDir, cache.CanonicalFileName())
 	if err := downloadFile(canonicalURL, canonicalFile); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not download canonical transcript overrides: %v\n", err)
+		logger.Warn("could not download canonical transcript overrides", zap.Error(err))
 		// Non-fatal: tool still works without overrides
 	}
 

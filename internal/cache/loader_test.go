@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoader_LoadJSONFile(t *testing.T) {
@@ -15,41 +18,21 @@ func TestLoader_LoadJSONFile(t *testing.T) {
 
 	// Load chromosome 12
 	err := loader.Load(c, "12")
-	if err != nil {
-		t.Fatalf("Failed to load chromosome 12: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Should have loaded KRAS transcripts
-	if c.TranscriptCount() == 0 {
-		t.Fatal("Expected at least one transcript, got 0")
-	}
+	require.NotZero(t, c.TranscriptCount(), "Expected at least one transcript")
 
 	// Find KRAS canonical transcript
 	transcript := c.GetTranscript("ENST00000311936")
-	if transcript == nil {
-		t.Fatal("Expected to find ENST00000311936 (KRAS canonical)")
-	}
+	require.NotNil(t, transcript, "Expected to find ENST00000311936 (KRAS canonical)")
 
 	// Verify transcript properties
-	if transcript.GeneName != "KRAS" {
-		t.Errorf("Expected gene name KRAS, got %s", transcript.GeneName)
-	}
-
-	if transcript.Strand != -1 {
-		t.Errorf("Expected strand -1 (reverse), got %d", transcript.Strand)
-	}
-
-	if !transcript.IsCanonical {
-		t.Error("Expected ENST00000311936 to be canonical")
-	}
-
-	if !transcript.IsProteinCoding() {
-		t.Error("Expected KRAS to be protein coding")
-	}
-
-	if len(transcript.Exons) != 5 {
-		t.Errorf("Expected 5 exons, got %d", len(transcript.Exons))
-	}
+	assert.Equal(t, "KRAS", transcript.GeneName)
+	assert.Equal(t, int8(-1), transcript.Strand)
+	assert.True(t, transcript.IsCanonical)
+	assert.True(t, transcript.IsProteinCoding())
+	assert.Len(t, transcript.Exons, 5)
 }
 
 func TestLoader_FindTranscripts(t *testing.T) {
@@ -59,15 +42,11 @@ func TestLoader_FindTranscripts(t *testing.T) {
 	c := New()
 
 	err := loader.Load(c, "12")
-	if err != nil {
-		t.Fatalf("Failed to load chromosome 12: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Position 25245351 should overlap KRAS transcripts
 	transcripts := c.FindTranscripts("12", 25245351)
-	if len(transcripts) == 0 {
-		t.Fatal("Expected to find transcripts at position 25245351")
-	}
+	require.NotEmpty(t, transcripts, "Expected to find transcripts at position 25245351")
 
 	// Should find KRAS
 	foundKRAS := false
@@ -78,9 +57,7 @@ func TestLoader_FindTranscripts(t *testing.T) {
 		}
 	}
 
-	if !foundKRAS {
-		t.Error("Expected to find KRAS transcript at position 25245351")
-	}
+	assert.True(t, foundKRAS, "Expected to find KRAS transcript at position 25245351")
 }
 
 func TestLoader_FindTranscripts_Intergenic(t *testing.T) {
@@ -90,15 +67,11 @@ func TestLoader_FindTranscripts_Intergenic(t *testing.T) {
 	c := New()
 
 	err := loader.Load(c, "12")
-	if err != nil {
-		t.Fatalf("Failed to load chromosome 12: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Position 1000000 should not overlap any transcripts in our test data
 	transcripts := c.FindTranscripts("12", 1000000)
-	if len(transcripts) != 0 {
-		t.Errorf("Expected no transcripts at position 1000000, got %d", len(transcripts))
-	}
+	assert.Empty(t, transcripts)
 }
 
 func TestLoader_LoadNonexistentChromosome(t *testing.T) {
@@ -109,15 +82,11 @@ func TestLoader_LoadNonexistentChromosome(t *testing.T) {
 
 	// Loading a chromosome that doesn't exist should not error
 	err := loader.Load(c, "99")
-	if err != nil {
-		t.Errorf("Expected no error for nonexistent chromosome, got: %v", err)
-	}
+	assert.NoError(t, err)
 
 	// Cache should be empty for that chromosome
 	transcripts := c.FindTranscripts("99", 100000)
-	if len(transcripts) != 0 {
-		t.Errorf("Expected no transcripts for chromosome 99, got %d", len(transcripts))
-	}
+	assert.Empty(t, transcripts)
 }
 
 func TestLoader_TranscriptCDSSequence(t *testing.T) {
@@ -127,35 +96,23 @@ func TestLoader_TranscriptCDSSequence(t *testing.T) {
 	c := New()
 
 	err := loader.Load(c, "12")
-	if err != nil {
-		t.Fatalf("Failed to load chromosome 12: %v", err)
-	}
+	require.NoError(t, err)
 
 	transcript := c.GetTranscript("ENST00000311936")
-	if transcript == nil {
-		t.Fatal("Expected to find ENST00000311936")
-	}
+	require.NotNil(t, transcript, "Expected to find ENST00000311936")
 
 	// Verify CDS sequence starts with ATG (start codon)
-	if len(transcript.CDSSequence) < 3 {
-		t.Fatal("CDS sequence too short")
-	}
+	require.True(t, len(transcript.CDSSequence) >= 3, "CDS sequence too short")
 
 	startCodon := transcript.CDSSequence[:3]
-	if startCodon != "ATG" {
-		t.Errorf("Expected CDS to start with ATG, got %s", startCodon)
-	}
+	assert.Equal(t, "ATG", startCodon)
 
 	// Verify codon 12 is GGT (Glycine)
 	// CDS positions 34-36 correspond to codon 12
-	if len(transcript.CDSSequence) < 36 {
-		t.Fatal("CDS sequence too short for codon 12")
-	}
+	require.True(t, len(transcript.CDSSequence) >= 36, "CDS sequence too short for codon 12")
 
 	codon12 := transcript.CDSSequence[33:36] // 0-indexed: positions 33-35
-	if codon12 != "GGT" {
-		t.Errorf("Expected codon 12 to be GGT, got %s", codon12)
-	}
+	assert.Equal(t, "GGT", codon12)
 }
 
 // findTestCacheDir locates the test cache directory.

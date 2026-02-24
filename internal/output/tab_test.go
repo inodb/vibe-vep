@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
@@ -13,12 +16,8 @@ func TestTabWriter_WriteHeader(t *testing.T) {
 	var buf bytes.Buffer
 	w := NewTabWriter(&buf)
 
-	if err := w.WriteHeader(); err != nil {
-		t.Fatalf("WriteHeader() error = %v", err)
-	}
-	if err := w.Flush(); err != nil {
-		t.Fatalf("Flush() error = %v", err)
-	}
+	require.NoError(t, w.WriteHeader())
+	require.NoError(t, w.Flush())
 
 	header := buf.String()
 
@@ -35,9 +34,7 @@ func TestTabWriter_WriteHeader(t *testing.T) {
 	}
 
 	for _, col := range expectedCols {
-		if !strings.Contains(header, col) {
-			t.Errorf("Header missing column: %s", col)
-		}
+		assert.Contains(t, header, col)
 	}
 }
 
@@ -71,21 +68,13 @@ func TestTabWriter_Write_KRASG12C(t *testing.T) {
 		ExonNumber:      "2/5",
 	}
 
-	if err := w.WriteHeader(); err != nil {
-		t.Fatalf("WriteHeader() error = %v", err)
-	}
-	if err := w.Write(v, ann); err != nil {
-		t.Fatalf("Write() error = %v", err)
-	}
-	if err := w.Flush(); err != nil {
-		t.Fatalf("Flush() error = %v", err)
-	}
+	require.NoError(t, w.WriteHeader())
+	require.NoError(t, w.Write(v, ann))
+	require.NoError(t, w.Flush())
 
 	output := buf.String()
 	lines := strings.Split(output, "\n")
-	if len(lines) < 2 {
-		t.Fatalf("Expected at least 2 lines (header + data), got %d", len(lines))
-	}
+	require.GreaterOrEqual(t, len(lines), 2)
 
 	dataLine := lines[1]
 
@@ -104,9 +93,7 @@ func TestTabWriter_Write_KRASG12C(t *testing.T) {
 	}
 
 	for _, check := range checks {
-		if !strings.Contains(dataLine, check.value) {
-			t.Errorf("Data line missing %s: %s", check.name, check.value)
-		}
+		assert.Contains(t, dataLine, check.value, check.name)
 	}
 }
 
@@ -130,19 +117,11 @@ func TestTabWriter_Write_IntergenicVariant(t *testing.T) {
 		Allele:      "G",
 	}
 
-	if err := w.Write(v, ann); err != nil {
-		t.Fatalf("Write() error = %v", err)
-	}
-	if err := w.Flush(); err != nil {
-		t.Fatalf("Flush() error = %v", err)
-	}
+	require.NoError(t, w.Write(v, ann))
+	require.NoError(t, w.Flush())
 
 	output := buf.String()
 
-	if !strings.Contains(output, "intergenic_variant") {
-		t.Error("Missing intergenic_variant consequence")
-	}
-	if !strings.Contains(output, "MODIFIER") {
-		t.Error("Missing MODIFIER impact")
-	}
+	assert.Contains(t, output, "intergenic_variant")
+	assert.Contains(t, output, "MODIFIER")
 }

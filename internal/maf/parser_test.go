@@ -4,173 +4,105 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParser_ParseVariants(t *testing.T) {
 	testFile := findTestFile(t, "sample.maf")
 
 	parser, err := NewParser(testFile)
-	if err != nil {
-		t.Fatalf("Failed to create parser: %v", err)
-	}
+	require.NoError(t, err)
 	defer parser.Close()
 
 	// Verify column indices were parsed correctly
 	cols := parser.Columns()
-	if cols.Chromosome != 4 {
-		t.Errorf("Expected Chromosome column at index 4, got %d", cols.Chromosome)
-	}
-	if cols.StartPosition != 5 {
-		t.Errorf("Expected Start_Position column at index 5, got %d", cols.StartPosition)
-	}
-	if cols.ReferenceAllele != 11 {
-		t.Errorf("Expected Reference_Allele column at index 11, got %d", cols.ReferenceAllele)
-	}
-	if cols.TumorSeqAllele2 != 13 {
-		t.Errorf("Expected Tumor_Seq_Allele2 column at index 13, got %d", cols.TumorSeqAllele2)
-	}
+	assert.Equal(t, 4, cols.Chromosome)
+	assert.Equal(t, 5, cols.StartPosition)
+	assert.Equal(t, 11, cols.ReferenceAllele)
+	assert.Equal(t, 13, cols.TumorSeqAllele2)
 
 	// Read first variant (TRUB1)
 	v, err := parser.Next()
-	if err != nil {
-		t.Fatalf("Failed to read variant: %v", err)
-	}
-	if v == nil {
-		t.Fatal("Expected a variant, got nil")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, v)
 
-	if v.Chrom != "10" {
-		t.Errorf("Expected chrom 10, got %s", v.Chrom)
-	}
-	if v.Pos != 116734973 {
-		t.Errorf("Expected pos 116734973, got %d", v.Pos)
-	}
-	if v.Ref != "G" {
-		t.Errorf("Expected ref G, got %s", v.Ref)
-	}
-	if v.Alt != "A" {
-		t.Errorf("Expected alt A, got %s", v.Alt)
-	}
+	assert.Equal(t, "10", v.Chrom)
+	assert.Equal(t, int64(116734973), v.Pos)
+	assert.Equal(t, "G", v.Ref)
+	assert.Equal(t, "A", v.Alt)
 
 	// Read second variant (RRM1)
 	v, err = parser.Next()
-	if err != nil {
-		t.Fatalf("Failed to read variant: %v", err)
-	}
-	if v == nil {
-		t.Fatal("Expected a variant, got nil")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, v)
 
-	if v.Chrom != "11" {
-		t.Errorf("Expected chrom 11, got %s", v.Chrom)
-	}
-	if v.Pos != 4148284 {
-		t.Errorf("Expected pos 4148284, got %d", v.Pos)
-	}
+	assert.Equal(t, "11", v.Chrom)
+	assert.Equal(t, int64(4148284), v.Pos)
 
 	// Read third variant (KRAS G12C)
 	v, err = parser.Next()
-	if err != nil {
-		t.Fatalf("Failed to read variant: %v", err)
-	}
-	if v == nil {
-		t.Fatal("Expected a variant, got nil")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, v)
 
-	if v.Chrom != "12" {
-		t.Errorf("Expected chrom 12, got %s", v.Chrom)
-	}
-	if v.Pos != 25398285 {
-		t.Errorf("Expected pos 25398285, got %d", v.Pos)
-	}
-	if v.Ref != "G" {
-		t.Errorf("Expected ref G, got %s", v.Ref)
-	}
-	if v.Alt != "T" {
-		t.Errorf("Expected alt T, got %s", v.Alt)
-	}
+	assert.Equal(t, "12", v.Chrom)
+	assert.Equal(t, int64(25398285), v.Pos)
+	assert.Equal(t, "G", v.Ref)
+	assert.Equal(t, "T", v.Alt)
 
 	// Count remaining variants
 	count := 3 // Already read 3
 	for {
 		v, err := parser.Next()
-		if err != nil {
-			t.Fatalf("Error reading variant: %v", err)
-		}
+		require.NoError(t, err)
 		if v == nil {
 			break
 		}
 		count++
 	}
 
-	if count != 5 {
-		t.Errorf("Expected 5 variants, got %d", count)
-	}
+	assert.Equal(t, 5, count)
 }
 
 func TestParser_WithAnnotation(t *testing.T) {
 	testFile := findTestFile(t, "sample.maf")
 
 	parser, err := NewParser(testFile)
-	if err != nil {
-		t.Fatalf("Failed to create parser: %v", err)
-	}
+	require.NoError(t, err)
 	defer parser.Close()
 
 	// Read first variant with annotation
 	v, ann, err := parser.NextWithAnnotation()
-	if err != nil {
-		t.Fatalf("Failed to read variant: %v", err)
-	}
-	if v == nil || ann == nil {
-		t.Fatal("Expected variant and annotation, got nil")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, v)
+	require.NotNil(t, ann)
 
 	// Verify annotation data
-	if ann.HugoSymbol != "TRUB1" {
-		t.Errorf("Expected HugoSymbol TRUB1, got %s", ann.HugoSymbol)
-	}
-	if ann.Consequence != "stop_gained" {
-		t.Errorf("Expected Consequence stop_gained, got %s", ann.Consequence)
-	}
-	if ann.HGVSpShort != "p.W295*" {
-		t.Errorf("Expected HGVSpShort p.W295*, got %s", ann.HGVSpShort)
-	}
-	if ann.TranscriptID != "ENST00000298746" {
-		t.Errorf("Expected TranscriptID ENST00000298746, got %s", ann.TranscriptID)
-	}
-	if ann.NCBIBuild != "GRCh37" {
-		t.Errorf("Expected NCBIBuild GRCh37, got %s", ann.NCBIBuild)
-	}
+	assert.Equal(t, "TRUB1", ann.HugoSymbol)
+	assert.Equal(t, "stop_gained", ann.Consequence)
+	assert.Equal(t, "p.W295*", ann.HGVSpShort)
+	assert.Equal(t, "ENST00000298746", ann.TranscriptID)
+	assert.Equal(t, "GRCh37", ann.NCBIBuild)
 
 	// Read KRAS G12C variant
 	parser.NextWithAnnotation() // skip RRM1
 	v, ann, err = parser.NextWithAnnotation()
-	if err != nil {
-		t.Fatalf("Failed to read variant: %v", err)
-	}
+	require.NoError(t, err)
 
-	if ann.HugoSymbol != "KRAS" {
-		t.Errorf("Expected HugoSymbol KRAS, got %s", ann.HugoSymbol)
-	}
-	if ann.HGVSpShort != "p.G12C" {
-		t.Errorf("Expected HGVSpShort p.G12C, got %s", ann.HGVSpShort)
-	}
+	assert.Equal(t, "KRAS", ann.HugoSymbol)
+	assert.Equal(t, "p.G12C", ann.HGVSpShort)
 }
 
 func TestParser_Header(t *testing.T) {
 	testFile := findTestFile(t, "sample.maf")
 
 	parser, err := NewParser(testFile)
-	if err != nil {
-		t.Fatalf("Failed to create parser: %v", err)
-	}
+	require.NoError(t, err)
 	defer parser.Close()
 
 	header := parser.Header()
-	if header == "" {
-		t.Error("Expected header line")
-	}
+	assert.NotEmpty(t, header)
 
 	// Check for expected columns in header
 	if len(header) < 50 {
@@ -185,29 +117,21 @@ func TestParseError(t *testing.T) {
 	}
 
 	expected := "maf parse error at line 42: required column not found"
-	if err.Error() != expected {
-		t.Errorf("Error message mismatch: got %q, want %q", err.Error(), expected)
-	}
+	assert.Equal(t, expected, err.Error())
 }
 
 func TestParser_ImplementsVariantParser(t *testing.T) {
 	testFile := findTestFile(t, "sample.maf")
 
 	parser, err := NewParser(testFile)
-	if err != nil {
-		t.Fatalf("Failed to create parser: %v", err)
-	}
+	require.NoError(t, err)
 	defer parser.Close()
 
 	// Verify the parser has the expected interface methods
 	_ = parser.LineNumber()
 	v, err := parser.Next()
-	if err != nil {
-		t.Fatalf("Next() failed: %v", err)
-	}
-	if v == nil {
-		t.Fatal("Expected variant from Next()")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, v)
 }
 
 // findTestFile locates a test file in the testdata directory.

@@ -3,8 +3,10 @@ package vcf
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParser_SingleVariant(t *testing.T) {
@@ -12,91 +14,60 @@ func TestParser_SingleVariant(t *testing.T) {
 	testFile := findTestFile(t, "kras_g12c.vcf")
 
 	parser, err := NewParser(testFile)
-	if err != nil {
-		t.Fatalf("Failed to create parser: %v", err)
-	}
+	require.NoError(t, err)
 	defer parser.Close()
 
 	// Read the first (and only) variant
 	v, err := parser.Next()
-	if err != nil {
-		t.Fatalf("Failed to read variant: %v", err)
-	}
-
-	if v == nil {
-		t.Fatal("Expected a variant, got nil")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, v)
 
 	// Verify KRAS G12C variant (c.34G>T p.G12C)
 	// On reverse strand: coding G->T = genomic C->A
-	if v.Chrom != "12" {
-		t.Errorf("Expected chrom 12, got %s", v.Chrom)
-	}
-	if v.Pos != 25245351 {
-		t.Errorf("Expected pos 25245351, got %d", v.Pos)
-	}
-	if v.Ref != "C" {
-		t.Errorf("Expected ref C, got %s", v.Ref)
-	}
-	if v.Alt != "A" {
-		t.Errorf("Expected alt A, got %s", v.Alt)
-	}
+	assert.Equal(t, "12", v.Chrom)
+	assert.Equal(t, int64(25245351), v.Pos)
+	assert.Equal(t, "C", v.Ref)
+	assert.Equal(t, "A", v.Alt)
 
 	// Should be a SNV
-	if !v.IsSNV() {
-		t.Error("KRAS G12C should be classified as SNV")
-	}
+	assert.True(t, v.IsSNV(), "KRAS G12C should be classified as SNV")
 
 	// No more variants
 	v2, err := parser.Next()
-	if err != nil {
-		t.Fatalf("Error checking for more variants: %v", err)
-	}
-	if v2 != nil {
-		t.Error("Expected no more variants")
-	}
+	require.NoError(t, err)
+	assert.Nil(t, v2)
 }
 
 func TestParser_MultipleVariants(t *testing.T) {
 	testFile := findTestFile(t, "multi_variant.vcf")
 
 	parser, err := NewParser(testFile)
-	if err != nil {
-		t.Fatalf("Failed to create parser: %v", err)
-	}
+	require.NoError(t, err)
 	defer parser.Close()
 
 	// Count variants
 	count := 0
 	for {
 		v, err := parser.Next()
-		if err != nil {
-			t.Fatalf("Error reading variant: %v", err)
-		}
+		require.NoError(t, err)
 		if v == nil {
 			break
 		}
 		count++
 	}
 
-	if count != 5 {
-		t.Errorf("Expected 5 variants, got %d", count)
-	}
+	assert.Equal(t, 5, count)
 }
 
 func TestParser_Header(t *testing.T) {
 	testFile := findTestFile(t, "kras_g12c.vcf")
 
 	parser, err := NewParser(testFile)
-	if err != nil {
-		t.Fatalf("Failed to create parser: %v", err)
-	}
+	require.NoError(t, err)
 	defer parser.Close()
 
 	header := parser.Header()
-	if len(header) == 0 {
-		t.Error("Expected header lines")
-	}
+	require.NotEmpty(t, header)
 
 	// Check for required header elements
 	hasFileformat := false
@@ -110,12 +81,8 @@ func TestParser_Header(t *testing.T) {
 		}
 	}
 
-	if !hasFileformat {
-		t.Error("Missing ##fileformat header")
-	}
-	if !hasChromLine {
-		t.Error("Missing #CHROM header line")
-	}
+	assert.True(t, hasFileformat, "Missing ##fileformat header")
+	assert.True(t, hasChromLine, "Missing #CHROM header line")
 }
 
 func TestSplitMultiAllelic(t *testing.T) {
@@ -139,15 +106,11 @@ func TestSplitMultiAllelic(t *testing.T) {
 			}
 
 			variants := SplitMultiAllelic(v)
-			if len(variants) != tt.expected {
-				t.Errorf("Expected %d variants, got %d", tt.expected, len(variants))
-			}
+			require.Len(t, variants, tt.expected)
 
 			// Each variant should have only one alt allele
 			for _, split := range variants {
-				if strings.Contains(split.Alt, ",") {
-					t.Errorf("Split variant should not contain comma in alt: %s", split.Alt)
-				}
+				assert.NotContains(t, split.Alt, ",")
 			}
 		})
 	}
@@ -160,9 +123,7 @@ func TestParseError(t *testing.T) {
 	}
 
 	expected := "vcf parse error at line 42: expected 8 columns, found 7"
-	if err.Error() != expected {
-		t.Errorf("Error message mismatch: got %q, want %q", err.Error(), expected)
-	}
+	assert.Equal(t, expected, err.Error())
 }
 
 // findTestFile locates a test file in the testdata directory.
@@ -184,4 +145,3 @@ func findTestFile(t *testing.T, name string) string {
 	t.Fatalf("Test file not found: %s", name)
 	return ""
 }
-

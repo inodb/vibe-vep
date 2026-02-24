@@ -9,6 +9,8 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/vcf"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestAnnotator_KRASG12C_Integration is an end-to-end integration test
@@ -19,13 +21,8 @@ func TestAnnotator_KRASG12C_Integration(t *testing.T) {
 	c := cache.New()
 	loader := cache.NewLoader(testCacheDir, "homo_sapiens", "GRCh38")
 
-	if err := loader.Load(c, "12"); err != nil {
-		t.Fatalf("Failed to load cache: %v", err)
-	}
-
-	if c.TranscriptCount() == 0 {
-		t.Fatal("No transcripts loaded")
-	}
+	require.NoError(t, loader.Load(c, "12"), "loading cache")
+	require.NotZero(t, c.TranscriptCount(), "no transcripts loaded")
 
 	// Create annotator
 	ann := NewAnnotator(c)
@@ -42,13 +39,8 @@ func TestAnnotator_KRASG12C_Integration(t *testing.T) {
 
 	// Annotate
 	annotations, err := ann.Annotate(v)
-	if err != nil {
-		t.Fatalf("Annotation failed: %v", err)
-	}
-
-	if len(annotations) == 0 {
-		t.Fatal("Expected at least one annotation")
-	}
+	require.NoError(t, err, "annotation failed")
+	require.NotEmpty(t, annotations)
 
 	// Find the canonical transcript annotation
 	var canonicalAnn *Annotation
@@ -59,9 +51,7 @@ func TestAnnotator_KRASG12C_Integration(t *testing.T) {
 		}
 	}
 
-	if canonicalAnn == nil {
-		t.Fatal("Expected to find canonical transcript annotation")
-	}
+	require.NotNil(t, canonicalAnn, "expected canonical transcript annotation")
 
 	// Verify annotation fields
 	tests := []struct {
@@ -81,18 +71,12 @@ func TestAnnotator_KRASG12C_Integration(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if tt.got != tt.expected {
-			t.Errorf("%s: got %v, expected %v", tt.name, tt.got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, tt.got, tt.name)
 	}
 
 	// Verify codon change contains expected codons
-	if !strings.Contains(strings.ToUpper(canonicalAnn.CodonChange), "GGT") {
-		t.Errorf("CodonChange should contain GGT (ref codon), got %s", canonicalAnn.CodonChange)
-	}
-	if !strings.Contains(strings.ToUpper(canonicalAnn.CodonChange), "TGT") {
-		t.Errorf("CodonChange should contain TGT (alt codon), got %s", canonicalAnn.CodonChange)
-	}
+	assert.Contains(t, strings.ToUpper(canonicalAnn.CodonChange), "GGT")
+	assert.Contains(t, strings.ToUpper(canonicalAnn.CodonChange), "TGT")
 }
 
 func TestAnnotator_IntergenicVariant(t *testing.T) {
@@ -101,9 +85,7 @@ func TestAnnotator_IntergenicVariant(t *testing.T) {
 	c := cache.New()
 	loader := cache.NewLoader(testCacheDir, "homo_sapiens", "GRCh38")
 
-	if err := loader.Load(c, "12"); err != nil {
-		t.Fatalf("Failed to load cache: %v", err)
-	}
+	require.NoError(t, loader.Load(c, "12"), "loading cache")
 
 	ann := NewAnnotator(c)
 
@@ -116,21 +98,11 @@ func TestAnnotator_IntergenicVariant(t *testing.T) {
 	}
 
 	annotations, err := ann.Annotate(v)
-	if err != nil {
-		t.Fatalf("Annotation failed: %v", err)
-	}
+	require.NoError(t, err, "annotation failed")
+	require.Len(t, annotations, 1)
 
-	if len(annotations) != 1 {
-		t.Fatalf("Expected 1 annotation for intergenic, got %d", len(annotations))
-	}
-
-	if annotations[0].Consequence != ConsequenceIntergenicVariant {
-		t.Errorf("Expected intergenic_variant, got %s", annotations[0].Consequence)
-	}
-
-	if annotations[0].Impact != ImpactModifier {
-		t.Errorf("Expected MODIFIER impact, got %s", annotations[0].Impact)
-	}
+	assert.Equal(t, ConsequenceIntergenicVariant, annotations[0].Consequence)
+	assert.Equal(t, ImpactModifier, annotations[0].Impact)
 }
 
 func TestAnnotator_CanonicalOnly(t *testing.T) {
@@ -138,9 +110,7 @@ func TestAnnotator_CanonicalOnly(t *testing.T) {
 	c := cache.New()
 	loader := cache.NewLoader(testCacheDir, "homo_sapiens", "GRCh38")
 
-	if err := loader.Load(c, "12"); err != nil {
-		t.Fatalf("Failed to load cache: %v", err)
-	}
+	require.NoError(t, loader.Load(c, "12"), "loading cache")
 
 	ann := NewAnnotator(c)
 	ann.SetCanonicalOnly(true)
@@ -153,17 +123,13 @@ func TestAnnotator_CanonicalOnly(t *testing.T) {
 	}
 
 	annotations, err := ann.Annotate(v)
-	if err != nil {
-		t.Fatalf("Annotation failed: %v", err)
-	}
+	require.NoError(t, err, "annotation failed")
 
 	// Should only have canonical transcript
-	if len(annotations) != 1 {
-		t.Errorf("Expected 1 annotation (canonical only), got %d", len(annotations))
-	}
+	assert.Len(t, annotations, 1)
 
-	if len(annotations) > 0 && !annotations[0].IsCanonical {
-		t.Error("Expected only canonical transcript annotation")
+	if len(annotations) > 0 {
+		assert.True(t, annotations[0].IsCanonical)
 	}
 }
 
@@ -172,9 +138,7 @@ func TestAnnotator_AnnotateAll(t *testing.T) {
 	c := cache.New()
 	loader := cache.NewLoader(testCacheDir, "homo_sapiens", "GRCh38")
 
-	if err := loader.Load(c, "12"); err != nil {
-		t.Fatalf("Failed to load cache: %v", err)
-	}
+	require.NoError(t, loader.Load(c, "12"), "loading cache")
 
 	ann := NewAnnotator(c)
 	ann.SetCanonicalOnly(true)
@@ -182,27 +146,19 @@ func TestAnnotator_AnnotateAll(t *testing.T) {
 	// Parse the test VCF
 	vcfPath := findTestVCF(t, "kras_g12c.vcf")
 	parser, err := vcf.NewParser(vcfPath)
-	if err != nil {
-		t.Fatalf("Failed to create parser: %v", err)
-	}
+	require.NoError(t, err, "creating parser")
 	defer parser.Close()
 
 	// Use a mock writer to capture output
 	var buf bytes.Buffer
 	writer := &mockWriter{buf: &buf}
 
-	if err := ann.AnnotateAll(parser, writer); err != nil {
-		t.Fatalf("AnnotateAll failed: %v", err)
-	}
+	require.NoError(t, ann.AnnotateAll(parser, writer), "AnnotateAll failed")
 
 	// Verify we got KRAS annotation
 	output := buf.String()
-	if !strings.Contains(output, "KRAS") {
-		t.Error("Expected output to contain KRAS")
-	}
-	if !strings.Contains(output, "missense_variant") {
-		t.Error("Expected output to contain missense_variant")
-	}
+	assert.Contains(t, output, "KRAS")
+	assert.Contains(t, output, "missense_variant")
 }
 
 // mockWriter implements AnnotationWriter for testing.

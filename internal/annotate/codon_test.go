@@ -1,12 +1,16 @@
 package annotate
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestTranslateCodon(t *testing.T) {
 	tests := []struct {
-		name   string
-		codon  string
-		want   byte
+		name  string
+		codon string
+		want  byte
 	}{
 		// Standard amino acids
 		{"ATG -> Met (start)", "ATG", 'M'},
@@ -34,9 +38,7 @@ func TestTranslateCodon(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := TranslateCodon(tt.codon)
-			if got != tt.want {
-				t.Errorf("TranslateCodon(%q) = %c, want %c", tt.codon, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "TranslateCodon(%q)", tt.codon)
 		})
 	}
 }
@@ -65,9 +67,7 @@ func TestReverseComplement(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ReverseComplement(tt.seq)
-			if got != tt.want {
-				t.Errorf("ReverseComplement(%q) = %q, want %q", tt.seq, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "ReverseComplement(%q)", tt.seq)
 		})
 	}
 }
@@ -88,9 +88,7 @@ func TestIsStopCodon(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.codon, func(t *testing.T) {
 			got := IsStopCodon(tt.codon)
-			if got != tt.want {
-				t.Errorf("IsStopCodon(%q) = %v, want %v", tt.codon, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -109,9 +107,7 @@ func TestIsStartCodon(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.codon, func(t *testing.T) {
 			got := IsStartCodon(tt.codon)
-			if got != tt.want {
-				t.Errorf("IsStartCodon(%q) = %v, want %v", tt.codon, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -137,20 +133,18 @@ func TestGetCodon(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := GetCodon(tt.cds, tt.codonNumber)
-			if got != tt.want {
-				t.Errorf("GetCodon(%q, %d) = %q, want %q", tt.cds, tt.codonNumber, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
 
 func TestMutateCodon(t *testing.T) {
 	tests := []struct {
-		name           string
-		codon          string
+		name            string
+		codon           string
 		positionInCodon int
-		newBase        byte
-		want           string
+		newBase         byte
+		want            string
 	}{
 		{"first position", "GGT", 0, 'T', "TGT"},   // G12C: GGT -> TGT
 		{"second position", "GGT", 1, 'A', "GAT"},
@@ -162,10 +156,7 @@ func TestMutateCodon(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := MutateCodon(tt.codon, tt.positionInCodon, tt.newBase)
-			if got != tt.want {
-				t.Errorf("MutateCodon(%q, %d, %c) = %q, want %q",
-					tt.codon, tt.positionInCodon, tt.newBase, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -186,9 +177,7 @@ func TestTranslateSequence(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := TranslateSequence(tt.seq)
-			if got != tt.want {
-				t.Errorf("TranslateSequence(%q) = %q, want %q", tt.seq, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -203,24 +192,16 @@ func TestKRASG12CMutation(t *testing.T) {
 
 	refCodon := "GGT"
 	refAA := TranslateCodon(refCodon)
-	if refAA != 'G' {
-		t.Errorf("Reference codon GGT should translate to G (Gly), got %c", refAA)
-	}
+	assert.Equal(t, byte('G'), refAA, "Reference codon GGT should translate to G (Gly)")
 
 	// Mutate first position: G -> T gives TGT
 	altCodon := MutateCodon(refCodon, 0, 'T')
-	if altCodon != "TGT" {
-		t.Errorf("Expected TGT after mutation, got %s", altCodon)
-	}
+	assert.Equal(t, "TGT", altCodon, "Expected TGT after mutation")
 
 	altAA := TranslateCodon(altCodon)
-	if altAA != 'C' {
-		t.Errorf("Alternate codon TGT should translate to C (Cys), got %c", altAA)
-	}
+	assert.Equal(t, byte('C'), altAA, "Alternate codon TGT should translate to C (Cys)")
 
 	// The amino acid change notation
 	aaChange := string(refAA) + "12" + string(altAA)
-	if aaChange != "G12C" {
-		t.Errorf("Expected amino acid change G12C, got %s", aaChange)
-	}
+	assert.Equal(t, "G12C", aaChange, "Expected amino acid change G12C")
 }

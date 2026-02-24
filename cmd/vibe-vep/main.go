@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/maf"
@@ -29,6 +32,8 @@ var (
 )
 
 func newRootCmd() *cobra.Command {
+	var verbose bool
+
 	rootCmd := &cobra.Command{
 		Use:   "vibe-vep",
 		Short: "Variant Effect Predictor",
@@ -36,10 +41,24 @@ func newRootCmd() *cobra.Command {
 		Version: fmt.Sprintf("%s (%s) built %s", version, commit, date),
 	}
 
-	rootCmd.AddCommand(newAnnotateCmd())
-	rootCmd.AddCommand(newDownloadCmd())
+	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable debug-level logging")
+
+	rootCmd.AddCommand(newAnnotateCmd(&verbose))
+	rootCmd.AddCommand(newDownloadCmd(&verbose))
 
 	return rootCmd
+}
+
+// newLogger creates a zap logger for the CLI. In verbose mode it logs at DEBUG
+// level; otherwise at INFO level.
+func newLogger(verbose bool) (*zap.Logger, error) {
+	cfg := zap.NewDevelopmentConfig()
+	cfg.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	cfg.DisableStacktrace = true
+	if !verbose {
+		cfg.Level.SetLevel(zap.InfoLevel)
+	}
+	return cfg.Build()
 }
 
 func main() {
@@ -48,7 +67,7 @@ func main() {
 	}
 }
 
-func newAnnotateCmd() *cobra.Command {
+func newAnnotateCmd(verbose *bool) *cobra.Command {
 	var (
 		assembly      string
 		outputFormat  string
@@ -70,7 +89,12 @@ func newAnnotateCmd() *cobra.Command {
   cat input.vcf | vibe-vep annotate -`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAnnotate(args[0], assembly, outputFormat, outputFile, canonicalOnly, inputFormat, validate, validateAll)
+			logger, err := newLogger(*verbose)
+			if err != nil {
+				return fmt.Errorf("creating logger: %w", err)
+			}
+			defer logger.Sync()
+			return runAnnotate(logger, args[0], assembly, outputFormat, outputFile, canonicalOnly, inputFormat, validate, validateAll)
 		},
 	}
 
@@ -85,7 +109,7 @@ func newAnnotateCmd() *cobra.Command {
 	return cmd
 }
 
-func runAnnotate(inputPath, assembly, outputFormat, outputFile string, canonicalOnly bool, inputFormat string, validate, validateAll bool) error {
+func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFile string, canonicalOnly bool, inputFormat string, validate, validateAll bool) error {
 	// Detect input format if not specified
 	detectedFormat := inputFormat
 	if detectedFormat == "" {
@@ -119,37 +143,36 @@ func runAnnotate(inputPath, assembly, outputFormat, outputFile string, canonical
 		return fmt.Errorf("no GENCODE cache found for %s\nHint: Download GENCODE annotations with: vibe-vep download --assembly %s", assembly, assembly)
 	}
 
-	fmt.Fprintf(os.Stderr, "Using GENCODE cache for %s\n", assembly)
-	fmt.Fprintf(os.Stderr, "  GTF: %s\n", gtfPath)
-	if fastaPath != "" {
-		fmt.Fprintf(os.Stderr, "  FASTA: %s\n", fastaPath)
-	}
+	logger.Info("using GENCODE cache",
+		zap.String("assembly", assembly),
+		zap.String("gtf", gtfPath),
+		zap.String("fasta", fastaPath))
 
 	c := cache.New()
 	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
 
 	// Load canonical transcript overrides if available
 	if canonicalPath != "" {
-		fmt.Fprintf(os.Stderr, "  Canonical overrides: %s\n", canonicalPath)
+		logger.Info("loading canonical overrides", zap.String("path", canonicalPath))
 		overrides, err := cache.LoadCanonicalOverrides(canonicalPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not load canonical overrides: %v\n", err)
+			logger.Warn("could not load canonical overrides", zap.Error(err))
 		} else {
 			loader.SetCanonicalOverrides(overrides)
-			fmt.Fprintf(os.Stderr, "  Loaded %d canonical overrides\n", len(overrides))
+			logger.Info("loaded canonical overrides", zap.Int("count", len(overrides)))
 		}
 	}
 
 	if err := loader.Load(c); err != nil {
 		return fmt.Errorf("loading GENCODE cache: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "Loaded %d transcripts\n", c.TranscriptCount())
+	logger.Info("loaded transcripts", zap.Int("count", c.TranscriptCount()))
 	transcriptCache := c
 
 	// Create annotator
 	ann := annotate.NewAnnotator(transcriptCache)
 	ann.SetCanonicalOnly(canonicalOnly)
-	ann.SetWarnings(os.Stderr)
+	ann.SetLogger(logger)
 
 	// Create output writer
 	var out *os.File
@@ -174,7 +197,7 @@ func runAnnotate(inputPath, assembly, outputFormat, outputFile string, canonical
 			return fmt.Errorf("--validate requires MAF parser")
 		}
 
-		return runValidation(mafParser, ann, out, validateAll)
+		return runValidation(logger, mafParser, ann, out, validateAll)
 	}
 
 	var writer annotate.AnnotationWriter
@@ -201,7 +224,7 @@ func runAnnotate(inputPath, assembly, outputFormat, outputFile string, canonical
 }
 
 // runValidation runs validation mode comparing MAF annotations to VEP predictions.
-func runValidation(parser *maf.Parser, ann *annotate.Annotator, out *os.File, showAll bool) error {
+func runValidation(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotator, out *os.File, showAll bool) error {
 	valWriter := output.NewValidationWriter(out, showAll)
 
 	if err := valWriter.WriteHeader(); err != nil {
@@ -220,7 +243,10 @@ func runValidation(parser *maf.Parser, ann *annotate.Annotator, out *os.File, sh
 		// Get VEP annotations
 		vepAnns, err := ann.Annotate(v)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to annotate %s:%d: %v\n", v.Chrom, v.Pos, err)
+			logger.Warn("failed to annotate variant",
+				zap.String("chrom", v.Chrom),
+				zap.Int64("pos", v.Pos),
+				zap.Error(err))
 			continue
 		}
 

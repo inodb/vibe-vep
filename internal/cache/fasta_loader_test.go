@@ -3,6 +3,9 @@ package cache
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFASTALoader_ParseHeader(t *testing.T) {
@@ -25,9 +28,7 @@ func TestFASTALoader_ParseHeader(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.header, func(t *testing.T) {
 			got := loader.parseHeader(tt.header)
-			if got != tt.expected {
-				t.Errorf("parseHeader(%q) = %q, want %q", tt.header, got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
@@ -42,57 +43,37 @@ ATGCGATCGATCGATCGATCG
 
 	loader := NewFASTALoader("")
 	err := loader.parseFASTA(strings.NewReader(fastaContent))
-	if err != nil {
-		t.Fatalf("parseFASTA() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Check sequence count
-	if loader.SequenceCount() != 2 {
-		t.Errorf("SequenceCount() = %d, want 2", loader.SequenceCount())
-	}
+	assert.Equal(t, 2, loader.SequenceCount())
 
 	// Check KRAS sequence (concatenated without newlines)
 	seq := loader.GetSequence("ENST00000311936")
 	expectedSeq := "ATGACTGAATATAAACTTGTGGTAGTTGGAGCTGGTGGCGTAGGCAAGAGTGCCTTGACGATACAG"
-	if seq != expectedSeq {
-		t.Errorf("GetSequence(ENST00000311936) = %q, want %q", seq, expectedSeq)
-	}
+	assert.Equal(t, expectedSeq, seq)
 
 	// Check HasSequence
-	if !loader.HasSequence("ENST00000311936") {
-		t.Error("HasSequence(ENST00000311936) = false, want true")
-	}
-	if loader.HasSequence("ENST99999999999") {
-		t.Error("HasSequence(ENST99999999999) = true, want false")
-	}
+	assert.True(t, loader.HasSequence("ENST00000311936"))
+	assert.False(t, loader.HasSequence("ENST99999999999"))
 }
 
 func TestFASTALoader_LoadFile(t *testing.T) {
 	loader := NewFASTALoader("../../testdata/sample_cds.fa")
 
-	if err := loader.Load(); err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	require.NoError(t, loader.Load())
 
 	// Check KRAS sequence was loaded
-	if !loader.HasSequence("ENST00000311936") {
-		t.Error("HasSequence(ENST00000311936) = false after loading sample_cds.fa")
-	}
+	assert.True(t, loader.HasSequence("ENST00000311936"))
 
 	seq := loader.GetSequence("ENST00000311936")
-	if seq == "" {
-		t.Error("GetSequence(ENST00000311936) returned empty string")
-	}
+	assert.NotEmpty(t, seq)
 
 	// KRAS CDS should start with ATG (start codon)
-	if !strings.HasPrefix(seq, "ATG") {
-		t.Errorf("KRAS CDS should start with ATG, got %q", seq[:min(3, len(seq))])
-	}
+	assert.True(t, strings.HasPrefix(seq, "ATG"), "KRAS CDS should start with ATG, got %q", seq[:min(3, len(seq))])
 
 	// KRAS CDS should end with TAA (stop codon)
-	if !strings.HasSuffix(seq, "TAA") {
-		t.Errorf("KRAS CDS should end with TAA, got %q", seq[max(0, len(seq)-3):])
-	}
+	assert.True(t, strings.HasSuffix(seq, "TAA"), "KRAS CDS should end with TAA, got %q", seq[max(0, len(seq)-3):])
 }
 
 func TestFASTALoader_GetSequenceWithVersion(t *testing.T) {
@@ -101,9 +82,7 @@ ATGACTGAA
 `
 
 	loader := NewFASTALoader("")
-	if err := loader.parseFASTA(strings.NewReader(fastaContent)); err != nil {
-		t.Fatalf("parseFASTA() error = %v", err)
-	}
+	require.NoError(t, loader.parseFASTA(strings.NewReader(fastaContent)))
 
 	// Should find sequence with or without version
 	tests := []string{
@@ -112,12 +91,8 @@ ATGACTGAA
 	}
 
 	for _, id := range tests {
-		if !loader.HasSequence(id) {
-			t.Errorf("HasSequence(%q) = false, want true", id)
-		}
-		if seq := loader.GetSequence(id); seq != "ATGACTGAA" {
-			t.Errorf("GetSequence(%q) = %q, want ATGACTGAA", id, seq)
-		}
+		assert.True(t, loader.HasSequence(id), "HasSequence(%q) should be true", id)
+		assert.Equal(t, "ATGACTGAA", loader.GetSequence(id), "GetSequence(%q)", id)
 	}
 }
 
@@ -129,15 +104,10 @@ AAAAAAAAAAATGCCCGAATTTTTTTTTT
 `
 
 	loader := NewFASTALoader("")
-	if err := loader.parseFASTA(strings.NewReader(fastaContent)); err != nil {
-		t.Fatalf("parseFASTA() error = %v", err)
-	}
+	require.NoError(t, loader.parseFASTA(strings.NewReader(fastaContent)))
 
 	seq := loader.GetSequence("ENST00000999999")
-	expected := "ATGCCCGAA"
-	if seq != expected {
-		t.Errorf("GetSequence(ENST00000999999) = %q, want %q (CDS only)", seq, expected)
-	}
+	assert.Equal(t, "ATGCCCGAA", seq)
 }
 
 func TestFASTALoader_CDSExtractionNoCDSAnnotation(t *testing.T) {
@@ -147,15 +117,10 @@ ATGCCCGAAATGCCCGAAATGCCCGAATTT
 `
 
 	loader := NewFASTALoader("")
-	if err := loader.parseFASTA(strings.NewReader(fastaContent)); err != nil {
-		t.Fatalf("parseFASTA() error = %v", err)
-	}
+	require.NoError(t, loader.parseFASTA(strings.NewReader(fastaContent)))
 
 	seq := loader.GetSequence("ENST00000888888")
-	expected := "ATGCCCGAAATGCCCGAAATGCCCGAATTT"
-	if seq != expected {
-		t.Errorf("GetSequence(ENST00000888888) = %q, want %q (full sequence)", seq, expected)
-	}
+	assert.Equal(t, "ATGCCCGAAATGCCCGAAATGCCCGAATTT", seq)
 }
 
 func TestFASTALoader_CDSExtractionNoUTR(t *testing.T) {
@@ -165,15 +130,10 @@ ATGCCCGAATAA
 `
 
 	loader := NewFASTALoader("")
-	if err := loader.parseFASTA(strings.NewReader(fastaContent)); err != nil {
-		t.Fatalf("parseFASTA() error = %v", err)
-	}
+	require.NoError(t, loader.parseFASTA(strings.NewReader(fastaContent)))
 
 	seq := loader.GetSequence("ENST00000777777")
-	expected := "ATGCCCGAATAA"
-	if seq != expected {
-		t.Errorf("GetSequence(ENST00000777777) = %q, want %q", seq, expected)
-	}
+	assert.Equal(t, "ATGCCCGAATAA", seq)
 }
 
 func TestParseCDSRange(t *testing.T) {
@@ -192,10 +152,9 @@ func TestParseCDSRange(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.header, func(t *testing.T) {
 			start, end, ok := parseCDSRange(tt.header)
-			if ok != tt.wantOK || start != tt.wantStart || end != tt.wantEnd {
-				t.Errorf("parseCDSRange(%q) = (%d, %d, %v), want (%d, %d, %v)",
-					tt.header, start, end, ok, tt.wantStart, tt.wantEnd, tt.wantOK)
-			}
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantStart, start)
+			assert.Equal(t, tt.wantEnd, end)
 		})
 	}
 }

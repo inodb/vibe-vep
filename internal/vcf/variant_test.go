@@ -1,6 +1,10 @@
 package vcf
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestVariant_IsSNV(t *testing.T) {
 	tests := []struct {
@@ -20,9 +24,7 @@ func TestVariant_IsSNV(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			v := &Variant{Ref: tt.ref, Alt: tt.alt}
-			if got := v.IsSNV(); got != tt.want {
-				t.Errorf("IsSNV() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, v.IsSNV())
 		})
 	}
 }
@@ -44,9 +46,7 @@ func TestVariant_IsIndel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			v := &Variant{Ref: tt.ref, Alt: tt.alt}
-			if got := v.IsIndel(); got != tt.want {
-				t.Errorf("IsIndel() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, v.IsIndel())
 		})
 	}
 }
@@ -67,9 +67,7 @@ func TestVariant_IsInsertion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			v := &Variant{Ref: tt.ref, Alt: tt.alt}
-			if got := v.IsInsertion(); got != tt.want {
-				t.Errorf("IsInsertion() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, v.IsInsertion())
 		})
 	}
 }
@@ -90,9 +88,7 @@ func TestVariant_IsDeletion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			v := &Variant{Ref: tt.ref, Alt: tt.alt}
-			if got := v.IsDeletion(); got != tt.want {
-				t.Errorf("IsDeletion() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, v.IsDeletion())
 		})
 	}
 }
@@ -117,9 +113,7 @@ func TestVariant_NormalizeChrom(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			v := &Variant{Chrom: tt.chrom}
-			if got := v.NormalizeChrom(); got != tt.want {
-				t.Errorf("NormalizeChrom() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, v.NormalizeChrom())
 		})
 	}
 }
@@ -134,15 +128,7 @@ func TestVariant_KRASG12C(t *testing.T) {
 		Alt:   "A",
 	}
 
-	if !v.IsSNV() {
-		t.Error("KRAS G12C should be classified as SNV")
-	}
-
-	if v.IsIndel() {
-		t.Error("KRAS G12C should not be classified as indel")
-	}
-
-	if v.NormalizeChrom() != "12" {
-		t.Errorf("Expected chromosome 12, got %s", v.NormalizeChrom())
-	}
+	assert.True(t, v.IsSNV(), "KRAS G12C should be classified as SNV")
+	assert.False(t, v.IsIndel(), "KRAS G12C should not be classified as indel")
+	assert.Equal(t, "12", v.NormalizeChrom())
 }

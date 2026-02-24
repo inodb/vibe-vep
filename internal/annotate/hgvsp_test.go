@@ -1,8 +1,10 @@
 package annotate
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
@@ -152,9 +154,7 @@ func TestFormatHGVSp(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := FormatHGVSp(tt.result)
-			if got != tt.want {
-				t.Errorf("FormatHGVSp() = %q, want %q", got, tt.want)
-			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -171,9 +171,7 @@ func TestHGVSp_KRASG12C(t *testing.T) {
 	transcript := createKRASTranscript()
 	result := PredictConsequence(v, transcript)
 
-	if result.HGVSp != "p.Gly12Cys" {
-		t.Errorf("Expected HGVSp p.Gly12Cys, got %q", result.HGVSp)
-	}
+	assert.Equal(t, "p.Gly12Cys", result.HGVSp)
 }
 
 func TestHGVSp_Synonymous(t *testing.T) {
@@ -181,8 +179,8 @@ func TestHGVSp_Synonymous(t *testing.T) {
 	v := &vcf.Variant{
 		Chrom: "12",
 		Pos:   25245349, // Third position of codon 12 on reverse strand
-		Ref:   "C",      // Genomic C → coding G
-		Alt:   "T",      // Genomic T → coding A... let's verify
+		Ref:   "C",      // Genomic C -> coding G
+		Alt:   "T",      // Genomic T -> coding A... let's verify
 	}
 
 	transcript := createKRASTranscript()
@@ -190,10 +188,7 @@ func TestHGVSp_Synonymous(t *testing.T) {
 
 	// If this is indeed synonymous, check HGVSp
 	if result.Consequence == ConsequenceSynonymousVariant {
-		expected := "p.Gly12="
-		if result.HGVSp != expected {
-			t.Errorf("Expected HGVSp %q, got %q", expected, result.HGVSp)
-		}
+		assert.Equal(t, "p.Gly12=", result.HGVSp)
 	}
 }
 
@@ -209,23 +204,15 @@ func TestHGVSp_Frameshift(t *testing.T) {
 	transcript := createKRASTranscript()
 	result := PredictConsequence(v, transcript)
 
-	if result.Consequence != ConsequenceFrameshiftVariant {
-		t.Fatalf("Expected frameshift_variant, got %s", result.Consequence)
-	}
+	require.Equal(t, ConsequenceFrameshiftVariant, result.Consequence)
 
-	if result.RefAA == 0 {
-		t.Error("Expected RefAA to be populated for frameshift")
-	}
-	if result.AltAA == 0 {
-		t.Error("Expected AltAA to be populated for frameshift")
-	}
+	assert.NotEqual(t, byte(0), result.RefAA)
+	assert.NotEqual(t, byte(0), result.AltAA)
 
 	// HGVSp should contain "fsTer" with a stop distance
-	if result.HGVSp == "" {
-		t.Error("Expected non-empty HGVSp for frameshift")
-	}
-	if result.FrameshiftStopDist > 0 && !strings.Contains(result.HGVSp, "fsTer") {
-		t.Errorf("Expected HGVSp to contain 'fsTer', got %q", result.HGVSp)
+	assert.NotEmpty(t, result.HGVSp)
+	if result.FrameshiftStopDist > 0 {
+		assert.Contains(t, result.HGVSp, "fsTer")
 	}
 	t.Logf("Frameshift HGVSp: %s (RefAA=%c, AltAA=%c, pos=%d, stopDist=%d)",
 		result.HGVSp, result.RefAA, result.AltAA, result.ProteinPosition, result.FrameshiftStopDist)
@@ -243,17 +230,11 @@ func TestHGVSp_InframeDeletion(t *testing.T) {
 	transcript := createKRASTranscript()
 	result := PredictConsequence(v, transcript)
 
-	if result.Consequence != ConsequenceInframeDeletion {
-		t.Fatalf("Expected inframe_deletion, got %s", result.Consequence)
-	}
+	require.Equal(t, ConsequenceInframeDeletion, result.Consequence)
 
-	if result.RefAA == 0 {
-		t.Error("Expected RefAA to be populated for inframe deletion")
-	}
+	assert.NotEqual(t, byte(0), result.RefAA)
 
-	if result.HGVSp == "" {
-		t.Error("Expected non-empty HGVSp for inframe deletion")
-	}
+	assert.NotEmpty(t, result.HGVSp)
 	t.Logf("Inframe deletion HGVSp: %s", result.HGVSp)
 }
 
@@ -269,9 +250,7 @@ func TestHGVSp_StartLost(t *testing.T) {
 	}
 
 	hgvsp := FormatHGVSp(result)
-	if hgvsp != "p.Met1?" {
-		t.Errorf("Expected p.Met1?, got %q", hgvsp)
-	}
+	assert.Equal(t, "p.Met1?", hgvsp)
 }
 
 func TestAaThree(t *testing.T) {
@@ -289,8 +268,6 @@ func TestAaThree(t *testing.T) {
 
 	for _, tt := range tests {
 		got := aaThree(tt.aa)
-		if got != tt.want {
-			t.Errorf("aaThree(%c) = %q, want %q", tt.aa, got, tt.want)
-		}
+		assert.Equal(t, tt.want, got)
 	}
 }

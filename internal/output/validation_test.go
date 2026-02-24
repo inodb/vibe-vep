@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/maf"
 	"github.com/inodb/vibe-vep/internal/vcf"
@@ -14,9 +17,7 @@ func TestValidationWriter_Match(t *testing.T) {
 	var buf bytes.Buffer
 	w := NewValidationWriter(&buf, true)
 
-	if err := w.WriteHeader(); err != nil {
-		t.Fatalf("WriteHeader failed: %v", err)
-	}
+	require.NoError(t, w.WriteHeader())
 
 	variant := &vcf.Variant{
 		Chrom: "12",
@@ -42,26 +43,17 @@ func TestValidationWriter_Match(t *testing.T) {
 		},
 	}
 
-	if err := w.WriteComparison(variant, mafAnn, vepAnns); err != nil {
-		t.Fatalf("WriteComparison failed: %v", err)
-	}
-
-	if err := w.Flush(); err != nil {
-		t.Fatalf("Flush failed: %v", err)
-	}
+	require.NoError(t, w.WriteComparison(variant, mafAnn, vepAnns))
+	require.NoError(t, w.Flush())
 
 	output := buf.String()
-	if !strings.Contains(output, "KRAS") {
-		t.Errorf("Expected output to contain KRAS, got: %s", output)
-	}
-	if !strings.Contains(output, "Y") {
-		t.Errorf("Expected match (Y) in output, got: %s", output)
-	}
+	assert.Contains(t, output, "KRAS")
+	assert.Contains(t, output, "Y")
 
 	total, matches, mismatches := w.Summary()
-	if total != 1 || matches != 1 || mismatches != 0 {
-		t.Errorf("Expected 1 total, 1 match, 0 mismatches; got %d, %d, %d", total, matches, mismatches)
-	}
+	assert.Equal(t, 1, total)
+	assert.Equal(t, 1, matches)
+	assert.Equal(t, 0, mismatches)
 }
 
 func TestValidationWriter_Mismatch(t *testing.T) {
@@ -93,14 +85,11 @@ func TestValidationWriter_Mismatch(t *testing.T) {
 	w.Flush()
 
 	output := buf.String()
-	if !strings.Contains(output, "N") {
-		t.Errorf("Expected mismatch (N) in output, got: %s", output)
-	}
+	assert.Contains(t, output, "N")
 
 	_, matches, mismatches := w.Summary()
-	if matches != 0 || mismatches != 1 {
-		t.Errorf("Expected 0 matches, 1 mismatch; got %d, %d", matches, mismatches)
-	}
+	assert.Equal(t, 0, matches)
+	assert.Equal(t, 1, mismatches)
 }
 
 func TestNormalizeConsequence(t *testing.T) {
@@ -123,9 +112,7 @@ func TestNormalizeConsequence(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			result := normalizeConsequence(tt.input)
-			if result != tt.expected {
-				t.Errorf("normalizeConsequence(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -154,11 +141,6 @@ func TestValidationWriter_MismatchesOnly(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 
 	// Should have header + 1 mismatch line only
-	if len(lines) != 2 {
-		t.Errorf("Expected 2 lines (header + mismatch), got %d: %v", len(lines), lines)
-	}
-
-	if !strings.Contains(output, "TP53") {
-		t.Errorf("Expected mismatch line with TP53, got: %s", output)
-	}
+	assert.Len(t, lines, 2)
+	assert.Contains(t, output, "TP53")
 }

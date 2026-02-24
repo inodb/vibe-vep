@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
@@ -25,7 +27,7 @@ func createKRASTranscript() *cache.Transcript {
 		CDSStart:    25209798, // CDS end in genomic coords (start for reverse)
 		CDSEnd:      25245384, // CDS start in genomic coords (end for reverse)
 		Exons: []cache.Exon{
-			{Number: 1, Start: 25250751, End: 25250929, CDSStart: 0, CDSEnd: 0, Frame: -1},       // 5' UTR
+			{Number: 1, Start: 25250751, End: 25250929, CDSStart: 0, CDSEnd: 0, Frame: -1},              // 5' UTR
 			{Number: 2, Start: 25245274, End: 25245395, CDSStart: 25245274, CDSEnd: 25245384, Frame: 0}, // Contains codon 12
 			{Number: 3, Start: 25227234, End: 25227412, CDSStart: 25227234, CDSEnd: 25227412, Frame: 0},
 			{Number: 4, Start: 25225614, End: 25225773, CDSStart: 25225614, CDSEnd: 25225773, Frame: 2},
@@ -59,29 +61,19 @@ func TestPredictConsequence_KRASG12C(t *testing.T) {
 	result := PredictConsequence(v, transcript)
 
 	// Should be missense variant
-	if result.Consequence != ConsequenceMissenseVariant {
-		t.Errorf("Expected missense_variant, got %s", result.Consequence)
-	}
+	assert.Equal(t, ConsequenceMissenseVariant, result.Consequence)
 
 	// Should be MODERATE impact
-	if result.Impact != ImpactModerate {
-		t.Errorf("Expected MODERATE impact, got %s", result.Impact)
-	}
+	assert.Equal(t, ImpactModerate, result.Impact)
 
 	// Protein position should be 12
-	if result.ProteinPosition != 12 {
-		t.Errorf("Expected protein position 12, got %d", result.ProteinPosition)
-	}
+	assert.Equal(t, int64(12), result.ProteinPosition)
 
 	// Amino acid change should be G12C
-	if result.AminoAcidChange != "G12C" {
-		t.Errorf("Expected amino acid change G12C, got %s", result.AminoAcidChange)
-	}
+	assert.Equal(t, "G12C", result.AminoAcidChange)
 
 	// HGVSp should be p.Gly12Cys
-	if result.HGVSp != "p.Gly12Cys" {
-		t.Errorf("Expected HGVSp p.Gly12Cys, got %s", result.HGVSp)
-	}
+	assert.Equal(t, "p.Gly12Cys", result.HGVSp)
 }
 
 func TestPredictConsequence_Synonymous(t *testing.T) {
@@ -100,7 +92,7 @@ func TestPredictConsequence_Synonymous(t *testing.T) {
 
 	// For a synonymous change
 	if result.Consequence != ConsequenceSynonymousVariant &&
-	   result.Consequence != ConsequenceMissenseVariant {
+		result.Consequence != ConsequenceMissenseVariant {
 		// Note: exact consequence depends on codon position calculation
 		t.Logf("Got consequence: %s (may vary based on position)", result.Consequence)
 	}
@@ -120,9 +112,7 @@ func TestPredictConsequence_StopGained(t *testing.T) {
 	result := PredictConsequence(v, transcript)
 
 	// Just verify we get a consequence
-	if result.Consequence == "" {
-		t.Error("Expected a consequence, got empty string")
-	}
+	assert.NotEmpty(t, result.Consequence)
 }
 
 func TestPredictConsequence_IntronicVariant(t *testing.T) {
@@ -137,13 +127,9 @@ func TestPredictConsequence_IntronicVariant(t *testing.T) {
 	transcript := createKRASTranscript()
 	result := PredictConsequence(v, transcript)
 
-	if result.Consequence != ConsequenceIntronVariant {
-		t.Errorf("Expected intron_variant, got %s", result.Consequence)
-	}
+	assert.Equal(t, ConsequenceIntronVariant, result.Consequence)
 
-	if result.Impact != ImpactModifier {
-		t.Errorf("Expected MODIFIER impact, got %s", result.Impact)
-	}
+	assert.Equal(t, ImpactModifier, result.Impact)
 }
 
 func TestPredictConsequence_UpstreamVariant(t *testing.T) {
@@ -160,16 +146,16 @@ func TestPredictConsequence_UpstreamVariant(t *testing.T) {
 
 	// Should be upstream for reverse strand gene
 	if result.Consequence != ConsequenceUpstreamGene &&
-	   result.Consequence != ConsequenceDownstreamGene {
+		result.Consequence != ConsequenceDownstreamGene {
 		t.Errorf("Expected upstream/downstream variant, got %s", result.Consequence)
 	}
 }
 
 func TestCDSToCodonPosition(t *testing.T) {
 	tests := []struct {
-		cdsPos          int64
-		wantCodonNum    int64
-		wantPosInCodon  int
+		cdsPos         int64
+		wantCodonNum   int64
+		wantPosInCodon int
 	}{
 		{1, 1, 0},   // First base of first codon
 		{2, 1, 1},   // Second base of first codon
@@ -184,10 +170,8 @@ func TestCDSToCodonPosition(t *testing.T) {
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
 			codonNum, posInCodon := CDSToCodonPosition(tt.cdsPos)
-			if codonNum != tt.wantCodonNum || posInCodon != tt.wantPosInCodon {
-				t.Errorf("CDSToCodonPosition(%d) = (%d, %d), want (%d, %d)",
-					tt.cdsPos, codonNum, posInCodon, tt.wantCodonNum, tt.wantPosInCodon)
-			}
+			assert.Equal(t, tt.wantCodonNum, codonNum)
+			assert.Equal(t, tt.wantPosInCodon, posInCodon)
 		})
 	}
 }
@@ -204,13 +188,9 @@ func TestPredictConsequence_FrameshiftVariant(t *testing.T) {
 	transcript := createKRASTranscript()
 	result := PredictConsequence(v, transcript)
 
-	if result.Consequence != ConsequenceFrameshiftVariant {
-		t.Errorf("Expected frameshift_variant, got %s", result.Consequence)
-	}
+	assert.Equal(t, ConsequenceFrameshiftVariant, result.Consequence)
 
-	if result.Impact != ImpactHigh {
-		t.Errorf("Expected HIGH impact, got %s", result.Impact)
-	}
+	assert.Equal(t, ImpactHigh, result.Impact)
 }
 
 func TestSpliceSiteType(t *testing.T) {
@@ -223,17 +203,17 @@ func TestSpliceSiteType(t *testing.T) {
 		pos      int64
 		expected string
 	}{
-		// After exon.End (25245395): reverse strand → acceptor
+		// After exon.End (25245395): reverse strand -> acceptor
 		{"end_plus1", 25245396, ConsequenceSpliceAcceptor},
 		{"end_plus2", 25245397, ConsequenceSpliceAcceptor},
 		{"end_plus3_not_splice", 25245398, ""},
 
-		// Before exon.Start (25245274): reverse strand → donor
+		// Before exon.Start (25245274): reverse strand -> donor
 		{"start_minus1", 25245273, ConsequenceSpliceDonor},
 		{"start_minus2", 25245272, ConsequenceSpliceDonor},
 		{"start_minus3_not_splice", 25245271, ""},
 
-		// In exon or deep intron → not a splice site
+		// In exon or deep intron -> not a splice site
 		{"in_exon", 25245350, ""},
 		{"deep_intron", 25235000, ""},
 	}
@@ -241,9 +221,7 @@ func TestSpliceSiteType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := spliceSiteType(tt.pos, transcript)
-			if got != tt.expected {
-				t.Errorf("spliceSiteType(%d) = %q, want %q", tt.pos, got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
@@ -267,11 +245,11 @@ func TestSpliceSiteType_ForwardStrand(t *testing.T) {
 		pos      int64
 		expected string
 	}{
-		// After exon 1 End (1200): forward strand → donor
+		// After exon 1 End (1200): forward strand -> donor
 		{"exon1_end_plus1", 1201, ConsequenceSpliceDonor},
 		{"exon1_end_plus2", 1202, ConsequenceSpliceDonor},
 
-		// Before exon 2 Start (2000): forward strand → acceptor
+		// Before exon 2 Start (2000): forward strand -> acceptor
 		{"exon2_start_minus1", 1999, ConsequenceSpliceAcceptor},
 		{"exon2_start_minus2", 1998, ConsequenceSpliceAcceptor},
 
@@ -283,16 +261,14 @@ func TestSpliceSiteType_ForwardStrand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := spliceSiteType(tt.pos, transcript)
-			if got != tt.expected {
-				t.Errorf("spliceSiteType(%d) = %q, want %q", tt.pos, got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
 
 func TestPredictConsequence_SpliceDonor(t *testing.T) {
 	// KRAS reverse strand: position before exon.Start = splice donor
-	// Exon 2 Start = 25245274, so pos 25245273 = Start-1 → splice_donor_variant
+	// Exon 2 Start = 25245274, so pos 25245273 = Start-1 -> splice_donor_variant
 	v := &vcf.Variant{
 		Chrom: "12",
 		Pos:   25245273,
@@ -303,17 +279,13 @@ func TestPredictConsequence_SpliceDonor(t *testing.T) {
 	transcript := createKRASTranscript()
 	result := PredictConsequence(v, transcript)
 
-	if result.Consequence != ConsequenceSpliceDonor {
-		t.Errorf("Expected %s, got %s", ConsequenceSpliceDonor, result.Consequence)
-	}
-	if result.Impact != ImpactHigh {
-		t.Errorf("Expected HIGH impact, got %s", result.Impact)
-	}
+	assert.Equal(t, ConsequenceSpliceDonor, result.Consequence)
+	assert.Equal(t, ImpactHigh, result.Impact)
 }
 
 func TestPredictConsequence_SpliceAcceptor(t *testing.T) {
 	// KRAS reverse strand: position after exon.End = splice acceptor
-	// Exon 2 End = 25245395, so pos 25245396 = End+1 → splice_acceptor_variant
+	// Exon 2 End = 25245395, so pos 25245396 = End+1 -> splice_acceptor_variant
 	v := &vcf.Variant{
 		Chrom: "12",
 		Pos:   25245396,
@@ -324,12 +296,8 @@ func TestPredictConsequence_SpliceAcceptor(t *testing.T) {
 	transcript := createKRASTranscript()
 	result := PredictConsequence(v, transcript)
 
-	if result.Consequence != ConsequenceSpliceAcceptor {
-		t.Errorf("Expected %s, got %s", ConsequenceSpliceAcceptor, result.Consequence)
-	}
-	if result.Impact != ImpactHigh {
-		t.Errorf("Expected HIGH impact, got %s", result.Impact)
-	}
+	assert.Equal(t, ConsequenceSpliceAcceptor, result.Consequence)
+	assert.Equal(t, ImpactHigh, result.Impact)
 }
 
 func TestPredictConsequence_IndelSpanningSpliceSite(t *testing.T) {
@@ -348,9 +316,9 @@ func TestPredictConsequence_IndelSpanningSpliceSite(t *testing.T) {
 	}{
 		{
 			// Deletion starting in splice region (5bp from boundary), spanning into splice site
-			// pos=25245269 (splice region), ref=6bp, end=25245274 → hits exon.Start
+			// pos=25245269 (splice region), ref=6bp, end=25245274 -> hits exon.Start
 			// But exon.Start is exon side, not splice site. Need to span to Start-1 or Start-2.
-			// pos=25245268, ref=6bp, end=25245273 → hits Start-1 (splice donor for reverse)
+			// pos=25245268, ref=6bp, end=25245273 -> hits Start-1 (splice donor for reverse)
 			name:       "intron_del_spanning_donor",
 			pos:        25245268,
 			ref:        "AAAAAA",
@@ -362,16 +330,16 @@ func TestPredictConsequence_IndelSpanningSpliceSite(t *testing.T) {
 			// Deletion starting in splice region after exon end, spanning into splice acceptor
 			// pos=25245398 (splice region), ref=AAAA (4bp), end=25245401
 			// But we need to span back to 25245396 or 25245397 (acceptor sites)
-			// pos=25245395 (exon end), ref=AAAA (4bp), end=25245398 → doesn't hit +1/+2 from start pos
-			// pos=25245394, ref=AAAAAA (6bp), end=25245399 → covers 25245396 (End+1=acceptor)
-			// Actually for intronic start: pos=25245398, ref is 6bp → end=25245403
+			// pos=25245395 (exon end), ref=AAAA (4bp), end=25245398 -> doesn't hit +1/+2 from start pos
+			// pos=25245394, ref=AAAAAA (6bp), end=25245399 -> covers 25245396 (End+1=acceptor)
+			// Actually for intronic start: pos=25245398, ref is 6bp -> end=25245403
 			// That doesn't hit 25245396/25245397. Let me pick a start that spans.
-			// pos=25245393, ref=AAAAAAAAA (9bp), end=25245401 → covers 25245396 (acceptor)
+			// pos=25245393, ref=AAAAAAAAA (9bp), end=25245401 -> covers 25245396 (acceptor)
 			// But 25245393 is in the exon, not intronic.
 			// For a truly intronic start that spans acceptor:
-			// pos=25245400 (intron, splice region), ref=AAAAAA → too far right
+			// pos=25245400 (intron, splice region), ref=AAAAAA -> too far right
 			// Actually let's use: deletion starting 8bp out that spans to End+1
-			// pos=25245390 (in exon), ref=8bp, end=25245397 → covers 25245396,25245397 (acceptor)
+			// pos=25245390 (in exon), ref=8bp, end=25245397 -> covers 25245396,25245397 (acceptor)
 			name:       "exon_del_spanning_acceptor",
 			pos:        25245390,
 			ref:        "AAAAAAAA",
@@ -402,13 +370,9 @@ func TestPredictConsequence_IndelSpanningSpliceSite(t *testing.T) {
 			v := &vcf.Variant{Chrom: "12", Pos: tt.pos, Ref: tt.ref, Alt: tt.alt}
 			got := indelSpliceSiteType(v, transcript)
 			if tt.wantSplice {
-				if got != tt.wantType {
-					t.Errorf("indelSpliceSiteType() = %q, want %q", got, tt.wantType)
-				}
+				assert.Equal(t, tt.wantType, got)
 			} else {
-				if got != "" {
-					t.Errorf("indelSpliceSiteType() = %q, want empty", got)
-				}
+				assert.Empty(t, got)
 			}
 		})
 	}
@@ -418,7 +382,7 @@ func TestPredictConsequence_DeletionSpanningSpliceDonor(t *testing.T) {
 	// KRAS reverse strand. Deletion starting in intron near exon 2 Start boundary,
 	// spanning into the splice donor site (exon.Start-1, exon.Start-2).
 	// Exon 2 Start = 25245274. Donor at 25245273, 25245272.
-	// Deletion: pos=25245268, ref=6bp → end=25245273, hits donor site.
+	// Deletion: pos=25245268, ref=6bp -> end=25245273, hits donor site.
 	v := &vcf.Variant{
 		Chrom: "12",
 		Pos:   25245268,
@@ -429,12 +393,8 @@ func TestPredictConsequence_DeletionSpanningSpliceDonor(t *testing.T) {
 	transcript := createKRASTranscript()
 	result := PredictConsequence(v, transcript)
 
-	if result.Consequence != ConsequenceSpliceDonor {
-		t.Errorf("Expected %s, got %s", ConsequenceSpliceDonor, result.Consequence)
-	}
-	if result.Impact != ImpactHigh {
-		t.Errorf("Expected HIGH impact, got %s", result.Impact)
-	}
+	assert.Equal(t, ConsequenceSpliceDonor, result.Consequence)
+	assert.Equal(t, ImpactHigh, result.Impact)
 }
 
 func TestIsSpliceRegion(t *testing.T) {
@@ -484,16 +444,14 @@ func TestIsSpliceRegion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := isSpliceRegion(tt.pos, transcript)
-			if got != tt.expected {
-				t.Errorf("isSpliceRegion(%d) = %v, want %v", tt.pos, got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
 
 func TestPredictConsequence_SpliceRegionIntronic(t *testing.T) {
 	// Variant 5bp into intron after exon 2 End (25245395)
-	// Position 25245400 = 5bp after exon boundary → splice_region_variant,intron_variant
+	// Position 25245400 = 5bp after exon boundary -> splice_region_variant,intron_variant
 	v := &vcf.Variant{
 		Chrom: "12",
 		Pos:   25245400,
@@ -505,12 +463,8 @@ func TestPredictConsequence_SpliceRegionIntronic(t *testing.T) {
 	result := PredictConsequence(v, transcript)
 
 	expected := "splice_region_variant,intron_variant"
-	if result.Consequence != expected {
-		t.Errorf("Expected %s, got %s", expected, result.Consequence)
-	}
-	if result.Impact != "LOW" {
-		t.Errorf("Expected LOW impact, got %s", result.Impact)
-	}
+	assert.Equal(t, expected, result.Consequence)
+	assert.Equal(t, "LOW", result.Impact)
 }
 
 func TestPredictConsequence_SpliceRegionCoding(t *testing.T) {
@@ -518,7 +472,7 @@ func TestPredictConsequence_SpliceRegionCoding(t *testing.T) {
 	// This is within the CDS (CDSEnd=25245384... wait, 25245395 > 25245384)
 	// Actually 25245395 > CDSEnd 25245384, so this would be 5'UTR on reverse strand
 	// Use exon 2 Start boundary instead: pos 25245274 is CDS (CDSStart=25245274)
-	// On reverse strand, CDSStart < CDSEnd, and pos >= CDSStart and pos <= CDSEnd → in CDS
+	// On reverse strand, CDSStart < CDSEnd, and pos >= CDSStart and pos <= CDSEnd -> in CDS
 	v := &vcf.Variant{
 		Chrom: "12",
 		Pos:   25245274, // exon.Start, within 3bp of boundary, in CDS
@@ -530,14 +484,11 @@ func TestPredictConsequence_SpliceRegionCoding(t *testing.T) {
 	result := PredictConsequence(v, transcript)
 
 	// Should have splice_region_variant appended to coding consequence
-	if !strings.Contains(result.Consequence, "splice_region_variant") {
-		t.Errorf("Expected consequence to contain splice_region_variant, got %s", result.Consequence)
-	}
+	assert.Contains(t, result.Consequence, "splice_region_variant")
 	// Primary consequence should be a coding type
-	if !strings.Contains(result.Consequence, "missense_variant") &&
-		!strings.Contains(result.Consequence, "synonymous_variant") {
-		t.Errorf("Expected coding consequence + splice_region_variant, got %s", result.Consequence)
-	}
+	hasCoding := strings.Contains(result.Consequence, "missense_variant") ||
+		strings.Contains(result.Consequence, "synonymous_variant")
+	assert.True(t, hasCoding, "expected coding consequence + splice_region_variant, got %s", result.Consequence)
 }
 
 func TestPredictConsequence_NoSpliceRegionMidExon(t *testing.T) {
@@ -552,12 +503,8 @@ func TestPredictConsequence_NoSpliceRegionMidExon(t *testing.T) {
 	transcript := createKRASTranscript()
 	result := PredictConsequence(v, transcript)
 
-	if strings.Contains(result.Consequence, "splice_region_variant") {
-		t.Errorf("Expected no splice_region_variant for mid-exon variant, got %s", result.Consequence)
-	}
-	if result.Consequence != "missense_variant" {
-		t.Errorf("Expected missense_variant, got %s", result.Consequence)
-	}
+	assert.NotContains(t, result.Consequence, "splice_region_variant")
+	assert.Equal(t, "missense_variant", result.Consequence)
 }
 
 func TestPredictConsequence_NoSpliceRegionDeepIntron(t *testing.T) {
@@ -572,9 +519,7 @@ func TestPredictConsequence_NoSpliceRegionDeepIntron(t *testing.T) {
 	transcript := createKRASTranscript()
 	result := PredictConsequence(v, transcript)
 
-	if result.Consequence != "intron_variant" {
-		t.Errorf("Expected intron_variant, got %s", result.Consequence)
-	}
+	assert.Equal(t, "intron_variant", result.Consequence)
 }
 
 func TestPredictConsequence_InframeDeletion(t *testing.T) {
@@ -589,27 +534,23 @@ func TestPredictConsequence_InframeDeletion(t *testing.T) {
 	transcript := createKRASTranscript()
 	result := PredictConsequence(v, transcript)
 
-	if result.Consequence != ConsequenceInframeDeletion {
-		t.Errorf("Expected inframe_deletion, got %s", result.Consequence)
-	}
+	assert.Equal(t, ConsequenceInframeDeletion, result.Consequence)
 
-	if result.Impact != ImpactModerate {
-		t.Errorf("Expected MODERATE impact, got %s", result.Impact)
-	}
+	assert.Equal(t, ImpactModerate, result.Impact)
 }
 
 func BenchmarkPredictConsequence(b *testing.B) {
 	transcript := createKRASTranscript()
 
 	variants := []*vcf.Variant{
-		{Chrom: "12", Pos: 25245350, Ref: "C", Alt: "A"},            // missense (G12C)
-		{Chrom: "12", Pos: 25245350, Ref: "C", Alt: "C"},            // synonymous
-		{Chrom: "12", Pos: 25245350, Ref: "CC", Alt: "C"},           // frameshift
-		{Chrom: "12", Pos: 25245350, Ref: "CCCC", Alt: "C"},         // inframe deletion
-		{Chrom: "12", Pos: 25245280, Ref: "A", Alt: "G"},            // splice region
-		{Chrom: "12", Pos: 25245300, Ref: "A", Alt: "G"},            // intron
-		{Chrom: "12", Pos: 25250800, Ref: "A", Alt: "G"},            // 5' UTR
-		{Chrom: "12", Pos: 25200000, Ref: "A", Alt: "G"},            // upstream
+		{Chrom: "12", Pos: 25245350, Ref: "C", Alt: "A"},    // missense (G12C)
+		{Chrom: "12", Pos: 25245350, Ref: "C", Alt: "C"},    // synonymous
+		{Chrom: "12", Pos: 25245350, Ref: "CC", Alt: "C"},   // frameshift
+		{Chrom: "12", Pos: 25245350, Ref: "CCCC", Alt: "C"}, // inframe deletion
+		{Chrom: "12", Pos: 25245280, Ref: "A", Alt: "G"},    // splice region
+		{Chrom: "12", Pos: 25245300, Ref: "A", Alt: "G"},    // intron
+		{Chrom: "12", Pos: 25250800, Ref: "A", Alt: "G"},    // 5' UTR
+		{Chrom: "12", Pos: 25200000, Ref: "A", Alt: "G"},    // upstream
 	}
 
 	b.ResetTimer()
