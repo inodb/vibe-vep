@@ -244,6 +244,15 @@ go build -o vibe-vep ./cmd/vibe-vep
 vibe-vep annotate --validate /path/to/data_mutations.txt
 ```
 
+## Roadmap
+
+- [ ] **Feature parity for MAF annotation** — Match the annotation capabilities of the [genome-nexus-annotation-pipeline](https://github.com/genome-nexus/genome-nexus-annotation-pipeline), which currently relies on Genome Nexus Server + VEP
+  - [x] Consequence prediction (~99.8% concordance with GDC/VEP across 1M+ TCGA variants, see [Validation Results](#validation-results))
+  - [ ] HGVSp/HGVSc notation
+  - [ ] Full MAF output format (all required columns)
+- [ ] **Re-annotate datahub GDC studies** — Validate by re-annotating [cBioPortal/datahub](https://github.com/cBioPortal/datahub) GDC studies with vibe-vep
+- [ ] **Replace genome-nexus-annotation-pipeline for datahub** — Use vibe-vep as the annotation tool for datahub processing
+
 ## License
 
 MIT License
