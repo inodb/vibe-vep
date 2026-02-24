@@ -90,6 +90,7 @@ func TestValidationBenchmark(t *testing.T) {
 
 			total, matches, mismatches := valWriter.Summary()
 			hgvspM, hgvspMM, hgvspS := valWriter.HGVSpSummary()
+			hgvscM, hgvscMM, hgvscS := valWriter.HGVScSummary()
 
 			t.Logf("%s: %d variants, %.1f%% consequence match, %s",
 				name, total, float64(matches)/float64(total)*100, elapsed)
@@ -102,6 +103,9 @@ func TestValidationBenchmark(t *testing.T) {
 				hgvspMatches:   hgvspM,
 				hgvspMismatch:  hgvspMM,
 				hgvspSkipped:   hgvspS,
+				hgvscMatches:   hgvscM,
+				hgvscMismatch:  hgvscMM,
+				hgvscSkipped:   hgvscS,
 				duration:       elapsed,
 			})
 		})
@@ -170,6 +174,31 @@ func writeReport(t *testing.T, path string, results []studyResult, transcriptCou
 	}
 	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%d** | **%.1f%%** |\n\n",
 		totHTotal, totHM, totHMM, totHRate))
+
+	// HGVSc match table
+	sb.WriteString("## HGVSc Match\n\n")
+	sb.WriteString("| Study | Variants | Match | Mismatch | Match Rate |\n")
+	sb.WriteString("|-------|----------|-------|----------|------------|\n")
+
+	var totCM, totCMM int
+	for _, r := range results {
+		codingTotal := r.hgvscMatches + r.hgvscMismatch
+		rate := float64(0)
+		if codingTotal > 0 {
+			rate = float64(r.hgvscMatches) / float64(codingTotal) * 100
+		}
+		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %d | %.1f%% |\n",
+			r.name, codingTotal, r.hgvscMatches, r.hgvscMismatch, rate))
+		totCM += r.hgvscMatches
+		totCMM += r.hgvscMismatch
+	}
+	totCTotal := totCM + totCMM
+	totCRate := float64(0)
+	if totCTotal > 0 {
+		totCRate = float64(totCM) / float64(totCTotal) * 100
+	}
+	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%d** | **%.1f%%** |\n\n",
+		totCTotal, totCM, totCMM, totCRate))
 
 	// Performance table
 	sb.WriteString("## Performance\n\n")
@@ -245,5 +274,8 @@ type studyResult = struct {
 	hgvspMatches   int
 	hgvspMismatch  int
 	hgvspSkipped   int
+	hgvscMatches   int
+	hgvscMismatch  int
+	hgvscSkipped   int
 	duration       time.Duration
 }

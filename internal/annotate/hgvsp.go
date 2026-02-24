@@ -50,7 +50,14 @@ func FormatHGVSp(result *ConsequenceResult) string {
 
 	case ConsequenceFrameshiftVariant:
 		if result.RefAA != 0 {
-			return fmt.Sprintf("p.%s%dfs", aaThree(result.RefAA), pos)
+			altStr := ""
+			if result.AltAA != 0 {
+				altStr = aaThree(result.AltAA)
+			}
+			if result.FrameshiftStopDist > 0 {
+				return fmt.Sprintf("p.%s%d%sfsTer%d", aaThree(result.RefAA), pos, altStr, result.FrameshiftStopDist)
+			}
+			return fmt.Sprintf("p.%s%d%sfs", aaThree(result.RefAA), pos, altStr)
 		}
 		return fmt.Sprintf("p.%dfs", pos)
 

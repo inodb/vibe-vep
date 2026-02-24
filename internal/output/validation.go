@@ -19,10 +19,13 @@ type ValidationWriter struct {
 	matches        int
 	mismatches     int
 	total          int
-	hgvspMatches   int
+	hgvspMatches    int
 	hgvspMismatches int
-	hgvspSkipped   int // non-coding variants with no HGVSp to compare
-	showAll        bool // if false, only show mismatches
+	hgvspSkipped    int // non-coding variants with no HGVSp to compare
+	hgvscMatches    int
+	hgvscMismatches int
+	hgvscSkipped    int
+	showAll         bool // if false, only show mismatches
 }
 
 // NewValidationWriter creates a new validation output writer.
@@ -35,7 +38,7 @@ func NewValidationWriter(w io.Writer, showAll bool) *ValidationWriter {
 
 // WriteHeader writes the validation output header.
 func (v *ValidationWriter) WriteHeader() error {
-	_, err := fmt.Fprintln(v.w, "Variant\tGene\tMAF_Consequence\tVEP_Consequence\tMAF_HGVSp\tVEP_HGVSp\tConseq_Match\tHGVSp_Match")
+	_, err := fmt.Fprintln(v.w, "Variant\tGene\tMAF_Consequence\tVEP_Consequence\tMAF_HGVSp\tVEP_HGVSp\tMAF_HGVSc\tVEP_HGVSc\tConseq_Match\tHGVSp_Match\tHGVSc_Match")
 	return err
 }
 
@@ -56,11 +59,13 @@ func (v *ValidationWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAF
 
 	mafConseq := mafAnn.Consequence
 	mafHGVSp := mafAnn.HGVSpShort
+	mafHGVSc := mafAnn.HGVSc
 
-	var vepConseq, vepHGVSp string
+	var vepConseq, vepHGVSp, vepHGVSc string
 	if bestAnn != nil {
 		vepConseq = bestAnn.Consequence
 		vepHGVSp = bestAnn.HGVSp
+		vepHGVSc = bestAnn.HGVSc
 	}
 
 	// Check consequence match
@@ -90,18 +95,35 @@ func (v *ValidationWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAF
 		hgvspMatchStr = "N"
 	}
 
+	// Check HGVSc match
+	hgvscMatch := false
+	hgvscMatchStr := "-"
+	if mafHGVSc == "" && vepHGVSc == "" {
+		v.hgvscSkipped++
+	} else if hgvscValuesMatch(mafHGVSc, vepHGVSc) {
+		v.hgvscMatches++
+		hgvscMatch = true
+		hgvscMatchStr = "Y"
+	} else {
+		v.hgvscMismatches++
+		hgvscMatchStr = "N"
+	}
+
 	// Only write if showAll or any mismatch
-	showRow := v.showAll || !conseqMatch || (!hgvspMatch && hgvspMatchStr != "-")
+	showRow := v.showAll || !conseqMatch || (!hgvspMatch && hgvspMatchStr != "-") || (!hgvscMatch && hgvscMatchStr != "-")
 	if showRow {
-		_, err := fmt.Fprintf(v.w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		_, err := fmt.Fprintf(v.w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			variantStr,
 			mafAnn.HugoSymbol,
 			mafConseq,
 			vepConseq,
 			mafHGVSp,
 			vepHGVSp,
+			mafHGVSc,
+			vepHGVSc,
 			conseqMatchStr,
 			hgvspMatchStr,
+			hgvscMatchStr,
 		)
 		return err
 	}
@@ -124,6 +146,11 @@ func (v *ValidationWriter) HGVSpSummary() (matches, mismatches, skipped int) {
 	return v.hgvspMatches, v.hgvspMismatches, v.hgvspSkipped
 }
 
+// HGVScSummary returns HGVSc match statistics.
+func (v *ValidationWriter) HGVScSummary() (matches, mismatches, skipped int) {
+	return v.hgvscMatches, v.hgvscMismatches, v.hgvscSkipped
+}
+
 // WriteSummary writes a summary of the validation results.
 func (v *ValidationWriter) WriteSummary(w io.Writer) {
 	conseqRate := float64(0)
@@ -142,6 +169,14 @@ func (v *ValidationWriter) WriteSummary(w io.Writer) {
 	fmt.Fprintf(w, "  HGVSp matches:        %d/%d (%.1f%%)\n", v.hgvspMatches, hgvspTotal, hgvspRate)
 	fmt.Fprintf(w, "  HGVSp mismatches:     %d/%d\n", v.hgvspMismatches, hgvspTotal)
 	fmt.Fprintf(w, "  HGVSp skipped:        %d (non-coding)\n", v.hgvspSkipped)
+	hgvscTotal := v.hgvscMatches + v.hgvscMismatches
+	hgvscRate := float64(0)
+	if hgvscTotal > 0 {
+		hgvscRate = float64(v.hgvscMatches) / float64(hgvscTotal) * 100
+	}
+	fmt.Fprintf(w, "  HGVSc matches:        %d/%d (%.1f%%)\n", v.hgvscMatches, hgvscTotal, hgvscRate)
+	fmt.Fprintf(w, "  HGVSc mismatches:     %d/%d\n", v.hgvscMismatches, hgvscTotal)
+	fmt.Fprintf(w, "  HGVSc skipped:        %d\n", v.hgvscSkipped)
 }
 
 // selectBestAnnotation picks the best VEP annotation to compare against a MAF entry.
@@ -254,6 +289,21 @@ func hgvspValuesMatch(mafHGVSp, vepHGVSp string) bool {
 	// Normalize VEP 3-letter to single-letter for comparison
 	vepShort := hgvspToShort(vepHGVSp)
 	return mafHGVSp == vepShort
+}
+
+// hgvscValuesMatch compares MAF HGVSc with VEP HGVSc.
+// MAF HGVSc is prefixed with transcript ID (e.g., "ENST00000361923.2:c.1428C>G"),
+// so we strip the prefix before comparing.
+func hgvscValuesMatch(mafHGVSc, vepHGVSc string) bool {
+	if mafHGVSc == "" && vepHGVSc == "" {
+		return true
+	}
+	// Strip transcript ID prefix from MAF value
+	mafNorm := mafHGVSc
+	if idx := strings.LastIndex(mafNorm, ":"); idx >= 0 {
+		mafNorm = mafNorm[idx+1:]
+	}
+	return mafNorm == vepHGVSc
 }
 
 // consequencesMatch checks if MAF and VEP consequences should be considered matching.

@@ -67,6 +67,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 		}
 
 		result := PredictConsequence(v, t)
+		result.HGVSc = FormatHGVSc(v, t, result)
 
 		// Append biotype-specific modifier terms per VEP convention
 		consequence := result.Consequence
@@ -92,6 +93,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 			IntronNumber:    result.IntronNumber,
 			CDNAPosition:    result.CDNAPosition,
 			HGVSp:           result.HGVSp,
+			HGVSc:           result.HGVSc,
 		}
 
 		annotations = append(annotations, ann)

@@ -11,20 +11,22 @@ import (
 
 // ConsequenceResult holds the result of consequence prediction for a variant.
 type ConsequenceResult struct {
-	Consequence     string
-	Impact          string
-	CDSPosition     int64
-	ProteinPosition int64
-	RefCodon        string
-	AltCodon        string
-	RefAA           byte
-	AltAA           byte
-	AminoAcidChange string
-	CodonChange     string
-	ExonNumber      string
-	IntronNumber    string
-	CDNAPosition    int64
-	HGVSp           string
+	Consequence        string
+	Impact             string
+	CDSPosition        int64
+	ProteinPosition    int64
+	RefCodon           string
+	AltCodon           string
+	RefAA              byte
+	AltAA              byte
+	AminoAcidChange    string
+	CodonChange        string
+	ExonNumber         string
+	IntronNumber       string
+	CDNAPosition       int64
+	HGVSp              string
+	HGVSc              string
+	FrameshiftStopDist int // Distance to new stop codon in frameshift (1=at variant pos, 0=unknown)
 }
 
 // PredictConsequence determines the effect of a variant on a transcript.
@@ -289,11 +291,63 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 				result.Consequence = ConsequenceFrameshiftVariant + "," + ConsequenceStopLost
 			}
 		}
+		// Compute the new amino acid and distance to first stop codon
+		if result.CDSPosition > 0 {
+			altAA, stopDist := computeFrameshiftDetails(v, t, result.CDSPosition)
+			if altAA != 0 {
+				result.AltAA = altAA
+			}
+			result.FrameshiftStopDist = stopDist
+		}
 	}
 
 	result.Impact = GetImpact(result.Consequence)
 	result.HGVSp = FormatHGVSp(result)
 	return result
+}
+
+// computeFrameshiftDetails builds the mutant CDS for a frameshift variant and
+// determines the new amino acid at the variant position and the distance to
+// the first new stop codon. Returns altAA=0 if it can't be computed, and
+// stopDist=0 if no new stop codon is found within the mutant sequence.
+func computeFrameshiftDetails(v *vcf.Variant, t *cache.Transcript, cdsPos int64) (altAA byte, stopDist int) {
+	if len(t.CDSSequence) == 0 || cdsPos < 1 {
+		return 0, 0
+	}
+
+	cdsIdx := int(cdsPos - 1) // 0-based index in CDS
+
+	ref := v.Ref
+	alt := v.Alt
+	if t.IsReverseStrand() {
+		ref = ReverseComplement(ref)
+		alt = ReverseComplement(alt)
+	}
+
+	endIdx := cdsIdx + len(ref)
+	if endIdx > len(t.CDSSequence) {
+		endIdx = len(t.CDSSequence)
+	}
+
+	mutCDS := t.CDSSequence[:cdsIdx] + alt + t.CDSSequence[endIdx:]
+
+	// Translate from the codon containing the variant position forward
+	codonStart := (cdsIdx / 3) * 3
+	dist := 1
+	for i := codonStart; i+3 <= len(mutCDS); i += 3 {
+		codon := mutCDS[i : i+3]
+		aa := TranslateCodon(codon)
+		if i == codonStart {
+			altAA = aa
+		}
+		if aa == '*' {
+			return altAA, dist
+		}
+		dist++
+	}
+
+	// No stop found in mutant sequence
+	return altAA, 0
 }
 
 // indelCreatesStop checks if an indel creates a stop codon near the variant site.

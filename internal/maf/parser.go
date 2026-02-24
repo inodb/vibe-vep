@@ -26,6 +26,7 @@ const (
 	ColTranscriptID     = "Transcript_ID"
 	ColVariantType      = "Variant_Type"
 	ColNCBIBuild        = "NCBI_Build"
+	ColHGVSc            = "HGVSc"
 )
 
 // ColumnIndices holds the indices of important MAF columns.
@@ -41,6 +42,7 @@ type ColumnIndices struct {
 	TranscriptID    int
 	VariantType     int
 	NCBIBuild       int
+	HGVSc           int
 }
 
 // MAFAnnotation holds the original MAF annotation data for validation.
@@ -51,6 +53,7 @@ type MAFAnnotation struct {
 	TranscriptID string
 	VariantType  string
 	NCBIBuild    string
+	HGVSc        string
 }
 
 // Parser reads variants from a MAF file.
@@ -179,6 +182,7 @@ func (p *Parser) parseColumnIndices(headerLine string) error {
 		TranscriptID:    -1,
 		VariantType:     -1,
 		NCBIBuild:       -1,
+		HGVSc:           -1,
 	}
 
 	for i, col := range columns {
@@ -205,6 +209,8 @@ func (p *Parser) parseColumnIndices(headerLine string) error {
 			p.columns.VariantType = i
 		case ColNCBIBuild:
 			p.columns.NCBIBuild = i
+		case ColHGVSc:
+			p.columns.HGVSc = i
 		}
 	}
 
@@ -356,6 +362,9 @@ func (p *Parser) parseLineWithAnnotation(line string) (*vcf.Variant, *MAFAnnotat
 	}
 	if p.columns.NCBIBuild >= 0 && p.columns.NCBIBuild < len(fields) {
 		ann.NCBIBuild = fields[p.columns.NCBIBuild]
+	}
+	if p.columns.HGVSc >= 0 && p.columns.HGVSc < len(fields) {
+		ann.HGVSc = fields[p.columns.HGVSc]
 	}
 
 	return v, ann, nil

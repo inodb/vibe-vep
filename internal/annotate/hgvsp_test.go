@@ -1,6 +1,7 @@
 package annotate
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/inodb/vibe-vep/internal/vcf"
@@ -73,7 +74,28 @@ func TestFormatHGVSp(t *testing.T) {
 			want: "p.Ter130=",
 		},
 		{
-			name: "frameshift",
+			name: "frameshift_with_stop",
+			result: &ConsequenceResult{
+				Consequence:        ConsequenceFrameshiftVariant,
+				ProteinPosition:    12,
+				RefAA:              'G',
+				AltAA:              'A',
+				FrameshiftStopDist: 6,
+			},
+			want: "p.Gly12AlafsTer6",
+		},
+		{
+			name: "frameshift_no_stop",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceFrameshiftVariant,
+				ProteinPosition: 12,
+				RefAA:           'G',
+				AltAA:           'A',
+			},
+			want: "p.Gly12Alafs",
+		},
+		{
+			name: "frameshift_no_altaa",
 			result: &ConsequenceResult{
 				Consequence:     ConsequenceFrameshiftVariant,
 				ProteinPosition: 12,
@@ -176,7 +198,7 @@ func TestHGVSp_Synonymous(t *testing.T) {
 }
 
 func TestHGVSp_Frameshift(t *testing.T) {
-	// Frameshift deletion at codon 12 should produce p.Gly12fs
+	// Frameshift deletion at codon 12 should produce full HGVSp with alt AA and stop distance
 	v := &vcf.Variant{
 		Chrom: "12",
 		Pos:   25245350,
@@ -191,16 +213,22 @@ func TestHGVSp_Frameshift(t *testing.T) {
 		t.Fatalf("Expected frameshift_variant, got %s", result.Consequence)
 	}
 
-	// RefAA should be populated
 	if result.RefAA == 0 {
 		t.Error("Expected RefAA to be populated for frameshift")
 	}
+	if result.AltAA == 0 {
+		t.Error("Expected AltAA to be populated for frameshift")
+	}
 
-	// HGVSp should contain "fs"
+	// HGVSp should contain "fsTer" with a stop distance
 	if result.HGVSp == "" {
 		t.Error("Expected non-empty HGVSp for frameshift")
 	}
-	t.Logf("Frameshift HGVSp: %s (RefAA=%c, pos=%d)", result.HGVSp, result.RefAA, result.ProteinPosition)
+	if result.FrameshiftStopDist > 0 && !strings.Contains(result.HGVSp, "fsTer") {
+		t.Errorf("Expected HGVSp to contain 'fsTer', got %q", result.HGVSp)
+	}
+	t.Logf("Frameshift HGVSp: %s (RefAA=%c, AltAA=%c, pos=%d, stopDist=%d)",
+		result.HGVSp, result.RefAA, result.AltAA, result.ProteinPosition, result.FrameshiftStopDist)
 }
 
 func TestHGVSp_InframeDeletion(t *testing.T) {
