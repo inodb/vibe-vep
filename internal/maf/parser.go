@@ -26,34 +26,41 @@ const (
 	ColTranscriptID     = "Transcript_ID"
 	ColVariantType      = "Variant_Type"
 	ColNCBIBuild        = "NCBI_Build"
-	ColHGVSc            = "HGVSc"
+	ColHGVSc                  = "HGVSc"
+	ColVariantClassification  = "Variant_Classification"
+	ColHGVSp                  = "HGVSp"
 )
 
 // ColumnIndices holds the indices of important MAF columns.
 type ColumnIndices struct {
-	Chromosome      int
-	StartPosition   int
-	EndPosition     int
-	ReferenceAllele int
-	TumorSeqAllele2 int
-	HugoSymbol      int
-	Consequence     int
-	HGVSpShort      int
-	TranscriptID    int
-	VariantType     int
-	NCBIBuild       int
-	HGVSc           int
+	Chromosome             int
+	StartPosition          int
+	EndPosition            int
+	ReferenceAllele        int
+	TumorSeqAllele2        int
+	HugoSymbol             int
+	Consequence            int
+	HGVSpShort             int
+	TranscriptID           int
+	VariantType            int
+	NCBIBuild              int
+	HGVSc                  int
+	VariantClassification  int
+	HGVSp                  int
 }
 
 // MAFAnnotation holds the original MAF annotation data for validation.
 type MAFAnnotation struct {
-	HugoSymbol   string
-	Consequence  string
-	HGVSpShort   string
-	TranscriptID string
-	VariantType  string
-	NCBIBuild    string
-	HGVSc        string
+	HugoSymbol            string
+	Consequence           string
+	HGVSpShort            string
+	TranscriptID          string
+	VariantType           string
+	NCBIBuild             string
+	HGVSc                 string
+	VariantClassification string
+	HGVSp                 string
+	RawFields             []string // Full tab-split row for MAF output
 }
 
 // Parser reads variants from a MAF file.
@@ -171,18 +178,20 @@ func (p *Parser) parseColumnIndices(headerLine string) error {
 
 	// Initialize all indices to -1 (not found)
 	p.columns = ColumnIndices{
-		Chromosome:      -1,
-		StartPosition:   -1,
-		EndPosition:     -1,
-		ReferenceAllele: -1,
-		TumorSeqAllele2: -1,
-		HugoSymbol:      -1,
-		Consequence:     -1,
-		HGVSpShort:      -1,
-		TranscriptID:    -1,
-		VariantType:     -1,
-		NCBIBuild:       -1,
-		HGVSc:           -1,
+		Chromosome:            -1,
+		StartPosition:         -1,
+		EndPosition:           -1,
+		ReferenceAllele:       -1,
+		TumorSeqAllele2:       -1,
+		HugoSymbol:            -1,
+		Consequence:           -1,
+		HGVSpShort:            -1,
+		TranscriptID:          -1,
+		VariantType:           -1,
+		NCBIBuild:             -1,
+		HGVSc:                 -1,
+		VariantClassification: -1,
+		HGVSp:                 -1,
 	}
 
 	for i, col := range columns {
@@ -211,6 +220,10 @@ func (p *Parser) parseColumnIndices(headerLine string) error {
 			p.columns.NCBIBuild = i
 		case ColHGVSc:
 			p.columns.HGVSc = i
+		case ColVariantClassification:
+			p.columns.VariantClassification = i
+		case ColHGVSp:
+			p.columns.HGVSp = i
 		}
 	}
 
@@ -343,7 +356,9 @@ func (p *Parser) parseLineWithAnnotation(line string) (*vcf.Variant, *MAFAnnotat
 	}
 
 	// Build annotation from available columns
-	ann := &MAFAnnotation{}
+	ann := &MAFAnnotation{
+		RawFields: fields,
+	}
 
 	if p.columns.HugoSymbol >= 0 && p.columns.HugoSymbol < len(fields) {
 		ann.HugoSymbol = fields[p.columns.HugoSymbol]
@@ -365,6 +380,12 @@ func (p *Parser) parseLineWithAnnotation(line string) (*vcf.Variant, *MAFAnnotat
 	}
 	if p.columns.HGVSc >= 0 && p.columns.HGVSc < len(fields) {
 		ann.HGVSc = fields[p.columns.HGVSc]
+	}
+	if p.columns.VariantClassification >= 0 && p.columns.VariantClassification < len(fields) {
+		ann.VariantClassification = fields[p.columns.VariantClassification]
+	}
+	if p.columns.HGVSp >= 0 && p.columns.HGVSp < len(fields) {
+		ann.HGVSp = fields[p.columns.HGVSp]
 	}
 
 	return v, ann, nil

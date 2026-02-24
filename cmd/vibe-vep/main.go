@@ -99,7 +99,7 @@ func newAnnotateCmd(verbose *bool) *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
-	cmd.Flags().StringVarP(&outputFormat, "output-format", "f", "tab", "Output format: tab, vcf")
+	cmd.Flags().StringVarP(&outputFormat, "output-format", "f", "", "Output format: tab, maf (default: auto-detect from input)")
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file (default: stdout)")
 	cmd.Flags().BoolVar(&canonicalOnly, "canonical", false, "Only report canonical transcript annotations")
 	cmd.Flags().StringVar(&inputFormat, "input-format", "", "Input format: vcf, maf (auto-detected if not specified)")
@@ -200,6 +200,27 @@ func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFi
 		return runValidation(logger, mafParser, ann, out, validateAll)
 	}
 
+	// Auto-detect output format
+	if outputFormat == "" {
+		if detectedFormat == "maf" {
+			outputFormat = "maf"
+		} else {
+			outputFormat = "tab"
+		}
+	}
+
+	// MAF output uses a dedicated flow (like validation)
+	if outputFormat == "maf" {
+		if detectedFormat != "maf" {
+			return fmt.Errorf("MAF output format requires MAF input")
+		}
+		mafParser, ok := parser.(*maf.Parser)
+		if !ok {
+			return fmt.Errorf("MAF output requires MAF parser")
+		}
+		return runMAFOutput(logger, mafParser, ann, out)
+	}
+
 	var writer annotate.AnnotationWriter
 	switch outputFormat {
 	case "tab":
@@ -262,6 +283,45 @@ func runValidation(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotat
 	valWriter.WriteSummary(os.Stderr)
 
 	return nil
+}
+
+// runMAFOutput runs MAF annotation mode, preserving all original columns.
+func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotator, out *os.File) error {
+	mafWriter := output.NewMAFWriter(out, parser.Header(), parser.Columns())
+
+	if err := mafWriter.WriteHeader(); err != nil {
+		return fmt.Errorf("writing header: %w", err)
+	}
+
+	for {
+		v, mafAnn, err := parser.NextWithAnnotation()
+		if err != nil {
+			return fmt.Errorf("reading variant: %w", err)
+		}
+		if v == nil {
+			break
+		}
+
+		vepAnns, err := ann.Annotate(v)
+		if err != nil {
+			logger.Warn("failed to annotate variant",
+				zap.String("chrom", v.Chrom),
+				zap.Int64("pos", v.Pos),
+				zap.Error(err))
+			// Write original row unchanged
+			if writeErr := mafWriter.WriteRow(mafAnn.RawFields, nil, v); writeErr != nil {
+				return fmt.Errorf("writing row: %w", writeErr)
+			}
+			continue
+		}
+
+		best := output.SelectBestAnnotation(mafAnn, vepAnns)
+		if err := mafWriter.WriteRow(mafAnn.RawFields, best, v); err != nil {
+			return fmt.Errorf("writing row: %w", err)
+		}
+	}
+
+	return mafWriter.Flush()
 }
 
 // detectInputFormat detects the input file format based on extension or content.

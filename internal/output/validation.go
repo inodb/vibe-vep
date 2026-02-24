@@ -52,7 +52,7 @@ func (v *ValidationWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAF
 	// 3. Same gene (any transcript)
 	// 4. Any canonical
 	// 5. First annotation
-	bestAnn := selectBestAnnotation(mafAnn, vepAnns)
+	bestAnn := SelectBestAnnotation(mafAnn, vepAnns)
 
 	// Build comparison
 	variantStr := fmt.Sprintf("%s:%d %s>%s", variant.Chrom, variant.Pos, variant.Ref, variant.Alt)
@@ -179,8 +179,8 @@ func (v *ValidationWriter) WriteSummary(w io.Writer) {
 	fmt.Fprintf(w, "  HGVSc skipped:        %d\n", v.hgvscSkipped)
 }
 
-// selectBestAnnotation picks the best VEP annotation to compare against a MAF entry.
-func selectBestAnnotation(mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotation) *annotate.Annotation {
+// SelectBestAnnotation picks the best VEP annotation to compare against a MAF entry.
+func SelectBestAnnotation(mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotation) *annotate.Annotation {
 	var bestAnn *annotate.Annotation
 
 	// Pass 1: exact transcript ID match (skip if transcript biotype changed
@@ -201,7 +201,7 @@ func selectBestAnnotation(mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotat
 	if mafAnn.HugoSymbol != "" {
 		for _, ann := range vepAnns {
 			if ann.GeneName == mafAnn.HugoSymbol {
-				if sameGene == nil || annotationBetter(ann, sameGene) {
+				if sameGene == nil || AnnotationBetter(ann, sameGene) {
 					sameGene = ann
 				}
 			}
@@ -213,16 +213,16 @@ func selectBestAnnotation(mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotat
 
 	// Pass 3: prefer canonical > protein-coding > higher impact
 	for _, ann := range vepAnns {
-		if bestAnn == nil || annotationBetter(ann, bestAnn) {
+		if bestAnn == nil || AnnotationBetter(ann, bestAnn) {
 			bestAnn = ann
 		}
 	}
 	return bestAnn
 }
 
-// annotationBetter returns true if ann is a better pick than current for validation.
+// AnnotationBetter returns true if ann is a better pick than current for validation.
 // Priority: canonical > protein-coding biotype > higher impact.
-func annotationBetter(ann, current *annotate.Annotation) bool {
+func AnnotationBetter(ann, current *annotate.Annotation) bool {
 	if ann.IsCanonical != current.IsCanonical {
 		return ann.IsCanonical
 	}
