@@ -592,3 +592,57 @@ func TestPredictConsequence_InframeDeletion(t *testing.T) {
 		t.Errorf("Expected MODERATE impact, got %s", result.Impact)
 	}
 }
+
+func BenchmarkPredictConsequence(b *testing.B) {
+	transcript := createKRASTranscript()
+
+	variants := []*vcf.Variant{
+		{Chrom: "12", Pos: 25245350, Ref: "C", Alt: "A"},            // missense (G12C)
+		{Chrom: "12", Pos: 25245350, Ref: "C", Alt: "C"},            // synonymous
+		{Chrom: "12", Pos: 25245350, Ref: "CC", Alt: "C"},           // frameshift
+		{Chrom: "12", Pos: 25245350, Ref: "CCCC", Alt: "C"},         // inframe deletion
+		{Chrom: "12", Pos: 25245280, Ref: "A", Alt: "G"},            // splice region
+		{Chrom: "12", Pos: 25245300, Ref: "A", Alt: "G"},            // intron
+		{Chrom: "12", Pos: 25250800, Ref: "A", Alt: "G"},            // 5' UTR
+		{Chrom: "12", Pos: 25200000, Ref: "A", Alt: "G"},            // upstream
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, v := range variants {
+			PredictConsequence(v, transcript)
+		}
+	}
+}
+
+func TestPredictConsequence_Performance(t *testing.T) {
+	transcript := createKRASTranscript()
+	variants := []*vcf.Variant{
+		{Chrom: "12", Pos: 25245350, Ref: "C", Alt: "A"},
+		{Chrom: "12", Pos: 25245350, Ref: "CC", Alt: "C"},
+		{Chrom: "12", Pos: 25245300, Ref: "A", Alt: "G"},
+		{Chrom: "12", Pos: 25250800, Ref: "A", Alt: "G"},
+	}
+
+	// Annotate 100k variants and check it completes within 1 second
+	const iterations = 100000
+	start := testing.AllocsPerRun(1, func() {})
+	_ = start
+
+	t0 := testing.Benchmark(func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			for _, v := range variants {
+				PredictConsequence(v, transcript)
+			}
+		}
+	})
+
+	nsPerVariant := float64(t0.T.Nanoseconds()) / float64(t0.N) / float64(len(variants))
+	variantsPerSec := 1e9 / nsPerVariant
+
+	// Regression threshold: must handle at least 100k variants/sec per transcript
+	if variantsPerSec < 100000 {
+		t.Errorf("PredictConsequence too slow: %.0f variants/sec (want >= 100000)", variantsPerSec)
+	}
+	t.Logf("PredictConsequence: %.0f variants/sec (%.0f ns/variant)", variantsPerSec, nsPerVariant)
+}
