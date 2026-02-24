@@ -1,5 +1,7 @@
 # vibe-vep
 
+[![CI](https://github.com/inodb/vibe-vep/actions/workflows/ci.yml/badge.svg)](https://github.com/inodb/vibe-vep/actions/workflows/ci.yml)
+
 An experiment in vibe coding a lightweight variant effect predictor for use by the [cBioPortal](https://www.cbioportal.org/), [Genome Nexus](https://www.genomenexus.org/), and [OncoKB](https://www.oncokb.org/) teams. Unlike Ensembl VEP, vibe-vep is a single Go binary with no Perl dependencies and uses a smaller annotation cache (~95MB GENCODE download vs 17GB VEP cache). It incorporates transcript prioritization similar to Genome Nexus — selecting a single gene and protein change by prioritizing coding transcripts and highest-impact consequences — while also providing effect predictions for all overlapping transcripts. Achieves 99.8% concordance with GDC/VEP annotations across 1M+ TCGA variants.
 
 ## Features
