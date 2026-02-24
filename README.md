@@ -86,10 +86,43 @@ Download Options:
 
 ## Examples
 
-```bash
-# Basic annotation
-vibe-vep annotate sample.vcf
+### Annotating a VCF file
 
+The repository includes a small [example VCF](examples/example.vcf) containing the KRAS G12C (p.Gly12Cys) hotspot mutation:
+
+```bash
+vibe-vep annotate examples/example.vcf
+```
+
+Expected output ([examples/example_output.txt](examples/example_output.txt)):
+
+```
+#Uploaded_variation	Location	Allele	Gene	Feature	Feature_type	Consequence	cDNA_position	CDS_position	Protein_position	Amino_acids	Codons	Existing_variation	IMPACT	BIOTYPE	CANONICAL	EXON	INTRON	HGVSp	HGVSc
+rs121913529	12:25245351	A	KRAS	ENST00000311936	Transcript	missense_variant	-	34	12	G12C	ggt/Tgt	-	MODERATE	protein_coding	YES	2/5	-	p.Gly12Cys	c.34G>T
+rs121913529	12:25245351	A	KRAS	ENST00000256078	Transcript	missense_variant	-	34	12	G12C	ggt/Tgt	-	MODERATE	protein_coding	-	2/6	-	p.Gly12Cys	c.34G>T
+```
+
+Each line in the output corresponds to one transcript overlapping the variant. The canonical transcript (`CANONICAL=YES`) is listed first.
+
+### Annotating a MAF file
+
+The repository also includes a small [example MAF](examples/example.maf) with the same KRAS G12C variant:
+
+```bash
+vibe-vep annotate examples/example.maf
+```
+
+Expected output ([examples/example_maf_output.txt](examples/example_maf_output.txt)):
+
+```
+#Uploaded_variation	Location	Allele	Gene	Feature	Feature_type	Consequence	cDNA_position	CDS_position	Protein_position	Amino_acids	Codons	Existing_variation	IMPACT	BIOTYPE	CANONICAL	EXON	INTRON	HGVSp	HGVSc
+.	12:25245351	A	KRAS	ENST00000311936	Transcript	missense_variant	-	34	12	G12C	ggt/Tgt	-	MODERATE	protein_coding	YES	2/5	-	p.Gly12Cys	c.34G>T
+.	12:25245351	A	KRAS	ENST00000256078	Transcript	missense_variant	-	34	12	G12C	ggt/Tgt	-	MODERATE	protein_coding	-	2/6	-	p.Gly12Cys	c.34G>T
+```
+
+### Other examples
+
+```bash
 # Validate TCGA MAF file
 vibe-vep annotate --validate data_mutations.txt
 

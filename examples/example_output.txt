@@ -1,0 +1,3 @@
+#Uploaded_variation	Location	Allele	Gene	Feature	Feature_type	Consequence	cDNA_position	CDS_position	Protein_position	Amino_acids	Codons	Existing_variation	IMPACT	BIOTYPE	CANONICAL	EXON	INTRON	HGVSp	HGVSc
+rs121913529	12:25245351	A	KRAS	ENST00000311936	Transcript	missense_variant	-	34	12	G12C	ggt/Tgt	-	MODERATE	protein_coding	YES	2/5	-	p.Gly12Cys	c.34G>T
+rs121913529	12:25245351	A	KRAS	ENST00000256078	Transcript	missense_variant	-	34	12	G12C	ggt/Tgt	-	MODERATE	protein_coding	-	2/6	-	p.Gly12Cys	c.34G>T
