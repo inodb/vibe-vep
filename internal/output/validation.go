@@ -271,22 +271,31 @@ func normalizeConsequence(conseq string) string {
 
 	// Drop lower-impact modifiers when a higher-impact term is present
 	hasSpliceSite := false
+	hasHighImpact := false
 	hasPrimary := false
 	for _, t := range terms {
 		if t == "splice_donor_variant" || t == "splice_acceptor_variant" {
 			hasSpliceSite = true
 		}
+		impact := annotate.GetImpact(t)
+		if impact == annotate.ImpactHigh {
+			hasHighImpact = true
+		}
 		if t != "intron_variant" && t != "splice_region_variant" {
 			hasPrimary = true
 		}
 	}
-	if hasSpliceSite || hasPrimary {
+	{
 		filtered := terms[:0]
 		for _, t := range terms {
 			if hasSpliceSite && t == "intron_variant" {
 				continue
 			}
 			if hasPrimary && t == "splice_region_variant" {
+				continue
+			}
+			// Drop UTR terms when a HIGH-impact consequence is present
+			if hasHighImpact && (t == "5_prime_utr_variant" || t == "3_prime_utr_variant") {
 				continue
 			}
 			filtered = append(filtered, t)

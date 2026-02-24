@@ -86,34 +86,72 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 	}
 
 	// Check UTR regions
+	inUTR := false
+	utrConsequence := ""
 	if t.IsForwardStrand() {
 		if v.Pos < t.CDSStart {
-			result.Consequence = Consequence5PrimeUTR
-			result.Impact = GetImpact(result.Consequence)
-			return result
-		}
-		if v.Pos > t.CDSEnd {
-			result.Consequence = Consequence3PrimeUTR
-			result.Impact = GetImpact(result.Consequence)
-			return result
+			inUTR = true
+			utrConsequence = Consequence5PrimeUTR
+		} else if v.Pos > t.CDSEnd {
+			inUTR = true
+			utrConsequence = Consequence3PrimeUTR
 		}
 	} else {
 		// Reverse strand: CDSEnd is where the start codon is (higher genomic coord),
 		// CDSStart is where the stop codon is (lower genomic coord)
 		if v.Pos > t.CDSEnd {
-			result.Consequence = Consequence5PrimeUTR
-			result.Impact = GetImpact(result.Consequence)
-			return result
+			inUTR = true
+			utrConsequence = Consequence5PrimeUTR
+		} else if v.Pos < t.CDSStart {
+			inUTR = true
+			utrConsequence = Consequence3PrimeUTR
 		}
-		if v.Pos < t.CDSStart {
-			result.Consequence = Consequence3PrimeUTR
-			result.Impact = GetImpact(result.Consequence)
-			return result
+	}
+
+	if inUTR {
+		// For large indels starting in UTR, check if deletion spans into
+		// higher-impact regions (splice sites, start codon, CDS)
+		if v.IsIndel() && len(v.Ref) > 1 {
+			// Check splice site overlap first (highest priority)
+			if spliceSite := indelSpliceSiteType(v, t); spliceSite != "" {
+				result.Consequence = spliceSite
+				result.Impact = GetImpact(spliceSite)
+				return result
+			}
+			// Check if deletion spans into start codon
+			indelEnd := v.Pos + int64(len(v.Ref)) - 1
+			startCodonStart, startCodonEnd := t.CDSStart, t.CDSStart+2
+			if !t.IsForwardStrand() {
+				startCodonStart, startCodonEnd = t.CDSEnd-2, t.CDSEnd
+			}
+			if indelEnd >= startCodonStart && v.Pos <= startCodonEnd {
+				result.Consequence = ConsequenceStartLost
+				result.Impact = GetImpact(result.Consequence)
+				return result
+			}
 		}
+		result.Consequence = utrConsequence
+		result.Impact = GetImpact(result.Consequence)
+		return result
 	}
 
 	// Variant is in CDS - calculate coding effect
 	result = predictCodingConsequence(v, t, exon, result)
+
+	// For indels, check for higher-impact consequences
+	if v.IsIndel() && len(v.Ref) > 1 {
+		indelEnd := v.Pos + int64(len(v.Ref)) - 1
+		// Check if indel spans the start codon → start_lost
+		startCodonStart, startCodonEnd := t.CDSStart, t.CDSStart+2
+		if !t.IsForwardStrand() {
+			startCodonStart, startCodonEnd = t.CDSEnd-2, t.CDSEnd
+		}
+		if indelEnd >= startCodonStart && v.Pos <= startCodonEnd {
+			result.Consequence = ConsequenceStartLost
+			result.Impact = GetImpact(result.Consequence)
+			return result
+		}
+	}
 
 	// For indels spanning into a splice site, upgrade to splice donor/acceptor
 	if spliceSite := indelSpliceSiteType(v, t); spliceSite != "" {
