@@ -272,10 +272,14 @@ func normalizeConsequence(conseq string) string {
 	// Drop lower-impact modifiers when a higher-impact term is present
 	hasSpliceSite := false
 	hasHighImpact := false
+	hasFrameshift := false
 	hasPrimary := false
 	for _, t := range terms {
 		if t == "splice_donor_variant" || t == "splice_acceptor_variant" {
 			hasSpliceSite = true
+		}
+		if t == "frameshift_variant" {
+			hasFrameshift = true
 		}
 		impact := annotate.GetImpact(t)
 		if impact == annotate.ImpactHigh {
@@ -296,6 +300,10 @@ func normalizeConsequence(conseq string) string {
 			}
 			// Drop UTR terms when a HIGH-impact consequence is present
 			if hasHighImpact && (t == "5_prime_utr_variant" || t == "3_prime_utr_variant") {
+				continue
+			}
+			// Drop stop_gained/stop_lost co-occurring with frameshift (inconsistently reported)
+			if hasFrameshift && (t == "stop_gained" || t == "stop_lost") {
 				continue
 			}
 			filtered = append(filtered, t)
