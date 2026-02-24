@@ -42,3 +42,6 @@ dist/
 # Temporary files
 *.tmp
 *.log
+
+# TCGA test data (large MAF files, download with: make download-testdata)
+testdata/tcga/*.txt

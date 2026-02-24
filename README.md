@@ -180,9 +180,10 @@ MAF files may use different consequence terms than SO standard. The validation n
 
 Tested against 7 TCGA GDC studies from [cBioPortal/datahub](https://github.com/cBioPortal/datahub) (1M+ total variants). See the full [validation report](testdata/tcga/validation_report.md) for per-study consequence match rates, HGVSp match rates, and performance numbers.
 
-To regenerate the report:
+To download the TCGA test data and regenerate the report:
 
 ```bash
+make download-testdata
 go test ./internal/output/ -run TestValidationBenchmark -v -count=1
 ```
 
@@ -236,8 +237,11 @@ go test ./internal/annotate/ -bench .
 # Build
 go build -o vibe-vep ./cmd/vibe-vep
 
+# Download TCGA test data for validation (~1.6GB)
+make download-testdata
+
 # Run validation against TCGA data
-vibe-vep annotate --validate /path/to/data_mutations.txt
+vibe-vep annotate --validate testdata/tcga/chol_tcga_gdc_data_mutations.txt
 ```
 
 ## Roadmap

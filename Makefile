@@ -1,4 +1,4 @@
-.PHONY: build test lint clean install
+.PHONY: build test lint clean install download-testdata
 
 # Binary name
 BINARY=vibe-vep
@@ -31,6 +31,10 @@ coverage:
 fmt:
 	gofmt -s -w .
 	goimports -w .
+
+# Download TCGA test data for validation (~1.6GB)
+download-testdata:
+	./scripts/download_tcga.sh
 
 # Download dependencies
 deps:
