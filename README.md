@@ -10,7 +10,7 @@ An experiment in vibe coding a lightweight variant effect predictor for use by t
 - **GENCODE Annotations**: Uses GENCODE GTF/FASTA (~95MB download vs 17GB VEP cache)
 - **Consequence Prediction**: Classifies variants using Sequence Ontology terms
 - **Validation Mode**: Compare existing MAF annotations against predictions
-- **Fast**: ~720k variants/sec annotation throughput (excluding cache load time)
+- **Fast**: ~720k+ variants/sec annotation throughput (see [validation report](testdata/tcga/validation_report.md))
 
 ## Installation
 
@@ -178,17 +178,13 @@ MAF files may use different consequence terms than SO standard. The validation n
 
 ### Validation Results
 
-Tested against 7 TCGA GDC studies from [cBioPortal/datahub](https://github.com/cBioPortal/datahub) (1,053,200 total variants):
+Tested against 7 TCGA GDC studies from [cBioPortal/datahub](https://github.com/cBioPortal/datahub) (1M+ total variants). See the full [validation report](testdata/tcga/validation_report.md) for per-study consequence match rates, HGVSp match rates, and performance numbers.
 
-| Study | Variants | Match Rate |
-|-------|----------|-----------|
-| chol_tcga_gdc | 3,764 | 99.9% |
-| blca_tcga_gdc | 116,684 | 99.9% |
-| gbm_tcga_gdc | 54,870 | 99.8% |
-| brca_tcga_gdc | 89,012 | 99.8% |
-| luad_tcga_gdc | 190,868 | 99.8% |
-| coad_tcga_gdc | 244,552 | 99.8% |
-| skcm_tcga_gdc | 353,450 | 99.8% |
+To regenerate the report:
+
+```bash
+go test ./internal/output/ -run TestValidationBenchmark -v -count=1
+```
 
 Remaining mismatches are primarily:
 - CDS sequence differences between GENCODE versions (synonymous vs missense)

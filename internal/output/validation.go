@@ -119,6 +119,11 @@ func (v *ValidationWriter) Summary() (total, matches, mismatches int) {
 	return v.total, v.matches, v.mismatches
 }
 
+// HGVSpSummary returns HGVSp match statistics.
+func (v *ValidationWriter) HGVSpSummary() (matches, mismatches, skipped int) {
+	return v.hgvspMatches, v.hgvspMismatches, v.hgvspSkipped
+}
+
 // WriteSummary writes a summary of the validation results.
 func (v *ValidationWriter) WriteSummary(w io.Writer) {
 	conseqRate := float64(0)
