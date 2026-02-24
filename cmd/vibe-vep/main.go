@@ -2,7 +2,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,13 +12,13 @@ import (
 	"github.com/inodb/vibe-vep/internal/maf"
 	"github.com/inodb/vibe-vep/internal/output"
 	"github.com/inodb/vibe-vep/internal/vcf"
+	"github.com/spf13/cobra"
 )
 
 // Exit codes
 const (
 	ExitSuccess = 0
 	ExitError   = 1
-	ExitUsage   = 2
 )
 
 // Version information (set at build time)
@@ -29,80 +28,27 @@ var (
 	date    = "unknown"
 )
 
+func newRootCmd() *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:   "vibe-vep",
+		Short: "Variant Effect Predictor",
+		Long:  "vibe-vep - Variant Effect Predictor using GENCODE annotations",
+		Version: fmt.Sprintf("%s (%s) built %s", version, commit, date),
+	}
+
+	rootCmd.AddCommand(newAnnotateCmd())
+	rootCmd.AddCommand(newDownloadCmd())
+
+	return rootCmd
+}
+
 func main() {
-	os.Exit(run())
-}
-
-func run() int {
-	// Global flags
-	var showVersion bool
-	flag.BoolVar(&showVersion, "version", false, "Show version information")
-
-	// Parse global flags first
-	flag.Parse()
-
-	if showVersion {
-		fmt.Printf("vibe-vep version %s (%s) built %s\n", version, commit, date)
-		return ExitSuccess
-	}
-
-	// Check for subcommand
-	args := flag.Args()
-	if len(args) < 1 {
-		printUsage()
-		return ExitUsage
-	}
-
-	switch args[0] {
-	case "annotate":
-		return runAnnotate(args[1:])
-	case "download":
-		return runDownload(args[1:])
-	case "help":
-		printUsage()
-		return ExitSuccess
-	default:
-		fmt.Fprintf(os.Stderr, "Error: unknown command %q\n\n", args[0])
-		printUsage()
-		return ExitUsage
+	if err := newRootCmd().Execute(); err != nil {
+		os.Exit(ExitError)
 	}
 }
 
-func printUsage() {
-	fmt.Fprintf(os.Stderr, `vibe-vep - Variant Effect Predictor
-
-Usage:
-  vibe-vep [options] <command> [arguments]
-
-Commands:
-  annotate    Annotate variants in a VCF or MAF file
-  download    Download GENCODE annotation files
-  help        Show this help message
-
-Global Options:
-  --version   Show version information
-
-Examples:
-  # Download GENCODE annotations (one-time setup)
-  vibe-vep download --assembly GRCh38
-
-  # Annotate a VCF file (uses GENCODE cache automatically)
-  vibe-vep annotate input.vcf
-
-  # Annotate a MAF file
-  vibe-vep annotate input.maf
-
-  # Validate MAF annotations against VEP predictions
-  vibe-vep annotate --validate data_mutations.txt
-
-For more information on a command, use:
-  vibe-vep <command> --help
-`)
-}
-
-func runAnnotate(args []string) int {
-	fs := flag.NewFlagSet("annotate", flag.ExitOnError)
-
+func newAnnotateCmd() *cobra.Command {
 	var (
 		assembly      string
 		outputFormat  string
@@ -113,50 +59,33 @@ func runAnnotate(args []string) int {
 		validateAll   bool
 	)
 
-	fs.StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
-	fs.StringVar(&outputFormat, "f", "tab", "Output format: tab, vcf")
-	fs.StringVar(&outputFormat, "output-format", "tab", "Output format: tab, vcf")
-	fs.StringVar(&outputFile, "o", "", "Output file (default: stdout)")
-	fs.StringVar(&outputFile, "output", "", "Output file (default: stdout)")
-	fs.BoolVar(&canonicalOnly, "canonical", false, "Only report canonical transcript annotations")
-	fs.StringVar(&inputFormat, "input-format", "", "Input format: vcf, maf (auto-detected if not specified)")
-	fs.BoolVar(&validate, "validate", false, "Validate MAF annotations against VEP predictions (MAF input only)")
-	fs.BoolVar(&validateAll, "validate-all", false, "Show all variants in validation output (default: mismatches only)")
-
-	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, `Annotate variants in a VCF or MAF file with consequence predictions.
-
-Usage:
-  vibe-vep annotate [options] <input-file>
-
-Arguments:
-  <input-file>  Input VCF or MAF file (use '-' for stdin)
-
-Options:
-`)
-		fs.PrintDefaults()
-		fmt.Fprintf(os.Stderr, `
-Examples:
-  vibe-vep annotate input.vcf
+	cmd := &cobra.Command{
+		Use:   "annotate <input-file>",
+		Short: "Annotate variants in a VCF or MAF file",
+		Long:  "Annotate variants in a VCF or MAF file with consequence predictions.",
+		Example: `  vibe-vep annotate input.vcf
   vibe-vep annotate input.maf
   vibe-vep annotate -f vcf -o output.vcf input.vcf
   vibe-vep annotate --validate data_mutations.txt
-  cat input.vcf | vibe-vep annotate -
-`)
+  cat input.vcf | vibe-vep annotate -`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAnnotate(args[0], assembly, outputFormat, outputFile, canonicalOnly, inputFormat, validate, validateAll)
+		},
 	}
 
-	if err := fs.Parse(args); err != nil {
-		return ExitUsage
-	}
+	cmd.Flags().StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
+	cmd.Flags().StringVarP(&outputFormat, "output-format", "f", "tab", "Output format: tab, vcf")
+	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file (default: stdout)")
+	cmd.Flags().BoolVar(&canonicalOnly, "canonical", false, "Only report canonical transcript annotations")
+	cmd.Flags().StringVar(&inputFormat, "input-format", "", "Input format: vcf, maf (auto-detected if not specified)")
+	cmd.Flags().BoolVar(&validate, "validate", false, "Validate MAF annotations against VEP predictions (MAF input only)")
+	cmd.Flags().BoolVar(&validateAll, "validate-all", false, "Show all variants in validation output (default: mismatches only)")
 
-	if fs.NArg() < 1 {
-		fmt.Fprintf(os.Stderr, "Error: input file argument required\n\n")
-		fs.Usage()
-		return ExitUsage
-	}
+	return cmd
+}
 
-	inputPath := fs.Arg(0)
-
+func runAnnotate(inputPath, assembly, outputFormat, outputFile string, canonicalOnly bool, inputFormat string, validate, validateAll bool) error {
 	// Detect input format if not specified
 	detectedFormat := inputFormat
 	if detectedFormat == "" {
@@ -173,26 +102,21 @@ Examples:
 	case "vcf":
 		parser, err = vcf.NewParser(inputPath)
 	default:
-		fmt.Fprintf(os.Stderr, "Error: unknown input format %q\n", detectedFormat)
-		fmt.Fprintf(os.Stderr, "Hint: Use --input-format to specify vcf or maf\n")
-		return ExitError
+		return fmt.Errorf("unknown input format %q (use --input-format to specify vcf or maf)", detectedFormat)
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		if os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "Hint: Check that the file path is correct\n")
+			return fmt.Errorf("%w (check that the file path is correct)", err)
 		}
-		return ExitError
+		return err
 	}
 	defer parser.Close()
 
 	// Load GENCODE cache
 	gtfPath, fastaPath, canonicalPath, found := FindGENCODEFiles(assembly)
 	if !found {
-		fmt.Fprintf(os.Stderr, "Error: No GENCODE cache found for %s\n", assembly)
-		fmt.Fprintf(os.Stderr, "Hint: Download GENCODE annotations with: vibe-vep download --assembly %s\n", assembly)
-		return ExitError
+		return fmt.Errorf("no GENCODE cache found for %s\nHint: Download GENCODE annotations with: vibe-vep download --assembly %s", assembly, assembly)
 	}
 
 	fmt.Fprintf(os.Stderr, "Using GENCODE cache for %s\n", assembly)
@@ -217,8 +141,7 @@ Examples:
 	}
 
 	if err := loader.Load(c); err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading GENCODE cache: %v\n", err)
-		return ExitError
+		return fmt.Errorf("loading GENCODE cache: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "Loaded %d transcripts\n", c.TranscriptCount())
 	transcriptCache := c
@@ -235,8 +158,7 @@ Examples:
 	} else {
 		out, err = os.Create(outputFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating output file: %v\n", err)
-			return ExitError
+			return fmt.Errorf("creating output file: %w", err)
 		}
 		defer out.Close()
 	}
@@ -244,14 +166,12 @@ Examples:
 	// Validation mode for MAF files
 	if validate {
 		if detectedFormat != "maf" {
-			fmt.Fprintf(os.Stderr, "Error: --validate requires MAF input format\n")
-			return ExitError
+			return fmt.Errorf("--validate requires MAF input format")
 		}
 
 		mafParser, ok := parser.(*maf.Parser)
 		if !ok {
-			fmt.Fprintf(os.Stderr, "Error: --validate requires MAF parser\n")
-			return ExitError
+			return fmt.Errorf("--validate requires MAF parser")
 		}
 
 		return runValidation(mafParser, ann, out, validateAll)
@@ -262,42 +182,36 @@ Examples:
 	case "tab":
 		writer = output.NewTabWriter(out)
 	case "vcf":
-		fmt.Fprintf(os.Stderr, "Error: VCF output format not yet implemented\n")
-		return ExitError
+		return fmt.Errorf("VCF output format not yet implemented")
 	default:
-		fmt.Fprintf(os.Stderr, "Error: unknown output format %q\n", outputFormat)
-		return ExitError
+		return fmt.Errorf("unknown output format %q", outputFormat)
 	}
 
 	// Write header
 	if err := writer.WriteHeader(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing header: %v\n", err)
-		return ExitError
+		return fmt.Errorf("writing header: %w", err)
 	}
 
 	// Annotate all variants
 	if err := ann.AnnotateAll(parser, writer); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return ExitError
+		return err
 	}
 
-	return ExitSuccess
+	return nil
 }
 
 // runValidation runs validation mode comparing MAF annotations to VEP predictions.
-func runValidation(parser *maf.Parser, ann *annotate.Annotator, out *os.File, showAll bool) int {
+func runValidation(parser *maf.Parser, ann *annotate.Annotator, out *os.File, showAll bool) error {
 	valWriter := output.NewValidationWriter(out, showAll)
 
 	if err := valWriter.WriteHeader(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing header: %v\n", err)
-		return ExitError
+		return fmt.Errorf("writing header: %w", err)
 	}
 
 	for {
 		v, mafAnn, err := parser.NextWithAnnotation()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading variant: %v\n", err)
-			return ExitError
+			return fmt.Errorf("reading variant: %w", err)
 		}
 		if v == nil {
 			break
@@ -311,21 +225,18 @@ func runValidation(parser *maf.Parser, ann *annotate.Annotator, out *os.File, sh
 		}
 
 		if err := valWriter.WriteComparison(v, mafAnn, vepAnns); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing comparison: %v\n", err)
-			return ExitError
+			return fmt.Errorf("writing comparison: %w", err)
 		}
 	}
 
 	if err := valWriter.Flush(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error flushing output: %v\n", err)
-		return ExitError
+		return fmt.Errorf("flushing output: %w", err)
 	}
 
 	valWriter.WriteSummary(os.Stderr)
 
-	return ExitSuccess
+	return nil
 }
-
 
 // detectInputFormat detects the input file format based on extension or content.
 func detectInputFormat(path string) string {

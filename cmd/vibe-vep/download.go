@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/spf13/cobra"
 )
 
 // GENCODE FTP URLs
@@ -36,57 +36,44 @@ func getGENCODEURLs(assembly string) (gtfURL, fastaURL string) {
 	return
 }
 
-func runDownload(args []string) int {
-	fs := flag.NewFlagSet("download", flag.ExitOnError)
-
+func newDownloadCmd() *cobra.Command {
 	var (
 		assembly  string
 		outputDir string
 		gtfOnly   bool
 	)
 
-	fs.StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
-	fs.StringVar(&outputDir, "output", "", "Output directory (default: ~/.vibe-vep/)")
-	fs.BoolVar(&gtfOnly, "gtf-only", false, "Only download GTF annotations (skip FASTA sequences)")
-
-	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, `Download GENCODE annotation files for variant annotation.
-
-Usage:
-  vibe-vep download [options]
-
-Options:
-`)
-		fs.PrintDefaults()
-		fmt.Fprintf(os.Stderr, `
-Examples:
-  # Download GRCh38 annotations (default)
+	cmd := &cobra.Command{
+		Use:   "download",
+		Short: "Download GENCODE annotation files",
+		Long:  "Download GENCODE annotation files for variant annotation.",
+		Example: `  # Download GRCh38 annotations (default)
   vibe-vep download
 
   # Download GRCh37 annotations
   vibe-vep download --assembly GRCh37
 
   # Download to a custom directory
-  vibe-vep download --output /data/gencode
-
-Files downloaded:
-  - gencode.v46.annotation.gtf.gz (~50MB for GRCh38)
-  - gencode.v46.pc_transcripts.fa.gz (~70MB for GRCh38)
-
-After downloading, vibe-vep will automatically detect and use these files.
-`)
+  vibe-vep download --output /data/gencode`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDownload(assembly, outputDir, gtfOnly)
+		},
 	}
 
-	if err := fs.Parse(args); err != nil {
-		return ExitUsage
-	}
+	cmd.Flags().StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
+	cmd.Flags().StringVar(&outputDir, "output", "", "Output directory (default: ~/.vibe-vep/)")
+	cmd.Flags().BoolVar(&gtfOnly, "gtf-only", false, "Only download GTF annotations (skip FASTA sequences)")
 
+	return cmd
+}
+
+func runDownload(assembly, outputDir string, gtfOnly bool) error {
 	// Determine output directory
 	if outputDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: cannot determine home directory: %v\n", err)
-			return ExitError
+			return fmt.Errorf("cannot determine home directory: %w", err)
 		}
 		outputDir = filepath.Join(home, ".vibe-vep")
 	}
@@ -96,8 +83,7 @@ After downloading, vibe-vep will automatically detect and use these files.
 	destDir := filepath.Join(outputDir, assemblyLower)
 
 	if err := os.MkdirAll(destDir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot create directory %s: %v\n", destDir, err)
-		return ExitError
+		return fmt.Errorf("cannot create directory %s: %w", destDir, err)
 	}
 
 	gtfURL, fastaURL := getGENCODEURLs(assembly)
@@ -108,16 +94,14 @@ After downloading, vibe-vep will automatically detect and use these files.
 	// Download GTF
 	gtfFile := filepath.Join(destDir, filepath.Base(gtfURL))
 	if err := downloadFile(gtfURL, gtfFile); err != nil {
-		fmt.Fprintf(os.Stderr, "Error downloading GTF: %v\n", err)
-		return ExitError
+		return fmt.Errorf("downloading GTF: %w", err)
 	}
 
 	// Download FASTA (unless gtf-only)
 	if !gtfOnly {
 		fastaFile := filepath.Join(destDir, filepath.Base(fastaURL))
 		if err := downloadFile(fastaURL, fastaFile); err != nil {
-			fmt.Fprintf(os.Stderr, "Error downloading FASTA: %v\n", err)
-			return ExitError
+			return fmt.Errorf("downloading FASTA: %w", err)
 		}
 	}
 
@@ -133,7 +117,7 @@ After downloading, vibe-vep will automatically detect and use these files.
 	fmt.Printf("To annotate variants, run:\n")
 	fmt.Printf("  vibe-vep annotate input.vcf\n")
 
-	return ExitSuccess
+	return nil
 }
 
 // downloadFile downloads a file from URL to the destination path with progress.
