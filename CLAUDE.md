@@ -1,29 +1,44 @@
 # vibe-vep Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-01-24
+## Tech Stack
 
-## Active Technologies
-
-- Go 1.22+ (001-vcf-variant-annotation)
+- Go 1.22+
 
 ## Project Structure
 
-```text
-src/
-tests/
+```
+cmd/vibe-vep/       CLI entry point (annotate, download commands)
+internal/
+  annotate/         Consequence prediction (PredictConsequence, Annotator)
+  cache/            Transcript cache (GENCODE GTF/FASTA loader)
+  maf/              MAF file parser
+  output/           Output formatting and validation comparison
+  vcf/              VCF file parser
+testdata/
+  cache/            Test transcript data (JSON)
+  tcga/             TCGA GDC MAF files for validation
 ```
 
 ## Commands
 
-# Add commands for Go 1.22+
+```bash
+# Run tests
+go test ./...
 
-## Code Style
+# Run benchmarks
+go test ./internal/annotate/ -bench . -benchmem
 
-Go 1.22+: Follow standard conventions
+# Build
+go build -o vibe-vep ./cmd/vibe-vep
 
-## Recent Changes
+# Run validation against TCGA data
+go run ./cmd/vibe-vep annotate --validate testdata/tcga/chol_tcga_gdc_data_mutations.txt
+```
 
-- 001-vcf-variant-annotation: Added Go 1.22+
+## Key Design Decisions
 
-<!-- MANUAL ADDITIONS START -->
-<!-- MANUAL ADDITIONS END -->
+- GENCODE GTF/FASTA is the only cache backend (no DuckDB, REST API, or Sereal)
+- Consequence prediction follows Sequence Ontology terms with VEP-compatible output
+- Transcript prioritization: canonical > protein-coding biotype > highest impact
+- Validation normalizes MAF and SO consequence terms before comparison
+- Performance target: >100k variants/sec (currently ~720k/sec)
