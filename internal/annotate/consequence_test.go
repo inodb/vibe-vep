@@ -616,6 +616,9 @@ func BenchmarkPredictConsequence(b *testing.B) {
 }
 
 func TestPredictConsequence_Performance(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping performance test in short mode")
+	}
 	transcript := createKRASTranscript()
 	variants := []*vcf.Variant{
 		{Chrom: "12", Pos: 25245350, Ref: "C", Alt: "A"},
