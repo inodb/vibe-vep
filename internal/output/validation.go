@@ -15,11 +15,14 @@ import (
 
 // ValidationWriter writes comparison output between MAF annotations and VEP predictions.
 type ValidationWriter struct {
-	w           *tabwriter.Writer
-	matches     int
-	mismatches  int
-	total       int
-	showAll     bool // if false, only show mismatches
+	w              *tabwriter.Writer
+	matches        int
+	mismatches     int
+	total          int
+	hgvspMatches   int
+	hgvspMismatches int
+	hgvspSkipped   int // non-coding variants with no HGVSp to compare
+	showAll        bool // if false, only show mismatches
 }
 
 // NewValidationWriter creates a new validation output writer.
@@ -32,7 +35,7 @@ func NewValidationWriter(w io.Writer, showAll bool) *ValidationWriter {
 
 // WriteHeader writes the validation output header.
 func (v *ValidationWriter) WriteHeader() error {
-	_, err := fmt.Fprintln(v.w, "Variant\tGene\tMAF_Consequence\tVEP_Consequence\tMAF_HGVSp\tVEP_HGVSp\tMatch")
+	_, err := fmt.Fprintln(v.w, "Variant\tGene\tMAF_Consequence\tVEP_Consequence\tMAF_HGVSp\tVEP_HGVSp\tConseq_Match\tHGVSp_Match")
 	return err
 }
 
@@ -60,28 +63,45 @@ func (v *ValidationWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAF
 		vepHGVSp = bestAnn.HGVSp
 	}
 
-	// Check for match (consequence match is primary)
+	// Check consequence match
 	conseqMatch := consequencesMatch(mafConseq, vepConseq)
 
-	var matchStr string
+	var conseqMatchStr string
 	if conseqMatch {
 		v.matches++
-		matchStr = "Y"
+		conseqMatchStr = "Y"
 	} else {
 		v.mismatches++
-		matchStr = "N"
+		conseqMatchStr = "N"
 	}
 
-	// Only write if showAll or mismatch
-	if v.showAll || !conseqMatch {
-		_, err := fmt.Fprintf(v.w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+	// Check HGVSp match
+	hgvspMatch := false
+	hgvspMatchStr := "-"
+	if mafHGVSp == "" && vepHGVSp == "" {
+		// Both empty (non-coding) — skip HGVSp comparison
+		v.hgvspSkipped++
+	} else if hgvspValuesMatch(mafHGVSp, vepHGVSp) {
+		v.hgvspMatches++
+		hgvspMatch = true
+		hgvspMatchStr = "Y"
+	} else {
+		v.hgvspMismatches++
+		hgvspMatchStr = "N"
+	}
+
+	// Only write if showAll or any mismatch
+	showRow := v.showAll || !conseqMatch || (!hgvspMatch && hgvspMatchStr != "-")
+	if showRow {
+		_, err := fmt.Fprintf(v.w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			variantStr,
 			mafAnn.HugoSymbol,
 			mafConseq,
 			vepConseq,
 			mafHGVSp,
 			vepHGVSp,
-			matchStr,
+			conseqMatchStr,
+			hgvspMatchStr,
 		)
 		return err
 	}
@@ -101,14 +121,22 @@ func (v *ValidationWriter) Summary() (total, matches, mismatches int) {
 
 // WriteSummary writes a summary of the validation results.
 func (v *ValidationWriter) WriteSummary(w io.Writer) {
-	matchRate := float64(0)
+	conseqRate := float64(0)
 	if v.total > 0 {
-		matchRate = float64(v.matches) / float64(v.total) * 100
+		conseqRate = float64(v.matches) / float64(v.total) * 100
+	}
+	hgvspTotal := v.hgvspMatches + v.hgvspMismatches
+	hgvspRate := float64(0)
+	if hgvspTotal > 0 {
+		hgvspRate = float64(v.hgvspMatches) / float64(hgvspTotal) * 100
 	}
 	fmt.Fprintf(w, "\nValidation Summary:\n")
-	fmt.Fprintf(w, "  Total variants:  %d\n", v.total)
-	fmt.Fprintf(w, "  Matches:         %d (%.1f%%)\n", v.matches, matchRate)
-	fmt.Fprintf(w, "  Mismatches:      %d (%.1f%%)\n", v.mismatches, 100-matchRate)
+	fmt.Fprintf(w, "  Total variants:       %d\n", v.total)
+	fmt.Fprintf(w, "  Consequence matches:  %d (%.1f%%)\n", v.matches, conseqRate)
+	fmt.Fprintf(w, "  Consequence mismatch: %d (%.1f%%)\n", v.mismatches, 100-conseqRate)
+	fmt.Fprintf(w, "  HGVSp matches:        %d/%d (%.1f%%)\n", v.hgvspMatches, hgvspTotal, hgvspRate)
+	fmt.Fprintf(w, "  HGVSp mismatches:     %d/%d\n", v.hgvspMismatches, hgvspTotal)
+	fmt.Fprintf(w, "  HGVSp skipped:        %d (non-coding)\n", v.hgvspSkipped)
 }
 
 // selectBestAnnotation picks the best VEP annotation to compare against a MAF entry.
@@ -195,6 +223,32 @@ func isCodingConsequence(conseq string) bool {
 		}
 	}
 	return false
+}
+
+// hgvspToShort converts 3-letter HGVSp notation to single-letter.
+// e.g., "p.Gly12Cys" → "p.G12C", "p.Ter130=" → "p.*130="
+func hgvspToShort(hgvsp string) string {
+	result := hgvsp
+	for single, three := range annotate.AminoAcidSingleToThree {
+		if single == '*' {
+			// Replace Ter with * for stop codons
+			result = strings.ReplaceAll(result, three, "*")
+		} else {
+			result = strings.ReplaceAll(result, three, string(single))
+		}
+	}
+	return result
+}
+
+// hgvspValuesMatch compares MAF HGVSp (single-letter) with VEP HGVSp (3-letter)
+// by normalizing both to single-letter format.
+func hgvspValuesMatch(mafHGVSp, vepHGVSp string) bool {
+	if mafHGVSp == "" && vepHGVSp == "" {
+		return true
+	}
+	// Normalize VEP 3-letter to single-letter for comparison
+	vepShort := hgvspToShort(vepHGVSp)
+	return mafHGVSp == vepShort
 }
 
 // consequencesMatch checks if MAF and VEP consequences should be considered matching.
