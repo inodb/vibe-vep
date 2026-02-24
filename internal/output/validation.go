@@ -57,7 +57,7 @@ func (v *ValidationWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAF
 	var vepConseq, vepHGVSp string
 	if bestAnn != nil {
 		vepConseq = bestAnn.Consequence
-		vepHGVSp = bestAnn.AminoAcidChange
+		vepHGVSp = bestAnn.HGVSp
 	}
 
 	// Check for match (consequence match is primary)

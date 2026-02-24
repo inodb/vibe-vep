@@ -24,6 +24,7 @@ type ConsequenceResult struct {
 	ExonNumber      string
 	IntronNumber    string
 	CDNAPosition    int64
+	HGVSp           string
 }
 
 // PredictConsequence determines the effect of a variant on a transcript.
@@ -241,11 +242,20 @@ func predictCodingConsequence(v *vcf.Variant, t *cache.Transcript, exon *cache.E
 	}
 
 	result.Impact = GetImpact(result.Consequence)
+	result.HGVSp = FormatHGVSp(result)
 	return result
 }
 
 // predictIndelConsequence determines the effect of an insertion or deletion.
 func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult) *ConsequenceResult {
+	// Look up the reference amino acid at the protein position for HGVSp
+	if result.ProteinPosition > 0 && len(t.CDSSequence) > 0 {
+		refCodon := GetCodon(t.CDSSequence, result.ProteinPosition)
+		if len(refCodon) == 3 {
+			result.RefAA = TranslateCodon(refCodon)
+		}
+	}
+
 	refLen := len(v.Ref)
 	altLen := len(v.Alt)
 	diff := altLen - refLen
@@ -282,6 +292,7 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 	}
 
 	result.Impact = GetImpact(result.Consequence)
+	result.HGVSp = FormatHGVSp(result)
 	return result
 }
 

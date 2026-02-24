@@ -77,6 +77,11 @@ func TestPredictConsequence_KRASG12C(t *testing.T) {
 	if result.AminoAcidChange != "G12C" {
 		t.Errorf("Expected amino acid change G12C, got %s", result.AminoAcidChange)
 	}
+
+	// HGVSp should be p.Gly12Cys
+	if result.HGVSp != "p.Gly12Cys" {
+		t.Errorf("Expected HGVSp p.Gly12Cys, got %s", result.HGVSp)
+	}
 }
 
 func TestPredictConsequence_Synonymous(t *testing.T) {

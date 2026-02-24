@@ -61,6 +61,7 @@ type Annotation struct {
 	ExonNumber      string // Exon number (e.g., "2/5")
 	IntronNumber    string // Intron number (e.g., "1/4")
 	CDNAPosition    int64  // Position in cDNA
+	HGVSp           string // HGVS protein notation (e.g., "p.Gly12Cys")
 }
 
 // GetImpact returns the impact level for a given consequence type.

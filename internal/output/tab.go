@@ -40,6 +40,7 @@ func NewTabWriter(w io.Writer) *TabWriter {
 			"CANONICAL",
 			"EXON",
 			"INTRON",
+			"HGVSp",
 		},
 	}
 }
@@ -121,6 +122,10 @@ func (tw *TabWriter) Write(v *vcf.Variant, ann *annotate.Annotation) error {
 	if intron == "" {
 		intron = "-"
 	}
+	hgvsp := ann.HGVSp
+	if hgvsp == "" {
+		hgvsp = "-"
+	}
 
 	// Build the row
 	values := []string{
@@ -142,6 +147,7 @@ func (tw *TabWriter) Write(v *vcf.Variant, ann *annotate.Annotation) error {
 		canonical,
 		exon,
 		intron,
+		hgvsp,
 	}
 
 	_, err := tw.w.WriteString(strings.Join(values, "\t") + "\n")

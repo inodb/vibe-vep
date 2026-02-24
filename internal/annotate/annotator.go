@@ -91,6 +91,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 			ExonNumber:      result.ExonNumber,
 			IntronNumber:    result.IntronNumber,
 			CDNAPosition:    result.CDNAPosition,
+			HGVSp:           result.HGVSp,
 		}
 
 		annotations = append(annotations, ann)

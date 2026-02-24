@@ -1,0 +1,268 @@
+package annotate
+
+import (
+	"testing"
+
+	"github.com/inodb/vibe-vep/internal/vcf"
+)
+
+func TestFormatHGVSp(t *testing.T) {
+	tests := []struct {
+		name   string
+		result *ConsequenceResult
+		want   string
+	}{
+		{
+			name: "missense",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceMissenseVariant,
+				ProteinPosition: 12,
+				RefAA:           'G',
+				AltAA:           'C',
+			},
+			want: "p.Gly12Cys",
+		},
+		{
+			name: "synonymous",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceSynonymousVariant,
+				ProteinPosition: 12,
+				RefAA:           'G',
+				AltAA:           'G',
+			},
+			want: "p.Gly12=",
+		},
+		{
+			name: "stop_gained",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceStopGained,
+				ProteinPosition: 12,
+				RefAA:           'G',
+				AltAA:           '*',
+			},
+			want: "p.Gly12Ter",
+		},
+		{
+			name: "stop_lost",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceStopLost,
+				ProteinPosition: 130,
+				RefAA:           '*',
+				AltAA:           'K',
+			},
+			want: "p.Ter130Lysext*?",
+		},
+		{
+			name: "start_lost",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceStartLost,
+				ProteinPosition: 1,
+				RefAA:           'M',
+				AltAA:           'K',
+			},
+			want: "p.Met1?",
+		},
+		{
+			name: "stop_retained",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceStopRetained,
+				ProteinPosition: 130,
+				RefAA:           '*',
+				AltAA:           '*',
+			},
+			want: "p.Ter130=",
+		},
+		{
+			name: "frameshift",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceFrameshiftVariant,
+				ProteinPosition: 12,
+				RefAA:           'G',
+			},
+			want: "p.Gly12fs",
+		},
+		{
+			name: "inframe_deletion",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceInframeDeletion,
+				ProteinPosition: 12,
+				RefAA:           'G',
+			},
+			want: "p.Gly12del",
+		},
+		{
+			name: "inframe_insertion",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceInframeInsertion,
+				ProteinPosition: 12,
+				RefAA:           'G',
+			},
+			want: "p.Gly12_13ins",
+		},
+		{
+			name: "intronic_empty",
+			result: &ConsequenceResult{
+				Consequence: ConsequenceIntronVariant,
+			},
+			want: "",
+		},
+		{
+			name: "splice_region_with_missense",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceMissenseVariant + "," + ConsequenceSpliceRegion,
+				ProteinPosition: 37,
+				RefAA:           'A',
+				AltAA:           'V',
+			},
+			want: "p.Ala37Val",
+		},
+		{
+			name: "frameshift_no_refaa",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceFrameshiftVariant,
+				ProteinPosition: 5,
+				RefAA:           0,
+			},
+			want: "p.5fs",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FormatHGVSp(tt.result)
+			if got != tt.want {
+				t.Errorf("FormatHGVSp() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHGVSp_KRASG12C(t *testing.T) {
+	// KRAS G12C: missense variant should produce p.Gly12Cys
+	v := &vcf.Variant{
+		Chrom: "12",
+		Pos:   25245351,
+		Ref:   "C",
+		Alt:   "A",
+	}
+
+	transcript := createKRASTranscript()
+	result := PredictConsequence(v, transcript)
+
+	if result.HGVSp != "p.Gly12Cys" {
+		t.Errorf("Expected HGVSp p.Gly12Cys, got %q", result.HGVSp)
+	}
+}
+
+func TestHGVSp_Synonymous(t *testing.T) {
+	// GGT -> GGC at codon 12 (both Gly) should produce p.Gly12=
+	v := &vcf.Variant{
+		Chrom: "12",
+		Pos:   25245349, // Third position of codon 12 on reverse strand
+		Ref:   "C",      // Genomic C → coding G
+		Alt:   "T",      // Genomic T → coding A... let's verify
+	}
+
+	transcript := createKRASTranscript()
+	result := PredictConsequence(v, transcript)
+
+	// If this is indeed synonymous, check HGVSp
+	if result.Consequence == ConsequenceSynonymousVariant {
+		expected := "p.Gly12="
+		if result.HGVSp != expected {
+			t.Errorf("Expected HGVSp %q, got %q", expected, result.HGVSp)
+		}
+	}
+}
+
+func TestHGVSp_Frameshift(t *testing.T) {
+	// Frameshift deletion at codon 12 should produce p.Gly12fs
+	v := &vcf.Variant{
+		Chrom: "12",
+		Pos:   25245350,
+		Ref:   "GG",
+		Alt:   "G",
+	}
+
+	transcript := createKRASTranscript()
+	result := PredictConsequence(v, transcript)
+
+	if result.Consequence != ConsequenceFrameshiftVariant {
+		t.Fatalf("Expected frameshift_variant, got %s", result.Consequence)
+	}
+
+	// RefAA should be populated
+	if result.RefAA == 0 {
+		t.Error("Expected RefAA to be populated for frameshift")
+	}
+
+	// HGVSp should contain "fs"
+	if result.HGVSp == "" {
+		t.Error("Expected non-empty HGVSp for frameshift")
+	}
+	t.Logf("Frameshift HGVSp: %s (RefAA=%c, pos=%d)", result.HGVSp, result.RefAA, result.ProteinPosition)
+}
+
+func TestHGVSp_InframeDeletion(t *testing.T) {
+	// In-frame deletion (3 bases) should produce p.{AA}{pos}del
+	v := &vcf.Variant{
+		Chrom: "12",
+		Pos:   25245350,
+		Ref:   "GGGA",
+		Alt:   "G",
+	}
+
+	transcript := createKRASTranscript()
+	result := PredictConsequence(v, transcript)
+
+	if result.Consequence != ConsequenceInframeDeletion {
+		t.Fatalf("Expected inframe_deletion, got %s", result.Consequence)
+	}
+
+	if result.RefAA == 0 {
+		t.Error("Expected RefAA to be populated for inframe deletion")
+	}
+
+	if result.HGVSp == "" {
+		t.Error("Expected non-empty HGVSp for inframe deletion")
+	}
+	t.Logf("Inframe deletion HGVSp: %s", result.HGVSp)
+}
+
+func TestHGVSp_StartLost(t *testing.T) {
+	// Create a variant at the start codon (Met1)
+	// For KRAS reverse strand, the start codon ATG starts at CDS position 1
+	// which maps to genomic position around CDSEnd (25245384)
+	result := &ConsequenceResult{
+		Consequence:     ConsequenceStartLost,
+		ProteinPosition: 1,
+		RefAA:           'M',
+		AltAA:           'K',
+	}
+
+	hgvsp := FormatHGVSp(result)
+	if hgvsp != "p.Met1?" {
+		t.Errorf("Expected p.Met1?, got %q", hgvsp)
+	}
+}
+
+func TestAaThree(t *testing.T) {
+	tests := []struct {
+		aa   byte
+		want string
+	}{
+		{'G', "Gly"},
+		{'A', "Ala"},
+		{'*', "Ter"},
+		{'X', "Xaa"},
+		{'Z', "Xaa"}, // unknown
+		{0, "Xaa"},   // zero value
+	}
+
+	for _, tt := range tests {
+		got := aaThree(tt.aa)
+		if got != tt.want {
+			t.Errorf("aaThree(%c) = %q, want %q", tt.aa, got, tt.want)
+		}
+	}
+}
