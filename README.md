@@ -8,7 +8,6 @@ An experiment in vibe coding a lightweight variant effect predictor for use by t
 - **GENCODE Annotations**: Uses GENCODE GTF/FASTA (~95MB download vs 17GB VEP cache)
 - **Consequence Prediction**: Classifies variants using Sequence Ontology terms
 - **Validation Mode**: Compare existing MAF annotations against predictions
-- **REST API Fallback**: On-demand fetching from Ensembl REST API
 - **Fast**: ~720k variants/sec annotation throughput (excluding cache load time)
 
 ## Installation
@@ -68,13 +67,10 @@ vibe-vep - Variant Effect Predictor
 Commands:
   annotate    Annotate variants in a VCF or MAF file
   download    Download GENCODE annotation files
-  convert     Convert VEP cache to DuckDB format
   help        Show help message
 
 Annotate Options:
   --assembly      Genome assembly: GRCh37 or GRCh38 (default: GRCh38)
-  --cache         Cache file (DuckDB) or directory
-  --rest          Use Ensembl REST API (no local cache needed)
   --validate      Validate MAF annotations against predictions
   --validate-all  Show all variants in validation (default: mismatches only)
   -f, --output-format   Output format: tab, vcf (default: tab)
@@ -91,9 +87,6 @@ Download Options:
 ```bash
 # Basic annotation
 vibe-vep annotate sample.vcf
-
-# Use REST API (slower, but no download needed)
-vibe-vep annotate --rest sample.vcf
 
 # Validate TCGA MAF file
 vibe-vep annotate --validate data_mutations.txt
@@ -183,7 +176,7 @@ MAF files may use different consequence terms than SO standard. The validation n
 
 ### Validation Results
 
-Tested against 7 TCGA GDC studies (1,053,200 total variants):
+Tested against 7 TCGA GDC studies from [cBioPortal/datahub](https://github.com/cBioPortal/datahub) (1,053,200 total variants):
 
 | Study | Variants | Match Rate |
 |-------|----------|-----------|
@@ -232,7 +225,6 @@ Default tab-delimited output includes:
 ## Data Sources
 
 - **GENCODE**: Gene annotations from [GENCODE](https://www.gencodegenes.org/)
-- **Ensembl REST API**: On-demand transcript data from [Ensembl](https://rest.ensembl.org/)
 
 ## Development
 

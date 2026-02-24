@@ -56,8 +56,6 @@ func run() int {
 	switch args[0] {
 	case "annotate":
 		return runAnnotate(args[1:])
-	case "convert":
-		return runConvert(args[1:])
 	case "download":
 		return runDownload(args[1:])
 	case "help":
@@ -79,7 +77,6 @@ Usage:
 Commands:
   annotate    Annotate variants in a VCF or MAF file
   download    Download GENCODE annotation files
-  convert     Convert VEP cache to DuckDB format
   help        Show this help message
 
 Global Options:
@@ -98,12 +95,6 @@ Examples:
   # Validate MAF annotations against VEP predictions
   vibe-vep annotate --validate data_mutations.txt
 
-  # Use Ensembl REST API instead of local cache
-  vibe-vep annotate --rest input.vcf
-
-  # Use DuckDB cache file
-  vibe-vep annotate --cache transcripts.duckdb input.vcf
-
 For more information on a command, use:
   vibe-vep <command> --help
 `)
@@ -113,9 +104,6 @@ func runAnnotate(args []string) int {
 	fs := flag.NewFlagSet("annotate", flag.ExitOnError)
 
 	var (
-		cachePath     string
-		cacheDir      string
-		species       string
 		assembly      string
 		outputFormat  string
 		outputFile    string
@@ -125,10 +113,7 @@ func runAnnotate(args []string) int {
 		validateAll   bool
 	)
 
-	fs.StringVar(&cachePath, "cache", "", "Cache file (DuckDB) or directory (Sereal)")
-	fs.StringVar(&cacheDir, "cache-dir", defaultCacheDir(), "VEP cache directory (Sereal format)")
-	fs.StringVar(&species, "species", "homo_sapiens", "Species name")
-	fs.StringVar(&assembly, "assembly", "GRCh38", "Genome assembly")
+	fs.StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
 	fs.StringVar(&outputFormat, "f", "tab", "Output format: tab, vcf")
 	fs.StringVar(&outputFormat, "output-format", "tab", "Output format: tab, vcf")
 	fs.StringVar(&outputFile, "o", "", "Output file (default: stdout)")
@@ -137,9 +122,6 @@ func runAnnotate(args []string) int {
 	fs.StringVar(&inputFormat, "input-format", "", "Input format: vcf, maf (auto-detected if not specified)")
 	fs.BoolVar(&validate, "validate", false, "Validate MAF annotations against VEP predictions (MAF input only)")
 	fs.BoolVar(&validateAll, "validate-all", false, "Show all variants in validation output (default: mismatches only)")
-
-	var useREST bool
-	fs.BoolVar(&useREST, "rest", false, "Use Ensembl REST API for transcript data (slower, no local cache needed)")
 
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, `Annotate variants in a VCF or MAF file with consequence predictions.
@@ -157,9 +139,7 @@ Options:
 Examples:
   vibe-vep annotate input.vcf
   vibe-vep annotate input.maf
-  vibe-vep annotate --cache transcripts.duckdb input.vcf
   vibe-vep annotate -f vcf -o output.vcf input.vcf
-  vibe-vep annotate --input-format maf data_mutations.txt
   vibe-vep annotate --validate data_mutations.txt
   cat input.vcf | vibe-vep annotate -
 `)
@@ -207,78 +187,41 @@ Examples:
 	}
 	defer parser.Close()
 
-	// Determine cache path
-	effectiveCachePath := cachePath
-	if effectiveCachePath == "" {
-		effectiveCachePath = cacheDir
+	// Load GENCODE cache
+	gtfPath, fastaPath, canonicalPath, found := FindGENCODEFiles(assembly)
+	if !found {
+		fmt.Fprintf(os.Stderr, "Error: No GENCODE cache found for %s\n", assembly)
+		fmt.Fprintf(os.Stderr, "Hint: Download GENCODE annotations with: vibe-vep download --assembly %s\n", assembly)
+		return ExitError
 	}
 
-	// Load cache (REST API, GENCODE, DuckDB or Sereal based on options)
-	var transcriptCache interface {
-		FindTranscripts(chrom string, pos int64) []*cache.Transcript
+	fmt.Fprintf(os.Stderr, "Using GENCODE cache for %s\n", assembly)
+	fmt.Fprintf(os.Stderr, "  GTF: %s\n", gtfPath)
+	if fastaPath != "" {
+		fmt.Fprintf(os.Stderr, "  FASTA: %s\n", fastaPath)
 	}
-	var duckLoader *cache.DuckDBLoader
 
-	if useREST {
-		// Use Ensembl REST API (on-demand loading)
-		fmt.Fprintf(os.Stderr, "Using Ensembl REST API for %s (on-demand loading)\n", assembly)
-		restLoader := cache.NewRESTLoader(assembly)
-		transcriptCache = cache.NewCacheWithLoader(restLoader)
-	} else if cache.IsDuckDB(effectiveCachePath) {
-		// Use DuckDB cache
-		duckLoader, err = cache.NewDuckDBLoader(effectiveCachePath)
+	c := cache.New()
+	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
+
+	// Load canonical transcript overrides if available
+	if canonicalPath != "" {
+		fmt.Fprintf(os.Stderr, "  Canonical overrides: %s\n", canonicalPath)
+		overrides, err := cache.LoadCanonicalOverrides(canonicalPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error opening DuckDB cache: %v\n", err)
-			return ExitError
+			fmt.Fprintf(os.Stderr, "Warning: could not load canonical overrides: %v\n", err)
+		} else {
+			loader.SetCanonicalOverrides(overrides)
+			fmt.Fprintf(os.Stderr, "  Loaded %d canonical overrides\n", len(overrides))
 		}
-		defer duckLoader.Close()
-
-		c := cache.New()
-		if err := duckLoader.LoadAll(c); err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading DuckDB cache: %v\n", err)
-			return ExitError
-		}
-		transcriptCache = c
-	} else if gtfPath, fastaPath, canonicalPath, found := FindGENCODEFiles(assembly); found {
-		// Use GENCODE cache (auto-detected)
-		fmt.Fprintf(os.Stderr, "Using GENCODE cache for %s\n", assembly)
-		fmt.Fprintf(os.Stderr, "  GTF: %s\n", gtfPath)
-		if fastaPath != "" {
-			fmt.Fprintf(os.Stderr, "  FASTA: %s\n", fastaPath)
-		}
-
-		c := cache.New()
-		loader := cache.NewGENCODELoader(gtfPath, fastaPath)
-
-		// Load canonical transcript overrides if available
-		if canonicalPath != "" {
-			fmt.Fprintf(os.Stderr, "  Canonical overrides: %s\n", canonicalPath)
-			overrides, err := cache.LoadCanonicalOverrides(canonicalPath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not load canonical overrides: %v\n", err)
-			} else {
-				loader.SetCanonicalOverrides(overrides)
-				fmt.Fprintf(os.Stderr, "  Loaded %d canonical overrides\n", len(overrides))
-			}
-		}
-
-		if err := loader.Load(c); err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading GENCODE cache: %v\n", err)
-			return ExitError
-		}
-		fmt.Fprintf(os.Stderr, "Loaded %d transcripts\n", c.TranscriptCount())
-		transcriptCache = c
-	} else {
-		// Try Sereal cache, fall back to REST API suggestion
-		c, err := loadCache(effectiveCachePath, species, assembly)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: No cache found for %s\n", assembly)
-			fmt.Fprintf(os.Stderr, "Hint: Download GENCODE annotations with: vibe-vep download --assembly %s\n", assembly)
-			fmt.Fprintf(os.Stderr, "Hint: Or use --rest to fetch data from Ensembl REST API (slower)\n")
-			return ExitError
-		}
-		transcriptCache = c
 	}
+
+	if err := loader.Load(c); err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading GENCODE cache: %v\n", err)
+		return ExitError
+	}
+	fmt.Fprintf(os.Stderr, "Loaded %d transcripts\n", c.TranscriptCount())
+	transcriptCache := c
 
 	// Create annotator
 	ann := annotate.NewAnnotator(transcriptCache)
@@ -383,39 +326,6 @@ func runValidation(parser *maf.Parser, ann *annotate.Annotator, out *os.File, sh
 	return ExitSuccess
 }
 
-// defaultCacheDir returns the default VEP cache directory.
-func defaultCacheDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ".vep"
-	}
-	return home + "/.vep"
-}
-
-// loadCache loads VEP cache data for annotation.
-func loadCache(cacheDir, species, assembly string) (*cache.Cache, error) {
-	c := cache.New()
-	loader := cache.NewLoader(cacheDir, species, assembly)
-
-	// Try to load all chromosomes
-	err := loader.LoadAll(c)
-	if err != nil {
-		// Check if it's just a missing cache (warn but continue)
-		cachePath := fmt.Sprintf("%s/%s/%s_%s", cacheDir, species, species, assembly)
-		if _, statErr := os.Stat(cachePath); os.IsNotExist(statErr) {
-			fmt.Fprintf(os.Stderr, "Warning: VEP cache not found at %s\n", cachePath)
-			fmt.Fprintf(os.Stderr, "Warning: Annotations will be limited without cache data\n")
-			return c, nil
-		}
-		return nil, err
-	}
-
-	if c.TranscriptCount() == 0 {
-		fmt.Fprintf(os.Stderr, "Warning: No transcripts loaded from cache\n")
-	}
-
-	return c, nil
-}
 
 // detectInputFormat detects the input file format based on extension or content.
 func detectInputFormat(path string) string {
