@@ -271,3 +271,44 @@ func TestAaThree(t *testing.T) {
 		assert.Equal(t, tt.want, got)
 	}
 }
+
+func BenchmarkFormatHGVSp(b *testing.B) {
+	results := []*ConsequenceResult{
+		{Consequence: ConsequenceMissenseVariant, ProteinPosition: 12, RefAA: 'G', AltAA: 'C'},
+		{Consequence: ConsequenceSynonymousVariant, ProteinPosition: 12, RefAA: 'G', AltAA: 'G'},
+		{Consequence: ConsequenceStopGained, ProteinPosition: 12, RefAA: 'G', AltAA: '*'},
+		{Consequence: ConsequenceFrameshiftVariant, ProteinPosition: 12, RefAA: 'G', AltAA: 'A', FrameshiftStopDist: 6},
+		{Consequence: ConsequenceInframeDeletion, ProteinPosition: 12, RefAA: 'G'},
+		{Consequence: ConsequenceInframeInsertion, ProteinPosition: 12, RefAA: 'G'},
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, r := range results {
+			FormatHGVSp(r)
+		}
+	}
+}
+
+// TestAllocRegression_FormatHGVSp verifies allocation count for HGVSp formatting.
+func TestAllocRegression_FormatHGVSp(t *testing.T) {
+	results := []*ConsequenceResult{
+		{Consequence: ConsequenceMissenseVariant, ProteinPosition: 12, RefAA: 'G', AltAA: 'C'},
+		{Consequence: ConsequenceSynonymousVariant, ProteinPosition: 12, RefAA: 'G', AltAA: 'G'},
+		{Consequence: ConsequenceStopGained, ProteinPosition: 12, RefAA: 'G', AltAA: '*'},
+		{Consequence: ConsequenceFrameshiftVariant, ProteinPosition: 12, RefAA: 'G', AltAA: 'A', FrameshiftStopDist: 6},
+	}
+
+	allocs := testing.AllocsPerRun(100, func() {
+		for _, r := range results {
+			FormatHGVSp(r)
+		}
+	})
+
+	// Each FormatHGVSp call does ~1 alloc (string concat result).
+	// 4 calls → ~4 allocs. Allow small margin.
+	const maxAllocs = 8
+	if int(allocs) > maxAllocs {
+		t.Errorf("FormatHGVSp allocation regression: got %.0f, want <= %d", allocs, maxAllocs)
+	}
+	t.Logf("FormatHGVSp allocs: %.0f (budget: %d)", allocs, maxAllocs)
+}

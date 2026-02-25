@@ -1,7 +1,7 @@
 package annotate
 
 import (
-	"fmt"
+	"strconv"
 
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/vcf"
@@ -41,7 +41,7 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 
 	// SNV
 	if !v.IsIndel() {
-		return fmt.Sprintf("c.%s%s>%s", startPosStr, ref, alt)
+		return "c." + startPosStr + ref + ">" + alt
 	}
 
 	// Indel handling
@@ -75,9 +75,9 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 			if dupStart >= 0 && shiftedIdx+1 <= len(t.CDSSequence) &&
 				t.CDSSequence[dupStart:shiftedIdx+1] == shiftedSeq {
 				if seqLen == 1 {
-					return fmt.Sprintf("c.%ddup", shiftedIdx+1)
+					return "c." + strconv.Itoa(shiftedIdx+1) + "dup"
 				}
-				return fmt.Sprintf("c.%d_%ddup", dupStart+1, shiftedIdx+1)
+				return "c." + strconv.Itoa(dupStart+1) + "_" + strconv.Itoa(shiftedIdx+1) + "dup"
 			}
 
 			// Check dup: inserted bases match following bases at shifted position
@@ -86,14 +86,14 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 			if afterStart >= 0 && afterEnd <= len(t.CDSSequence) &&
 				t.CDSSequence[afterStart:afterEnd] == shiftedSeq {
 				if seqLen == 1 {
-					return fmt.Sprintf("c.%ddup", afterStart+1)
+					return "c." + strconv.Itoa(afterStart+1) + "dup"
 				}
-				return fmt.Sprintf("c.%d_%ddup", afterStart+1, afterEnd)
+				return "c." + strconv.Itoa(afterStart+1) + "_" + strconv.Itoa(afterEnd) + "dup"
 			}
 
 			// Plain insertion at shifted CDS position
 			if shiftedIdx+2 <= len(t.CDSSequence) {
-				return fmt.Sprintf("c.%d_%dins%s", shiftedIdx+1, shiftedIdx+2, shiftedSeq)
+				return "c." + strconv.Itoa(shiftedIdx+1) + "_" + strconv.Itoa(shiftedIdx+2) + "ins" + shiftedSeq
 			}
 		}
 
@@ -101,9 +101,9 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		dup := checkDuplication(v, t, insertedSeq)
 		if dup.isDup {
 			if dup.cdsStart == dup.cdsEnd {
-				return fmt.Sprintf("c.%ddup", dup.cdsStart)
+				return "c." + strconv.FormatInt(dup.cdsStart, 10) + "dup"
 			}
-			return fmt.Sprintf("c.%d_%ddup", dup.cdsStart, dup.cdsEnd)
+			return "c." + strconv.FormatInt(dup.cdsStart, 10) + "_" + strconv.FormatInt(dup.cdsEnd, 10) + "dup"
 		}
 
 		insAfterPos := v.Pos
@@ -114,7 +114,7 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		}
 		afterStr := genomicToHGVScPos(insAfterPos, t)
 		beforeStr := genomicToHGVScPos(insBeforePos, t)
-		return fmt.Sprintf("c.%s_%sins%s", afterStr, beforeStr, insertedSeq)
+		return "c." + afterStr + "_" + beforeStr + "ins" + insertedSeq
 	}
 
 	// Deletion
@@ -134,18 +134,18 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		if delStartCDS > 0 && delEndCDS > 0 && len(t.CDSSequence) > 0 {
 			sStart, sEnd := shiftDeletionThreePrime(int(delStartCDS-1), int(delEndCDS-1), t.CDSSequence)
 			if sStart == sEnd {
-				return fmt.Sprintf("c.%ddel", sStart+1)
+				return "c." + strconv.Itoa(sStart+1) + "del"
 			}
-			return fmt.Sprintf("c.%d_%ddel", sStart+1, sEnd+1)
+			return "c." + strconv.Itoa(sStart+1) + "_" + strconv.Itoa(sEnd+1) + "del"
 		}
 
 		// Fall back to genomic-based positions for intronic/UTR deletions
 		delStartStr := genomicToHGVScPos(delStartGenomic, t)
 		if delStartGenomic == delEndGenomic {
-			return fmt.Sprintf("c.%sdel", delStartStr)
+			return "c." + delStartStr + "del"
 		}
 		delEndStr := genomicToHGVScPos(delEndGenomic, t)
-		return fmt.Sprintf("c.%s_%sdel", delStartStr, delEndStr)
+		return "c." + delStartStr + "_" + delEndStr + "del"
 	}
 
 	// MNV (same length ref/alt, len > 1) — treat as delins
@@ -154,7 +154,7 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		if t.IsReverseStrand() {
 			startPosStr, endPosStr = genomicToHGVScPos(v.Pos+int64(refLen)-1, t), startPosStr
 		}
-		return fmt.Sprintf("c.%s_%sdelins%s", startPosStr, endPosStr, alt)
+		return "c." + startPosStr + "_" + endPosStr + "delins" + alt
 	}
 
 	return ""
@@ -183,7 +183,7 @@ func exonicHGVScPos(pos int64, exon *cache.Exon, t *cache.Transcript) string {
 	if exon.IsCoding() && pos >= exon.CDSStart && pos <= exon.CDSEnd {
 		cdsPos := GenomicToCDS(pos, t)
 		if cdsPos > 0 {
-			return fmt.Sprintf("%d", cdsPos)
+			return strconv.FormatInt(cdsPos, 10)
 		}
 	}
 
@@ -217,7 +217,7 @@ func fiveprimeUTRPos(pos int64, t *cache.Transcript) string {
 	if dist < 0 {
 		dist = -dist
 	}
-	return fmt.Sprintf("-%d", dist)
+	return "-" + strconv.FormatInt(dist, 10)
 }
 
 // threeprimeUTRPos returns the HGVSc position for a 3'UTR position (e.g., "*6").
@@ -230,7 +230,7 @@ func threeprimeUTRPos(pos int64, t *cache.Transcript) string {
 	if dist < 0 {
 		dist = -dist
 	}
-	return fmt.Sprintf("*%d", dist)
+	return "*" + strconv.FormatInt(dist, 10)
 }
 
 // exonicDistance counts the number of exonic bases between two genomic positions.
@@ -306,11 +306,11 @@ func intronicHGVScPos(pos int64, t *cache.Transcript) string {
 		if useUpstream {
 			// After upstream exon end: c.{CDSpos}+{offset}
 			boundaryPos := exonBoundaryHGVScPos(upstreamExon.End, upstreamExon, t)
-			return fmt.Sprintf("%s+%d", boundaryPos, distToUpstream)
+			return boundaryPos + "+" + strconv.FormatInt(distToUpstream, 10)
 		}
 		// Before downstream exon start: c.{CDSpos}-{offset}
 		boundaryPos := exonBoundaryHGVScPos(downstreamExon.Start, downstreamExon, t)
-		return fmt.Sprintf("%s-%d", boundaryPos, distToDownstream)
+		return boundaryPos + "-" + strconv.FormatInt(distToDownstream, 10)
 	}
 
 	// Reverse strand: genomic upstream exon end = transcript 5' direction
@@ -320,13 +320,13 @@ func intronicHGVScPos(pos int64, t *cache.Transcript) string {
 		// on reverse strand, this is *before* the exon in transcript order
 		// So: c.{CDSpos of exon.End}-{offset}  (approaching from 3' side)
 		boundaryPos := exonBoundaryHGVScPos(upstreamExon.End, upstreamExon, t)
-		return fmt.Sprintf("%s-%d", boundaryPos, distToUpstream)
+		return boundaryPos + "-" + strconv.FormatInt(distToUpstream, 10)
 	}
 	// pos is before downstreamExon.Start genomically
 	// on reverse strand, this is *after* the exon in transcript order
 	// So: c.{CDSpos of exon.Start}+{offset}
 	boundaryPos := exonBoundaryHGVScPos(downstreamExon.Start, downstreamExon, t)
-	return fmt.Sprintf("%s+%d", boundaryPos, distToDownstream)
+	return boundaryPos + "+" + strconv.FormatInt(distToDownstream, 10)
 }
 
 // exonBoundaryHGVScPos returns the HGVSc position string for an exon boundary.
@@ -336,7 +336,7 @@ func exonBoundaryHGVScPos(genomicPos int64, exon *cache.Exon, t *cache.Transcrip
 	if exon.IsCoding() && genomicPos >= exon.CDSStart && genomicPos <= exon.CDSEnd {
 		cdsPos := GenomicToCDS(genomicPos, t)
 		if cdsPos > 0 {
-			return fmt.Sprintf("%d", cdsPos)
+			return strconv.FormatInt(cdsPos, 10)
 		}
 	}
 

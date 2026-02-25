@@ -474,3 +474,52 @@ func createForwardTranscript() *cache.Transcript {
 		CDSSequence: "ATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATG",
 	}
 }
+
+func BenchmarkFormatHGVSc_SNV(b *testing.B) {
+	transcript := createKRASTranscript()
+	v := &vcf.Variant{Chrom: "12", Pos: 25245351, Ref: "C", Alt: "A"}
+	result := PredictConsequence(v, transcript)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		FormatHGVSc(v, transcript, result)
+	}
+}
+
+func BenchmarkFormatHGVSc_Deletion(b *testing.B) {
+	transcript := createKRASTranscript()
+	v := &vcf.Variant{Chrom: "12", Pos: 25245350, Ref: "GG", Alt: "G"}
+	result := PredictConsequence(v, transcript)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		FormatHGVSc(v, transcript, result)
+	}
+}
+
+func BenchmarkFormatHGVSc_Insertion(b *testing.B) {
+	transcript := createKRASTranscript()
+	v := &vcf.Variant{Chrom: "12", Pos: 25245350, Ref: "C", Alt: "CCC"}
+	result := PredictConsequence(v, transcript)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		FormatHGVSc(v, transcript, result)
+	}
+}
+
+// TestAllocRegression_FormatHGVSc verifies allocation count for HGVSc formatting.
+func TestAllocRegression_FormatHGVSc(t *testing.T) {
+	transcript := createKRASTranscript()
+	snv := &vcf.Variant{Chrom: "12", Pos: 25245351, Ref: "C", Alt: "A"}
+	result := PredictConsequence(snv, transcript)
+
+	allocs := testing.AllocsPerRun(100, func() {
+		FormatHGVSc(snv, transcript, result)
+	})
+
+	// SNV HGVSc: ReverseComplement (1 alloc each for ref+alt) + position string + concat.
+	// Budget: ~5 allocs.
+	const maxAllocs = 8
+	if int(allocs) > maxAllocs {
+		t.Errorf("FormatHGVSc allocation regression: got %.0f, want <= %d", allocs, maxAllocs)
+	}
+	t.Logf("FormatHGVSc(SNV) allocs: %.0f (budget: %d)", allocs, maxAllocs)
+}

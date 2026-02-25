@@ -2,8 +2,7 @@
 package annotate
 
 import (
-	"fmt"
-	"strings"
+	"strconv"
 
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/vcf"
@@ -76,7 +75,7 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 	}
 
 	// Set exon number
-	result.ExonNumber = fmt.Sprintf("%d/%d", exon.Number, len(t.Exons))
+	result.ExonNumber = strconv.Itoa(exon.Number) + "/" + strconv.Itoa(len(t.Exons))
 
 	// Check if transcript is protein coding
 	if !t.IsProteinCoding() {
@@ -232,18 +231,18 @@ func predictCodingConsequence(v *vcf.Variant, t *cache.Transcript, exon *cache.E
 		}
 	} else if result.AltAA == '*' {
 		result.Consequence = ConsequenceStopGained
-		result.AminoAcidChange = fmt.Sprintf("%c%d*", result.RefAA, codonNum)
+		result.AminoAcidChange = string(result.RefAA) + strconv.FormatInt(codonNum, 10) + "*"
 	} else if result.RefAA == '*' {
 		result.Consequence = ConsequenceStopLost
-		result.AminoAcidChange = fmt.Sprintf("*%d%c", codonNum, result.AltAA)
+		result.AminoAcidChange = "*" + strconv.FormatInt(codonNum, 10) + string(result.AltAA)
 		// Compute extension length by scanning 3'UTR for next in-frame stop
 		result.StopLostExtDist = computeStopLostExtension(t, altCodon)
 	} else if result.RefAA == 'M' && codonNum == 1 {
 		result.Consequence = ConsequenceStartLost
-		result.AminoAcidChange = fmt.Sprintf("M1%c", result.AltAA)
+		result.AminoAcidChange = "M1" + string(result.AltAA)
 	} else {
 		result.Consequence = ConsequenceMissenseVariant
-		result.AminoAcidChange = fmt.Sprintf("%c%d%c", result.RefAA, codonNum, result.AltAA)
+		result.AminoAcidChange = string(result.RefAA) + strconv.FormatInt(codonNum, 10) + string(result.AltAA)
 	}
 
 	result.Impact = GetImpact(result.Consequence)
@@ -577,20 +576,17 @@ func isSpliceRegion(pos int64, t *cache.Transcript) bool {
 }
 
 // formatCodonChange formats the codon change string with lowercase mutated base.
+// Uses byte arithmetic for case conversion to avoid allocations.
 func formatCodonChange(refCodon, altCodon string, posInCodon int) string {
-	// Format: lowercase for unchanged bases, uppercase for mutated base in alt
-	refBytes := []byte(refCodon)
-	altBytes := []byte(altCodon)
-
+	var buf [7]byte // 3 ref + '/' + 3 alt
 	for i := 0; i < 3; i++ {
+		buf[i] = refCodon[i] | 0x20 // lowercase all ref
 		if i == posInCodon {
-			refBytes[i] = byte(strings.ToLower(string(refBytes[i]))[0])
-			altBytes[i] = byte(strings.ToUpper(string(altBytes[i]))[0])
+			buf[4+i] = altCodon[i] &^ 0x20 // uppercase mutated alt
 		} else {
-			refBytes[i] = byte(strings.ToLower(string(refBytes[i]))[0])
-			altBytes[i] = byte(strings.ToLower(string(altBytes[i]))[0])
+			buf[4+i] = altCodon[i] | 0x20 // lowercase unchanged alt
 		}
 	}
-
-	return string(refBytes) + "/" + string(altBytes)
+	buf[3] = '/'
+	return string(buf[:])
 }

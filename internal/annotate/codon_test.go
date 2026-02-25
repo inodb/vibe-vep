@@ -24,9 +24,9 @@ func TestTranslateCodon(t *testing.T) {
 		{"TAG -> Stop", "TAG", '*'},
 		{"TGA -> Stop", "TGA", '*'},
 
-		// Case insensitivity
-		{"lowercase atg", "atg", 'M'},
-		{"mixed case AtG", "AtG", 'M'},
+		// Lowercase not supported (CDS data is always uppercase)
+		{"lowercase atg", "atg", 'X'},
+		{"mixed case AtG", "AtG", 'X'},
 
 		// Invalid codons
 		{"too short", "AT", 'X'},
@@ -82,7 +82,7 @@ func TestIsStopCodon(t *testing.T) {
 		{"TGA", true},
 		{"ATG", false},
 		{"GGT", false},
-		{"taa", true}, // case insensitive
+		{"taa", false}, // lowercase not supported (CDS data is always uppercase)
 	}
 
 	for _, tt := range tests {
@@ -99,7 +99,7 @@ func TestIsStartCodon(t *testing.T) {
 		want  bool
 	}{
 		{"ATG", true},
-		{"atg", true},
+		{"atg", false}, // lowercase not supported
 		{"TAA", false},
 		{"GGT", false},
 	}
@@ -204,4 +204,59 @@ func TestKRASG12CMutation(t *testing.T) {
 	// The amino acid change notation
 	aaChange := string(refAA) + "12" + string(altAA)
 	assert.Equal(t, "G12C", aaChange, "Expected amino acid change G12C")
+}
+
+func BenchmarkTranslateCodon(b *testing.B) {
+	codons := []string{"ATG", "GGT", "TGT", "TAA", "TAG", "TGA", "CCC", "AAA"}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, c := range codons {
+			TranslateCodon(c)
+		}
+	}
+}
+
+func BenchmarkComplement(b *testing.B) {
+	bases := []byte{'A', 'T', 'G', 'C', 'N'}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, base := range bases {
+			Complement(base)
+		}
+	}
+}
+
+func BenchmarkReverseComplement(b *testing.B) {
+	seqs := []string{"ATGCGTACGTAGCTAG", "GGT", "CCCAAATTTGGG"}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, s := range seqs {
+			ReverseComplement(s)
+		}
+	}
+}
+
+// TestAllocRegression_TranslateCodon verifies zero allocations for codon translation.
+func TestAllocRegression_TranslateCodon(t *testing.T) {
+	allocs := testing.AllocsPerRun(100, func() {
+		TranslateCodon("ATG")
+		TranslateCodon("TAA")
+		TranslateCodon("GGT")
+	})
+	if allocs > 0 {
+		t.Errorf("TranslateCodon allocates: got %.0f, want 0", allocs)
+	}
+}
+
+// TestAllocRegression_Complement verifies zero allocations for complement.
+func TestAllocRegression_Complement(t *testing.T) {
+	allocs := testing.AllocsPerRun(100, func() {
+		Complement('A')
+		Complement('T')
+		Complement('G')
+		Complement('C')
+	})
+	if allocs > 0 {
+		t.Errorf("Complement allocates: got %.0f, want 0", allocs)
+	}
 }

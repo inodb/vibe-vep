@@ -1,7 +1,7 @@
 package annotate
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -29,27 +29,29 @@ func FormatHGVSp(result *ConsequenceResult) string {
 
 	pos := result.ProteinPosition
 
+	posStr := strconv.FormatInt(pos, 10)
+
 	switch conseq {
 	case ConsequenceMissenseVariant:
-		return fmt.Sprintf("p.%s%d%s", aaThree(result.RefAA), pos, aaThree(result.AltAA))
+		return "p." + aaThree(result.RefAA) + posStr + aaThree(result.AltAA)
 
 	case ConsequenceSynonymousVariant:
-		return fmt.Sprintf("p.%s%d=", aaThree(result.RefAA), pos)
+		return "p." + aaThree(result.RefAA) + posStr + "="
 
 	case ConsequenceStopGained:
-		return fmt.Sprintf("p.%s%dTer", aaThree(result.RefAA), pos)
+		return "p." + aaThree(result.RefAA) + posStr + "Ter"
 
 	case ConsequenceStopLost:
 		if result.StopLostExtDist > 0 {
-			return fmt.Sprintf("p.Ter%d%sext*%d", pos, aaThree(result.AltAA), result.StopLostExtDist)
+			return "p.Ter" + posStr + aaThree(result.AltAA) + "ext*" + strconv.Itoa(result.StopLostExtDist)
 		}
-		return fmt.Sprintf("p.Ter%d%sext*?", pos, aaThree(result.AltAA))
+		return "p.Ter" + posStr + aaThree(result.AltAA) + "ext*?"
 
 	case ConsequenceStartLost:
 		return "p.Met1?"
 
 	case ConsequenceStopRetained:
-		return fmt.Sprintf("p.Ter%d=", pos)
+		return "p.Ter" + posStr + "="
 
 	case ConsequenceFrameshiftVariant:
 		if result.RefAA != 0 {
@@ -58,23 +60,24 @@ func FormatHGVSp(result *ConsequenceResult) string {
 				altStr = aaThree(result.AltAA)
 			}
 			if result.FrameshiftStopDist > 0 {
-				return fmt.Sprintf("p.%s%d%sfsTer%d", aaThree(result.RefAA), pos, altStr, result.FrameshiftStopDist)
+				return "p." + aaThree(result.RefAA) + posStr + altStr + "fsTer" + strconv.Itoa(result.FrameshiftStopDist)
 			}
-			return fmt.Sprintf("p.%s%d%sfs", aaThree(result.RefAA), pos, altStr)
+			return "p." + aaThree(result.RefAA) + posStr + altStr + "fs"
 		}
-		return fmt.Sprintf("p.%dfs", pos)
+		return "p." + posStr + "fs"
 
 	case ConsequenceInframeDeletion:
 		if result.RefAA != 0 {
-			return fmt.Sprintf("p.%s%ddel", aaThree(result.RefAA), pos)
+			return "p." + aaThree(result.RefAA) + posStr + "del"
 		}
-		return fmt.Sprintf("p.%ddel", pos)
+		return "p." + posStr + "del"
 
 	case ConsequenceInframeInsertion:
+		pos1Str := strconv.FormatInt(pos+1, 10)
 		if result.RefAA != 0 {
-			return fmt.Sprintf("p.%s%d_%dins", aaThree(result.RefAA), pos, pos+1)
+			return "p." + aaThree(result.RefAA) + posStr + "_" + pos1Str + "ins"
 		}
-		return fmt.Sprintf("p.%d_%dins", pos, pos+1)
+		return "p." + posStr + "_" + pos1Str + "ins"
 
 	default:
 		return ""

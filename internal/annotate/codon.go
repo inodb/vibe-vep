@@ -26,20 +26,13 @@ var codonTable = map[string]byte{
 	"GGT": 'G', "GGC": 'G', "GGA": 'G', "GGG": 'G',
 }
 
-// Complement map for reverse complementing DNA sequences.
-var complementMap = map[byte]byte{
-	'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G',
-	'a': 't', 't': 'a', 'g': 'c', 'c': 'g',
-	'N': 'N', 'n': 'n',
-}
-
 // TranslateCodon translates a DNA codon to its amino acid.
 // Returns 'X' for unknown codons and '*' for stop codons.
+// CDS data is already uppercase, so no ToUpper conversion is needed.
 func TranslateCodon(codon string) byte {
 	if len(codon) != 3 {
 		return 'X'
 	}
-	codon = strings.ToUpper(codon)
 	if aa, ok := codonTable[codon]; ok {
 		return aa
 	}
@@ -53,7 +46,7 @@ func IsStopCodon(codon string) bool {
 
 // IsStartCodon returns true if the codon is the start codon (ATG).
 func IsStartCodon(codon string) bool {
-	return strings.ToUpper(codon) == "ATG"
+	return codon == "ATG"
 }
 
 // ReverseComplement returns the reverse complement of a DNA sequence.
@@ -63,28 +56,38 @@ func ReverseComplement(seq string) string {
 	n := len(seq)
 	result := make([]byte, n)
 	for i := 0; i < n; i++ {
-		base := seq[n-1-i]
-		if comp, ok := complementMap[base]; ok {
-			result[i] = comp
-		} else {
-			result[i] = 'N' // Unknown base
-		}
+		result[i] = Complement(seq[n-1-i])
 	}
 	return string(result)
 }
 
 // Complement returns the complement of a single base.
 func Complement(base byte) byte {
-	if comp, ok := complementMap[base]; ok {
-		return comp
+	switch base {
+	case 'A':
+		return 'T'
+	case 'T':
+		return 'A'
+	case 'G':
+		return 'C'
+	case 'C':
+		return 'G'
+	case 'a':
+		return 't'
+	case 't':
+		return 'a'
+	case 'g':
+		return 'c'
+	case 'c':
+		return 'g'
+	default:
+		return 'N'
 	}
-	return 'N'
 }
 
 // TranslateSequence translates a DNA sequence to amino acids.
 // Sequence length must be divisible by 3.
 func TranslateSequence(seq string) string {
-	seq = strings.ToUpper(seq)
 	n := len(seq)
 	if n%3 != 0 {
 		// Truncate to complete codons

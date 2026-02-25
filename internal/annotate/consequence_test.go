@@ -691,3 +691,61 @@ func TestPredictConsequence_Performance(t *testing.T) {
 	}
 	t.Logf("PredictConsequence: %.0f variants/sec (%.0f ns/variant)", variantsPerSec, nsPerVariant)
 }
+
+func BenchmarkFormatCodonChange(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		formatCodonChange("GGT", "TGT", 0)
+		formatCodonChange("GGT", "GAT", 1)
+		formatCodonChange("GGT", "GGA", 2)
+	}
+}
+
+func BenchmarkPredictCodingConsequence_Missense(b *testing.B) {
+	transcript := createKRASTranscript()
+	v := &vcf.Variant{Chrom: "12", Pos: 25245350, Ref: "C", Alt: "A"}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		PredictConsequence(v, transcript)
+	}
+}
+
+func BenchmarkPredictCodingConsequence_Frameshift(b *testing.B) {
+	transcript := createKRASTranscript()
+	v := &vcf.Variant{Chrom: "12", Pos: 25245350, Ref: "CC", Alt: "C"}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		PredictConsequence(v, transcript)
+	}
+}
+
+// TestAllocRegression_PredictConsequence verifies that the hot path does not
+// exceed a known allocation budget. If this test fails after a code change,
+// it means new allocations were introduced in the critical path.
+func TestAllocRegression_PredictConsequence(t *testing.T) {
+	transcript := createKRASTranscript()
+	variants := []*vcf.Variant{
+		{Chrom: "12", Pos: 25245350, Ref: "C", Alt: "A"},    // missense
+		{Chrom: "12", Pos: 25245350, Ref: "C", Alt: "C"},    // synonymous
+		{Chrom: "12", Pos: 25245350, Ref: "CC", Alt: "C"},   // frameshift
+		{Chrom: "12", Pos: 25245350, Ref: "CCCC", Alt: "C"}, // inframe deletion
+		{Chrom: "12", Pos: 25245280, Ref: "A", Alt: "G"},    // splice region
+		{Chrom: "12", Pos: 25245300, Ref: "A", Alt: "G"},    // intron
+		{Chrom: "12", Pos: 25250800, Ref: "A", Alt: "G"},    // 5' UTR
+		{Chrom: "12", Pos: 25200000, Ref: "A", Alt: "G"},    // upstream
+	}
+
+	allocs := testing.AllocsPerRun(100, func() {
+		for _, v := range variants {
+			PredictConsequence(v, transcript)
+		}
+	})
+
+	// Current budget: 42 allocs for the full variant set.
+	// Allow a small margin (10%) so minor refactors don't break this,
+	// but catch significant regressions.
+	const maxAllocs = 50
+	if int(allocs) > maxAllocs {
+		t.Errorf("allocation regression: got %.0f allocs/iter, want <= %d", allocs, maxAllocs)
+	}
+	t.Logf("PredictConsequence allocs: %.0f (budget: %d)", allocs, maxAllocs)
+}
