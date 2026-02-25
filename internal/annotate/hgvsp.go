@@ -67,6 +67,13 @@ func FormatHGVSp(result *ConsequenceResult) string {
 		return "p." + posStr + "fs"
 
 	case ConsequenceInframeDeletion:
+		if result.ProteinEndPosition > result.ProteinPosition && result.EndAA != 0 {
+			endPosStr := strconv.FormatInt(result.ProteinEndPosition, 10)
+			if result.RefAA != 0 {
+				return "p." + aaThree(result.RefAA) + posStr + "_" + aaThree(result.EndAA) + endPosStr + "del"
+			}
+			return "p." + posStr + "_" + endPosStr + "del"
+		}
 		if result.RefAA != 0 {
 			return "p." + aaThree(result.RefAA) + posStr + "del"
 		}
@@ -78,6 +85,9 @@ func FormatHGVSp(result *ConsequenceResult) string {
 			return "p." + aaThree(result.RefAA) + posStr + "_" + pos1Str + "ins"
 		}
 		return "p." + posStr + "_" + pos1Str + "ins"
+
+	case ConsequenceSpliceDonor, ConsequenceSpliceAcceptor:
+		return "p.X" + posStr + "_splice"
 
 	default:
 		return ""

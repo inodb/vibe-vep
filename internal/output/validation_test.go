@@ -117,6 +117,72 @@ func TestNormalizeConsequence(t *testing.T) {
 	}
 }
 
+func TestTranscriptBaseID(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"ENST00000333418.4", "ENST00000333418"},
+		{"ENST00000333418.5", "ENST00000333418"},
+		{"ENST00000333418", "ENST00000333418"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, transcriptBaseID(tt.input), "transcriptBaseID(%q)", tt.input)
+	}
+}
+
+func TestSelectBestAnnotation_VersionMismatch(t *testing.T) {
+	// MAF has transcript v4, VEP has v5 — should still match
+	mafAnn := &maf.MAFAnnotation{
+		HugoSymbol:   "KRAS",
+		Consequence:  "missense_variant",
+		TranscriptID: "ENST00000256078.4",
+	}
+	vepAnns := []*annotate.Annotation{
+		{
+			TranscriptID: "ENST00000311936.8",
+			GeneName:     "KRAS",
+			Consequence:  "missense_variant",
+			Biotype:      "protein_coding",
+			IsCanonical:  true,
+		},
+		{
+			TranscriptID: "ENST00000256078.5",
+			GeneName:     "KRAS",
+			Consequence:  "missense_variant",
+			Biotype:      "protein_coding",
+		},
+	}
+
+	best := SelectBestAnnotation(mafAnn, vepAnns)
+	require.NotNil(t, best)
+	assert.Equal(t, "ENST00000256078.5", best.TranscriptID)
+}
+
+func TestPrimaryConsequence(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"missense_variant", "missense_variant"},
+		{"frameshift_variant,stop_lost", "frameshift_variant"}, // both HIGH, first wins
+		{"intron_variant,splice_region_variant", "splice_region_variant"},
+		{"missense_variant,splice_region_variant", "missense_variant"},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, primaryConsequence(tt.input), "primaryConsequence(%q)", tt.input)
+	}
+}
+
+func TestConsequencesMatch_SubAnnotations(t *testing.T) {
+	// Same primary term but different sub-annotations should match
+	assert.True(t, consequencesMatch("missense_variant", "missense_variant,NMD_transcript_variant"))
+	assert.True(t, consequencesMatch("frameshift_variant", "frameshift_variant,splice_donor_5th_base_variant"))
+	// Different primary terms should not match
+	assert.False(t, consequencesMatch("missense_variant", "synonymous_variant"))
+}
+
 func TestValidationWriter_MismatchesOnly(t *testing.T) {
 	var buf bytes.Buffer
 	w := NewValidationWriter(&buf, false) // showAll = false

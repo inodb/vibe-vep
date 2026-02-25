@@ -179,15 +179,26 @@ func (v *ValidationWriter) WriteSummary(w io.Writer) {
 	fmt.Fprintf(w, "  HGVSc skipped:        %d\n", v.hgvscSkipped)
 }
 
+// transcriptBaseID strips the version suffix (e.g. ".4") from a transcript ID.
+// "ENST00000333418.4" → "ENST00000333418", "ENST00000333418" → "ENST00000333418".
+func transcriptBaseID(id string) string {
+	if idx := strings.LastIndexByte(id, '.'); idx >= 0 {
+		return id[:idx]
+	}
+	return id
+}
+
 // SelectBestAnnotation picks the best VEP annotation to compare against a MAF entry.
 func SelectBestAnnotation(mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotation) *annotate.Annotation {
 	var bestAnn *annotate.Annotation
 
-	// Pass 1: exact transcript ID match (skip if transcript biotype changed
-	// between GENCODE versions, e.g. was protein_coding but now retained_intron)
+	// Pass 1: transcript ID match ignoring version suffix (GENCODE versions
+	// may differ between MAF and our annotations). Skip if transcript biotype
+	// changed between versions (e.g. was protein_coding but now retained_intron).
 	if mafAnn.TranscriptID != "" {
+		mafBase := transcriptBaseID(mafAnn.TranscriptID)
 		for _, ann := range vepAnns {
-			if strings.HasPrefix(ann.TranscriptID, mafAnn.TranscriptID) {
+			if transcriptBaseID(ann.TranscriptID) == mafBase {
 				if isCodingConsequence(mafAnn.Consequence) && !isProteinCodingBiotype(ann.Biotype) {
 					break // transcript biotype changed, fall through to gene match
 				}
@@ -323,7 +334,30 @@ func consequencesMatch(mafConseq, vepConseq string) bool {
 		return true
 	}
 
+	// Fallback: if the primary (highest-impact) term matches, treat as match.
+	// This handles cases where MAF and VEP agree on the main consequence but
+	// differ in sub-annotations (e.g. extra NMD_transcript_variant modifiers).
+	if primaryConsequence(normMAF) == primaryConsequence(normVEP) {
+		return true
+	}
+
 	return false
+}
+
+// primaryConsequence extracts the highest-impact term from a comma-separated
+// normalized consequence string.
+func primaryConsequence(conseq string) string {
+	terms := strings.Split(conseq, ",")
+	if len(terms) == 1 {
+		return conseq
+	}
+	best := terms[0]
+	for _, t := range terms[1:] {
+		if annotate.ImpactRank(annotate.GetImpact(t)) > annotate.ImpactRank(annotate.GetImpact(best)) {
+			best = t
+		}
+	}
+	return best
 }
 
 // normalizeConsequence normalizes consequence terms for comparison.

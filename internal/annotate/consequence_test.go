@@ -810,3 +810,97 @@ func TestPredictConsequence_DeletionProteinPosition(t *testing.T) {
 	assert.Equal(t, int64(3), result.ProteinPosition, "should report first deleted AA position")
 	assert.Equal(t, byte('K'), result.RefAA, "ref AA at deleted position should be Lys")
 }
+
+func TestPredictConsequence_SpliceDonorHGVSp(t *testing.T) {
+	// KRAS reverse strand: splice donor at exon 2 Start-1 (25245273).
+	// Exon 2 CDS: CDSStart=25245274 (last coding base on reverse strand).
+	// GenomicToCDS(25245274) for reverse strand = first CDS position of exon 2.
+	// The protein position should be the codon containing that CDS boundary.
+	v := &vcf.Variant{
+		Chrom: "12",
+		Pos:   25245273,
+		Ref:   "A",
+		Alt:   "G",
+	}
+	transcript := createKRASTranscript()
+	result := PredictConsequence(v, transcript)
+
+	assert.Equal(t, ConsequenceSpliceDonor, result.Consequence)
+	assert.Greater(t, result.ProteinPosition, int64(0), "splice donor should have protein position")
+	assert.Contains(t, result.HGVSp, "p.X")
+	assert.Contains(t, result.HGVSp, "_splice")
+	t.Logf("Splice donor HGVSp: %s (protein pos %d)", result.HGVSp, result.ProteinPosition)
+}
+
+func TestPredictConsequence_SpliceAcceptorHGVSp(t *testing.T) {
+	// KRAS reverse strand: splice acceptor at exon 2 End+1 (25245396).
+	v := &vcf.Variant{
+		Chrom: "12",
+		Pos:   25245396,
+		Ref:   "A",
+		Alt:   "G",
+	}
+	transcript := createKRASTranscript()
+	result := PredictConsequence(v, transcript)
+
+	assert.Equal(t, ConsequenceSpliceAcceptor, result.Consequence)
+	assert.Greater(t, result.ProteinPosition, int64(0), "splice acceptor should have protein position")
+	assert.Contains(t, result.HGVSp, "p.X")
+	assert.Contains(t, result.HGVSp, "_splice")
+	t.Logf("Splice acceptor HGVSp: %s (protein pos %d)", result.HGVSp, result.ProteinPosition)
+}
+
+func TestNearestSpliceBoundaryProteinPos_ForwardStrand(t *testing.T) {
+	// Forward strand transcript with known CDS layout.
+	// CDS: ATG GCT GCA GGG TAA (15bp: M A A G *)
+	// Exon 1: 1000-1014 (CDSStart=1000, CDSEnd=1014)
+	// Splice donor at 1015 (exon.End+1) → boundary is CDSEnd=1014
+	// CDS pos 15 → codon 5 (stop codon)
+	transcript := &cache.Transcript{
+		ID: "ENST_SPLICE_FWD", GeneName: "SPLFWD", Chrom: "1",
+		Start: 990, End: 2030, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 2014,
+		Exons: []cache.Exon{
+			{Number: 1, Start: 990, End: 1014, CDSStart: 1000, CDSEnd: 1014, Frame: 0},
+			{Number: 2, Start: 2000, End: 2030, CDSStart: 2000, CDSEnd: 2014, Frame: 0},
+		},
+		CDSSequence: "ATGGCTGCAGGGTAAATGGCTGCAGGGTAA",
+	}
+
+	// Splice donor at 1015 (End+1 of exon 1)
+	pos := nearestSpliceBoundaryProteinPos(1015, transcript)
+	assert.Greater(t, pos, int64(0), "should map splice donor to a protein position")
+	t.Logf("Forward strand splice donor protein pos: %d", pos)
+
+	// Splice acceptor at 1999 (Start-1 of exon 2)
+	pos2 := nearestSpliceBoundaryProteinPos(1999, transcript)
+	assert.Greater(t, pos2, int64(0), "should map splice acceptor to a protein position")
+	t.Logf("Forward strand splice acceptor protein pos: %d", pos2)
+}
+
+func TestPredictConsequence_MultiCodonDeletion(t *testing.T) {
+	// Forward strand: CDS = ATG GCT AAA GAA GGG CGT TAA (21bp: M A K E G R *)
+	// Delete 6 bases (codons 3-4: AAA GAA = K E) with anchor at codon 2 boundary:
+	// VCF: pos=1005 (CDS 6), ref=TAAAGAA, alt=T
+	// First deleted = 1006 (CDS 7 → codon 3), last deleted = 1011 (CDS 12 → codon 4)
+	// Expected: p.Lys3_Glu4del
+
+	cds := "ATGGCTAAAGAAGGGCGT" + "TAA"
+	transcript := &cache.Transcript{
+		ID: "ENST_MCDEL", GeneName: "MCDEL", Chrom: "1",
+		Start: 990, End: 1030, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1020,
+		Exons:       []cache.Exon{{Number: 1, Start: 990, End: 1030, CDSStart: 1000, CDSEnd: 1020, Frame: 0}},
+		CDSSequence: cds,
+	}
+
+	v := &vcf.Variant{Chrom: "1", Pos: 1005, Ref: "TAAAGAA", Alt: "T"}
+	result := PredictConsequence(v, transcript)
+
+	assert.Equal(t, ConsequenceInframeDeletion, result.Consequence)
+	assert.Equal(t, int64(3), result.ProteinPosition, "first deleted AA position")
+	assert.Equal(t, int64(4), result.ProteinEndPosition, "last deleted AA position")
+	assert.Equal(t, byte('K'), result.RefAA, "first deleted AA")
+	assert.Equal(t, byte('E'), result.EndAA, "last deleted AA")
+	assert.Equal(t, "p.Lys3_Glu4del", result.HGVSp)
+}

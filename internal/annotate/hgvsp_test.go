@@ -149,6 +149,44 @@ func TestFormatHGVSp(t *testing.T) {
 			},
 			want: "p.5fs",
 		},
+		{
+			name: "splice_donor",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceSpliceDonor,
+				ProteinPosition: 37,
+			},
+			want: "p.X37_splice",
+		},
+		{
+			name: "splice_acceptor",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceSpliceAcceptor,
+				ProteinPosition: 100,
+			},
+			want: "p.X100_splice",
+		},
+		{
+			name: "multi_codon_deletion",
+			result: &ConsequenceResult{
+				Consequence:        ConsequenceInframeDeletion,
+				ProteinPosition:    59,
+				ProteinEndPosition: 66,
+				RefAA:              'R',
+				EndAA:              'E',
+			},
+			want: "p.Arg59_Glu66del",
+		},
+		{
+			name: "single_codon_deletion_with_end_same",
+			result: &ConsequenceResult{
+				Consequence:        ConsequenceInframeDeletion,
+				ProteinPosition:    12,
+				ProteinEndPosition: 12, // same as start — single codon
+				RefAA:              'G',
+				EndAA:              'G',
+			},
+			want: "p.Gly12del",
+		},
 	}
 
 	for _, tt := range tests {

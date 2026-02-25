@@ -14,10 +14,12 @@ type ConsequenceResult struct {
 	Impact             string
 	CDSPosition        int64
 	ProteinPosition    int64
+	ProteinEndPosition int64 // End position for multi-AA deletions (0 = single AA)
 	RefCodon           string
 	AltCodon           string
 	RefAA              byte
 	AltAA              byte
+	EndAA              byte // Amino acid at end position (for multi-AA deletions)
 	AminoAcidChange    string
 	CodonChange        string
 	ExonNumber         string
@@ -70,6 +72,15 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 		} else {
 			result.Consequence = ConsequenceIntronVariant
 			result.Impact = GetImpact(ConsequenceIntronVariant)
+		}
+		// For splice donor/acceptor variants on protein-coding transcripts,
+		// compute p.X###_splice notation using the nearest exon boundary.
+		if t.IsProteinCoding() &&
+			(result.Consequence == ConsequenceSpliceDonor || result.Consequence == ConsequenceSpliceAcceptor) {
+			if pos := nearestSpliceBoundaryProteinPos(v.Pos, t); pos > 0 {
+				result.ProteinPosition = pos
+				result.HGVSp = FormatHGVSp(result)
+			}
 		}
 		return result
 	}
@@ -259,15 +270,28 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 	// For deletions, compute protein position from the first deleted base
 	// instead of the VCF anchor (which is one position before the deletion).
 	if refLen > altLen && len(t.CDSSequence) > 0 {
-		var firstDelGenomic int64
+		var firstDelGenomic, lastDelGenomic int64
 		if t.IsForwardStrand() {
 			firstDelGenomic = v.Pos + 1
+			lastDelGenomic = v.Pos + int64(refLen) - 1
 		} else {
 			firstDelGenomic = v.Pos + int64(refLen) - 1
+			lastDelGenomic = v.Pos + 1
 		}
 		if firstDelCDS := GenomicToCDS(firstDelGenomic, t); firstDelCDS > 0 {
 			delCodonNum, _ := CDSToCodonPosition(firstDelCDS)
 			result.ProteinPosition = delCodonNum
+		}
+		// Compute end position for multi-codon deletions
+		if lastDelCDS := GenomicToCDS(lastDelGenomic, t); lastDelCDS > 0 {
+			endCodonNum, _ := CDSToCodonPosition(lastDelCDS)
+			if endCodonNum > result.ProteinPosition {
+				result.ProteinEndPosition = endCodonNum
+				endCodon := GetCodon(t.CDSSequence, endCodonNum)
+				if len(endCodon) == 3 {
+					result.EndAA = TranslateCodon(endCodon)
+				}
+			}
 		}
 	}
 
@@ -603,6 +627,49 @@ func isSpliceRegion(pos int64, t *cache.Transcript) bool {
 		}
 	}
 	return false
+}
+
+// nearestSpliceBoundaryProteinPos finds the nearest exon boundary to an intronic
+// splice-site position and returns the corresponding protein (codon) position.
+// Returns 0 if the position cannot be mapped to CDS.
+func nearestSpliceBoundaryProteinPos(pos int64, t *cache.Transcript) int64 {
+	if !t.IsProteinCoding() {
+		return 0
+	}
+	// Find the closest exon boundary on the coding side of the splice site.
+	var boundaryGenomic int64
+	minDist := int64(1<<62 - 1)
+	for _, exon := range t.Exons {
+		if !exon.IsCoding() {
+			continue
+		}
+		// Check exon.End boundary (splice site at End+1, End+2)
+		if d := abs64(pos - exon.End); d < minDist && d <= 2 {
+			minDist = d
+			boundaryGenomic = exon.CDSEnd
+		}
+		// Check exon.Start boundary (splice site at Start-1, Start-2)
+		if d := abs64(pos - exon.Start); d < minDist && d <= 2 {
+			minDist = d
+			boundaryGenomic = exon.CDSStart
+		}
+	}
+	if boundaryGenomic == 0 {
+		return 0
+	}
+	cdsPos := GenomicToCDS(boundaryGenomic, t)
+	if cdsPos < 1 {
+		return 0
+	}
+	codonNum, _ := CDSToCodonPosition(cdsPos)
+	return codonNum
+}
+
+func abs64(x int64) int64 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 // formatCodonChange formats the codon change string with lowercase mutated base.
