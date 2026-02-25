@@ -64,7 +64,43 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 			insertedSeq = alt[len(ref):] // shared base is at the start
 		}
 
-		// Check for duplication: if inserted seq matches adjacent reference bases
+		// 3' shift insertion in CDS space, then check dup at shifted position
+		cdsPos := GenomicToCDS(v.Pos, t)
+		if cdsPos > 0 && len(t.CDSSequence) > 0 {
+			cdsIdx := int(cdsPos - 1) // 0-based anchor index
+			shiftedSeq, shiftedIdx := shiftInsertionThreePrime(insertedSeq, cdsIdx, t.CDSSequence)
+			seqLen := len(shiftedSeq)
+			upperCDS := strings.ToUpper(t.CDSSequence)
+			upperIns := strings.ToUpper(shiftedSeq)
+
+			// Check dup: inserted bases match preceding bases at shifted position
+			dupStart := shiftedIdx - seqLen + 1
+			if dupStart >= 0 && shiftedIdx+1 <= len(upperCDS) &&
+				upperCDS[dupStart:shiftedIdx+1] == upperIns {
+				if seqLen == 1 {
+					return fmt.Sprintf("c.%ddup", shiftedIdx+1)
+				}
+				return fmt.Sprintf("c.%d_%ddup", dupStart+1, shiftedIdx+1)
+			}
+
+			// Check dup: inserted bases match following bases at shifted position
+			afterStart := shiftedIdx + 1
+			afterEnd := afterStart + seqLen
+			if afterStart >= 0 && afterEnd <= len(upperCDS) &&
+				upperCDS[afterStart:afterEnd] == upperIns {
+				if seqLen == 1 {
+					return fmt.Sprintf("c.%ddup", afterStart+1)
+				}
+				return fmt.Sprintf("c.%d_%ddup", afterStart+1, afterEnd)
+			}
+
+			// Plain insertion at shifted CDS position
+			if shiftedIdx+2 <= len(t.CDSSequence) {
+				return fmt.Sprintf("c.%d_%dins%s", shiftedIdx+1, shiftedIdx+2, shiftedSeq)
+			}
+		}
+
+		// Fall back to genomic-based positions for non-CDS insertions
 		dup := checkDuplication(v, t, insertedSeq)
 		if dup.isDup {
 			if dup.cdsStart == dup.cdsEnd {
@@ -73,12 +109,9 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 			return fmt.Sprintf("c.%d_%ddup", dup.cdsStart, dup.cdsEnd)
 		}
 
-		// Plain insertion: between the prefix base position and next position
-		// Position is between the two flanking bases
 		insAfterPos := v.Pos
 		insBeforePos := v.Pos + 1
 		if t.IsReverseStrand() {
-			// On reverse strand, the insertion is before v.Pos in transcript terms
 			insAfterPos = v.Pos + 1
 			insBeforePos = v.Pos
 		}
@@ -98,6 +131,18 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 			delStartGenomic, delEndGenomic = delEndGenomic, delStartGenomic
 		}
 
+		// Try 3' shifting in CDS space
+		delStartCDS := GenomicToCDS(delStartGenomic, t)
+		delEndCDS := GenomicToCDS(delEndGenomic, t)
+		if delStartCDS > 0 && delEndCDS > 0 && len(t.CDSSequence) > 0 {
+			sStart, sEnd := shiftDeletionThreePrime(int(delStartCDS-1), int(delEndCDS-1), t.CDSSequence)
+			if sStart == sEnd {
+				return fmt.Sprintf("c.%ddel", sStart+1)
+			}
+			return fmt.Sprintf("c.%d_%ddel", sStart+1, sEnd+1)
+		}
+
+		// Fall back to genomic-based positions for intronic/UTR deletions
 		delStartStr := genomicToHGVScPos(delStartGenomic, t)
 		if delStartGenomic == delEndGenomic {
 			return fmt.Sprintf("c.%sdel", delStartStr)
@@ -316,6 +361,35 @@ func exonBoundaryHGVScPos(genomicPos int64, exon *cache.Exon, t *cache.Transcrip
 	}
 
 	return ""
+}
+
+// shiftInsertionThreePrime shifts an insertion rightward (3' direction) in CDS space.
+// cdsAnchorIdx is the 0-based CDS index of the VCF anchor base (insertion is after this position).
+// Returns the shifted inserted sequence and new anchor index.
+func shiftInsertionThreePrime(insertedSeq string, cdsAnchorIdx int, cdsSeq string) (string, int) {
+	seq := []byte(strings.ToUpper(insertedSeq))
+	idx := cdsAnchorIdx
+	upper := strings.ToUpper(cdsSeq)
+	for idx+1 < len(upper) && upper[idx+1] == seq[0] {
+		// Rotate: move first base to end, advance anchor
+		first := seq[0]
+		copy(seq, seq[1:])
+		seq[len(seq)-1] = first
+		idx++
+	}
+	return string(seq), idx
+}
+
+// shiftDeletionThreePrime shifts a deletion rightward (3' direction) in CDS space.
+// delStart and delEnd are 0-based inclusive CDS indices of the deleted bases.
+// Returns the shifted start and end indices.
+func shiftDeletionThreePrime(delStart, delEnd int, cdsSeq string) (int, int) {
+	upper := strings.ToUpper(cdsSeq)
+	for delEnd+1 < len(upper) && upper[delStart] == upper[delEnd+1] {
+		delStart++
+		delEnd++
+	}
+	return delStart, delEnd
 }
 
 // dupResult holds the CDS position range of a detected duplication.
