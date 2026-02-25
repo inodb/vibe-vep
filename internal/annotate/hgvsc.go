@@ -2,7 +2,6 @@ package annotate
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/vcf"
@@ -70,13 +69,11 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 			cdsIdx := int(cdsPos - 1) // 0-based anchor index
 			shiftedSeq, shiftedIdx := shiftInsertionThreePrime(insertedSeq, cdsIdx, t.CDSSequence)
 			seqLen := len(shiftedSeq)
-			upperCDS := strings.ToUpper(t.CDSSequence)
-			upperIns := strings.ToUpper(shiftedSeq)
 
 			// Check dup: inserted bases match preceding bases at shifted position
 			dupStart := shiftedIdx - seqLen + 1
-			if dupStart >= 0 && shiftedIdx+1 <= len(upperCDS) &&
-				upperCDS[dupStart:shiftedIdx+1] == upperIns {
+			if dupStart >= 0 && shiftedIdx+1 <= len(t.CDSSequence) &&
+				t.CDSSequence[dupStart:shiftedIdx+1] == shiftedSeq {
 				if seqLen == 1 {
 					return fmt.Sprintf("c.%ddup", shiftedIdx+1)
 				}
@@ -86,8 +83,8 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 			// Check dup: inserted bases match following bases at shifted position
 			afterStart := shiftedIdx + 1
 			afterEnd := afterStart + seqLen
-			if afterStart >= 0 && afterEnd <= len(upperCDS) &&
-				upperCDS[afterStart:afterEnd] == upperIns {
+			if afterStart >= 0 && afterEnd <= len(t.CDSSequence) &&
+				t.CDSSequence[afterStart:afterEnd] == shiftedSeq {
 				if seqLen == 1 {
 					return fmt.Sprintf("c.%ddup", afterStart+1)
 				}
@@ -367,11 +364,9 @@ func exonBoundaryHGVScPos(genomicPos int64, exon *cache.Exon, t *cache.Transcrip
 // cdsAnchorIdx is the 0-based CDS index of the VCF anchor base (insertion is after this position).
 // Returns the shifted inserted sequence and new anchor index.
 func shiftInsertionThreePrime(insertedSeq string, cdsAnchorIdx int, cdsSeq string) (string, int) {
-	seq := []byte(strings.ToUpper(insertedSeq))
+	seq := []byte(insertedSeq)
 	idx := cdsAnchorIdx
-	upper := strings.ToUpper(cdsSeq)
-	for idx+1 < len(upper) && upper[idx+1] == seq[0] {
-		// Rotate: move first base to end, advance anchor
+	for idx+1 < len(cdsSeq) && cdsSeq[idx+1] == seq[0] {
 		first := seq[0]
 		copy(seq, seq[1:])
 		seq[len(seq)-1] = first
@@ -384,8 +379,7 @@ func shiftInsertionThreePrime(insertedSeq string, cdsAnchorIdx int, cdsSeq strin
 // delStart and delEnd are 0-based inclusive CDS indices of the deleted bases.
 // Returns the shifted start and end indices.
 func shiftDeletionThreePrime(delStart, delEnd int, cdsSeq string) (int, int) {
-	upper := strings.ToUpper(cdsSeq)
-	for delEnd+1 < len(upper) && upper[delStart] == upper[delEnd+1] {
+	for delEnd+1 < len(cdsSeq) && cdsSeq[delStart] == cdsSeq[delEnd+1] {
 		delStart++
 		delEnd++
 	}
@@ -415,13 +409,12 @@ func checkDuplication(v *vcf.Variant, t *cache.Transcript, insertedSeq string) d
 
 	cdsIdx := int(cdsPos - 1) // 0-based index of the VCF anchor base
 	seqLen := len(insertedSeq)
-	upper := strings.ToUpper(insertedSeq)
 
 	// Check if inserted bases match the bases at the anchor position
 	// (the anchor and preceding bases in CDS).
 	startIdx := cdsIdx - seqLen + 1
 	if startIdx >= 0 && cdsIdx+1 <= len(t.CDSSequence) {
-		if strings.ToUpper(t.CDSSequence[startIdx:cdsIdx+1]) == upper {
+		if t.CDSSequence[startIdx:cdsIdx+1] == insertedSeq {
 			return dupResult{
 				isDup:    true,
 				cdsStart: int64(startIdx + 1), // 1-based
@@ -435,7 +428,7 @@ func checkDuplication(v *vcf.Variant, t *cache.Transcript, insertedSeq string) d
 	afterStart := cdsIdx + 1
 	afterEnd := afterStart + seqLen
 	if afterStart >= 0 && afterEnd <= len(t.CDSSequence) {
-		if strings.ToUpper(t.CDSSequence[afterStart:afterEnd]) == upper {
+		if t.CDSSequence[afterStart:afterEnd] == insertedSeq {
 			return dupResult{
 				isDup:    true,
 				cdsStart: int64(afterStart + 1), // 1-based
