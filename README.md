@@ -75,7 +75,7 @@ Annotate Options:
   --assembly      Genome assembly: GRCh37 or GRCh38 (default: GRCh38)
   --validate      Validate MAF annotations against predictions
   --validate-all  Show all variants in validation (default: mismatches only)
-  -f, --output-format   Output format: tab, maf (default: auto-detect from input)
+  -f, --output-format   Output format: vcf, maf (default: auto-detect from input)
   -o, --output    Output file (default: stdout)
   --canonical     Only report canonical transcript annotations
 
@@ -94,14 +94,13 @@ The repository includes a small [example VCF](examples/example.vcf) containing t
 vibe-vep annotate examples/example.vcf
 ```
 
-Expected output ([examples/example_output.txt](examples/example_output.txt)) — tab-delimited with one line per overlapping transcript:
+VCF input produces VCF output by default — the original VCF lines are preserved and a `CSQ` INFO field is added with consequence annotations for all overlapping transcripts (canonical flagged with `YES`):
 
 ```
-#Uploaded_variation  Location      Allele  Gene  Feature          Consequence       ...  HGVSp        HGVSc
-rs121913529         12:25245351   A       KRAS  ENST00000686969  missense_variant  ...  p.Gly12Cys   c.34G>T
-rs121913529         12:25245351   A       KRAS  ENST00000256078  missense_variant  ...  p.Gly12Cys   c.34G>T
-rs121913529         12:25245351   A       KRAS  ENST00000311936  missense_variant  ...  p.Gly12Cys   c.34G>T
-...
+##fileformat=VCFv4.2
+##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from vibe-vep. Format: Allele|Consequence|IMPACT|SYMBOL|...">
+#CHROM  POS       ID           REF  ALT  QUAL  FILTER  INFO
+12      25245351  rs121913529  C    A    100   PASS    DP=50;CSQ=A|missense_variant|MODERATE|KRAS|...|YES,...
 ```
 
 ### Annotating a MAF file
@@ -112,17 +111,11 @@ The repository also includes a small [example MAF](examples/example.maf) with th
 vibe-vep annotate examples/example.maf
 ```
 
-When the input is MAF, the output defaults to MAF format — all original columns are preserved and annotation columns are updated with fresh VEP predictions. Expected output ([examples/example_maf_output.maf](examples/example_maf_output.maf)):
+When the input is MAF, the output defaults to MAF format — all original columns are preserved and annotation columns are updated with fresh VEP predictions:
 
 ```
 Hugo_Symbol  Entrez_Gene_Id  Center  ...  Consequence       Variant_Classification  ...  HGVSc    HGVSp        HGVSp_Short  Transcript_ID
 KRAS         3845            .       ...  missense_variant  Missense_Mutation       ...  c.34G>T  p.Gly12Cys   p.G12C       ENST00000311936
-```
-
-Use `-f tab` to get tab-delimited VEP-style output instead:
-
-```bash
-vibe-vep annotate -f tab examples/example.maf
 ```
 
 ### Other examples
@@ -232,32 +225,19 @@ Remaining mismatches are primarily:
 
 ## Output Format
 
+### VCF output (default for VCF input)
+
+When the input is a VCF file, vibe-vep outputs VCF format by default. Original VCF header and data lines are preserved, and a `CSQ` INFO field is appended with consequence annotations for all overlapping transcripts. The CSQ format follows the VEP convention — pipe-delimited fields per transcript, comma-separated between transcripts:
+
+```
+CSQ=Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|CANONICAL
+```
+
+Canonical transcripts are flagged with `CANONICAL=YES`.
+
 ### MAF output (default for MAF input)
 
 When the input is a MAF file, vibe-vep outputs MAF format by default. All original columns are preserved and annotation columns (`Hugo_Symbol`, `Consequence`, `Variant_Classification`, `HGVSp`, `HGVSp_Short`, `HGVSc`, `Transcript_ID`) are updated with fresh VEP predictions. Original values are kept when VEP has no prediction (e.g., intergenic variants).
-
-### Tab output (default for VCF input)
-
-Tab-delimited output includes:
-
-| Column | Description |
-|--------|-------------|
-| #Uploaded_variation | Variant identifier (chr:pos ref>alt) |
-| Location | Genomic location |
-| Allele | Alternate allele |
-| Gene | Gene symbol |
-| Feature | Transcript ID |
-| Consequence | SO term (e.g., missense_variant) |
-| cDNA_position | Position in cDNA |
-| CDS_position | Position in CDS |
-| Protein_position | Position in protein |
-| Amino_acids | Amino acid change (e.g., G/C) |
-| Codons | Codon change |
-| IMPACT | Impact level (HIGH, MODERATE, LOW, MODIFIER) |
-| BIOTYPE | Transcript biotype |
-| CANONICAL | YES if canonical transcript |
-| EXON | Exon number (e.g., 2/5) |
-| INTRON | Intron number (e.g., 1/4) |
 
 ## Performance
 

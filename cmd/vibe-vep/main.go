@@ -99,7 +99,7 @@ func newAnnotateCmd(verbose *bool) *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
-	cmd.Flags().StringVarP(&outputFormat, "output-format", "f", "", "Output format: tab, maf (default: auto-detect from input)")
+	cmd.Flags().StringVarP(&outputFormat, "output-format", "f", "", "Output format: vcf, maf (default: auto-detect from input)")
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file (default: stdout)")
 	cmd.Flags().BoolVar(&canonicalOnly, "canonical", false, "Only report canonical transcript annotations")
 	cmd.Flags().StringVar(&inputFormat, "input-format", "", "Input format: vcf, maf (auto-detected if not specified)")
@@ -205,7 +205,7 @@ func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFi
 		if detectedFormat == "maf" {
 			outputFormat = "maf"
 		} else {
-			outputFormat = "tab"
+			outputFormat = "vcf"
 		}
 	}
 
@@ -221,27 +221,26 @@ func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFi
 		return runMAFOutput(logger, mafParser, ann, out)
 	}
 
-	var writer annotate.AnnotationWriter
-	switch outputFormat {
-	case "tab":
-		writer = output.NewTabWriter(out)
-	case "vcf":
-		return fmt.Errorf("VCF output format not yet implemented")
-	default:
-		return fmt.Errorf("unknown output format %q", outputFormat)
+	// VCF output
+	if outputFormat == "vcf" {
+		if detectedFormat != "vcf" {
+			return fmt.Errorf("VCF output format requires VCF input (no VCF headers to preserve)")
+		}
+		vcfParser, ok := parser.(*vcf.Parser)
+		if !ok {
+			return fmt.Errorf("VCF output requires VCF parser")
+		}
+		writer := output.NewVCFWriter(out, vcfParser.Header())
+		if err := writer.WriteHeader(); err != nil {
+			return fmt.Errorf("writing header: %w", err)
+		}
+		if err := ann.AnnotateAll(parser, writer); err != nil {
+			return err
+		}
+		return nil
 	}
 
-	// Write header
-	if err := writer.WriteHeader(); err != nil {
-		return fmt.Errorf("writing header: %w", err)
-	}
-
-	// Annotate all variants
-	if err := ann.AnnotateAll(parser, writer); err != nil {
-		return err
-	}
-
-	return nil
+	return fmt.Errorf("unknown output format %q", outputFormat)
 }
 
 // runValidation runs validation mode comparing MAF annotations to VEP predictions.
