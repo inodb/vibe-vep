@@ -67,6 +67,12 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		cdsPos := GenomicToCDS(v.Pos, t)
 		if cdsPos > 0 && len(t.CDSSequence) > 0 {
 			cdsIdx := int(cdsPos - 1) // 0-based anchor index
+			if t.IsReverseStrand() {
+				cdsIdx-- // RC makes shared base a suffix; insertion is before CDS position
+			}
+			if cdsIdx < 0 {
+				cdsIdx = 0
+			}
 			shiftedSeq, shiftedIdx := shiftInsertionThreePrime(insertedSeq, cdsIdx, t.CDSSequence)
 			seqLen := len(shiftedSeq)
 
@@ -117,21 +123,50 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		return "c." + afterStr + "_" + beforeStr + "ins" + insertedSeq
 	}
 
-	// Deletion
+	// Deletion (or delins if alt has extra bases beyond shared prefix)
 	if refLen > altLen {
-		// Deleted bases start after the shared prefix
-		delStartGenomic := v.Pos + int64(altLen)
+		// Compute actual shared prefix length on genomic strand
+		sharedLen := 0
+		for sharedLen < refLen && sharedLen < altLen && v.Ref[sharedLen] == v.Alt[sharedLen] {
+			sharedLen++
+		}
+		if sharedLen == 0 {
+			sharedLen = 1
+		}
+		if sharedLen > altLen {
+			sharedLen = altLen
+		}
+
+		delStartGenomic := v.Pos + int64(sharedLen)
 		delEndGenomic := v.Pos + int64(refLen) - 1
+		extraAlt := ""
+		if sharedLen < altLen {
+			extraAlt = v.Alt[sharedLen:]
+		}
 
 		if t.IsReverseStrand() {
-			// For reverse strand, swap start/end for transcript order
 			delStartGenomic, delEndGenomic = delEndGenomic, delStartGenomic
 		}
 
-		// Try 3' shifting in CDS space
+		// Convert extra alt bases to coding strand
+		codingExtraAlt := extraAlt
+		if t.IsReverseStrand() && len(extraAlt) > 0 {
+			codingExtraAlt = ReverseComplement(extraAlt)
+		}
+
+		// Try CDS-based positioning
 		delStartCDS := GenomicToCDS(delStartGenomic, t)
 		delEndCDS := GenomicToCDS(delEndGenomic, t)
 		if delStartCDS > 0 && delEndCDS > 0 && len(t.CDSSequence) > 0 {
+			if len(codingExtraAlt) > 0 {
+				// Delins: no 3' shift per HGVS convention
+				startStr := strconv.Itoa(int(delStartCDS))
+				if delStartCDS == delEndCDS {
+					return "c." + startStr + "delins" + codingExtraAlt
+				}
+				return "c." + startStr + "_" + strconv.Itoa(int(delEndCDS)) + "delins" + codingExtraAlt
+			}
+			// Pure deletion: apply 3' shift
 			sStart, sEnd := shiftDeletionThreePrime(int(delStartCDS-1), int(delEndCDS-1), t.CDSSequence)
 			if sStart == sEnd {
 				return "c." + strconv.Itoa(sStart+1) + "del"
@@ -141,6 +176,13 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 
 		// Fall back to genomic-based positions for intronic/UTR deletions
 		delStartStr := genomicToHGVScPos(delStartGenomic, t)
+		if len(codingExtraAlt) > 0 {
+			if delStartGenomic == delEndGenomic {
+				return "c." + delStartStr + "delins" + codingExtraAlt
+			}
+			delEndStr := genomicToHGVScPos(delEndGenomic, t)
+			return "c." + delStartStr + "_" + delEndStr + "delins" + codingExtraAlt
+		}
 		if delStartGenomic == delEndGenomic {
 			return "c." + delStartStr + "del"
 		}

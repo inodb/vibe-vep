@@ -252,17 +252,32 @@ func predictCodingConsequence(v *vcf.Variant, t *cache.Transcript, exon *cache.E
 
 // predictIndelConsequence determines the effect of an insertion or deletion.
 func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult) *ConsequenceResult {
-	// Look up the reference amino acid at the protein position for HGVSp
+	refLen := len(v.Ref)
+	altLen := len(v.Alt)
+	diff := altLen - refLen
+
+	// For deletions, compute protein position from the first deleted base
+	// instead of the VCF anchor (which is one position before the deletion).
+	if refLen > altLen && len(t.CDSSequence) > 0 {
+		var firstDelGenomic int64
+		if t.IsForwardStrand() {
+			firstDelGenomic = v.Pos + 1
+		} else {
+			firstDelGenomic = v.Pos + int64(refLen) - 1
+		}
+		if firstDelCDS := GenomicToCDS(firstDelGenomic, t); firstDelCDS > 0 {
+			delCodonNum, _ := CDSToCodonPosition(firstDelCDS)
+			result.ProteinPosition = delCodonNum
+		}
+	}
+
+	// Look up the reference amino acid at the (possibly updated) protein position
 	if result.ProteinPosition > 0 && len(t.CDSSequence) > 0 {
 		refCodon := GetCodon(t.CDSSequence, result.ProteinPosition)
 		if len(refCodon) == 3 {
 			result.RefAA = TranslateCodon(refCodon)
 		}
 	}
-
-	refLen := len(v.Ref)
-	altLen := len(v.Alt)
-	diff := altLen - refLen
 
 	// Check if the indel overlaps the stop codon
 	stopCodonCDSPos := int64(0)
@@ -295,7 +310,11 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 		}
 		// Compute the new amino acid and distance to first stop codon
 		if result.CDSPosition > 0 {
-			altAA, stopDist := computeFrameshiftDetails(v, t, result.CDSPosition)
+			proteinPos, refAA, altAA, stopDist := computeFrameshiftDetails(v, t, result.CDSPosition)
+			if proteinPos > 0 {
+				result.ProteinPosition = proteinPos
+				result.RefAA = refAA
+			}
 			if altAA != 0 {
 				result.AltAA = altAA
 			}
@@ -309,13 +328,13 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 }
 
 // computeFrameshiftDetails builds the mutant CDS for a frameshift variant and
-// determines the new amino acid at the variant position and the distance to
-// the first new stop codon. If no stop is found in the CDS, it continues
-// scanning into the 3'UTR sequence. Returns altAA=0 if it can't be computed,
-// and stopDist=0 if no new stop codon is found.
-func computeFrameshiftDetails(v *vcf.Variant, t *cache.Transcript, cdsPos int64) (altAA byte, stopDist int) {
+// finds the first amino acid position that actually changes, along with the
+// distance to the first new stop codon. If no stop is found in the CDS, it
+// continues scanning into the 3'UTR sequence.
+// Returns proteinPos=0 if no changed codon is found, stopDist=0 if no stop.
+func computeFrameshiftDetails(v *vcf.Variant, t *cache.Transcript, cdsPos int64) (proteinPos int64, refAA byte, altAA byte, stopDist int) {
 	if len(t.CDSSequence) == 0 || cdsPos < 1 {
-		return 0, 0
+		return 0, 0, 0, 0
 	}
 
 	cdsIdx := int(cdsPos - 1) // 0-based index in CDS
@@ -335,23 +354,34 @@ func computeFrameshiftDetails(v *vcf.Variant, t *cache.Transcript, cdsPos int64)
 	// Build mutant sequence: CDS with the variant applied, plus 3'UTR for scanning
 	mutSeq := t.CDSSequence[:cdsIdx] + alt + t.CDSSequence[endIdx:] + t.UTR3Sequence
 
-	// Translate from the codon containing the variant position forward
+	// Scan from the codon containing the variant position forward,
+	// comparing each mutant codon against the original to find the first change.
 	codonStart := (cdsIdx / 3) * 3
-	dist := 1
 	for i := codonStart; i+3 <= len(mutSeq); i += 3 {
-		codon := mutSeq[i : i+3]
-		aa := TranslateCodon(codon)
-		if i == codonStart {
-			altAA = aa
+		mutAA := TranslateCodon(mutSeq[i : i+3])
+		if proteinPos == 0 {
+			// Still looking for the first changed codon
+			var origAA byte
+			if i+3 <= len(t.CDSSequence) {
+				origAA = TranslateCodon(t.CDSSequence[i : i+3])
+			}
+			if mutAA != origAA {
+				proteinPos = int64(i/3) + 1
+				refAA = origAA
+				altAA = mutAA
+				stopDist = 1
+			}
+		} else {
+			stopDist++
 		}
-		if aa == '*' {
-			return altAA, dist
+		if proteinPos > 0 && mutAA == '*' {
+			return
 		}
-		dist++
 	}
 
-	// No stop found in mutant sequence
-	return altAA, 0
+	// No stop found
+	stopDist = 0
+	return
 }
 
 // computeStopLostExtension scans the 3'UTR for the next in-frame stop codon

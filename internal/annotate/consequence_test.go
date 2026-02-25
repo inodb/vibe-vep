@@ -749,3 +749,64 @@ func TestAllocRegression_PredictConsequence(t *testing.T) {
 	}
 	t.Logf("PredictConsequence allocs: %.0f (budget: %d)", allocs, maxAllocs)
 }
+
+func TestPredictConsequence_FrameshiftFirstChangedPosition(t *testing.T) {
+	// Fix 1: Frameshift should report the first amino acid that actually changes,
+	// not the codon containing the VCF anchor.
+	//
+	// CDS: ATG GGC AAA GGG TAA (15bp: M G K G *)
+	// Insert 'G' after CDS pos 3 (last base of codon 1 'G'): ref=G, alt=GG
+	// Mutant: ATG GGG CAA AGG GTA A...
+	//   Codon 1: ATG→ATG (M→M, unchanged!)
+	//   Codon 2: GGC→GGG (G→G, unchanged! both are Gly)
+	//   Codon 3: AAA→CAA (K→Q, CHANGED)
+	// So protein position should be 3, not 1 or 2.
+
+	cds := "ATGGGCAAAGGG" + "TAA"
+	utr3 := "GCATAA"
+
+	transcript := &cache.Transcript{
+		ID: "ENST_FS_POS", GeneName: "FSPOS", Chrom: "1",
+		Start: 990, End: 1030, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1014,
+		Exons:        []cache.Exon{{Number: 1, Start: 990, End: 1030, CDSStart: 1000, CDSEnd: 1014, Frame: 0}},
+		CDSSequence:  cds,
+		UTR3Sequence: utr3,
+	}
+
+	// Insert G after position 1002 (CDS pos 3): ref=G, alt=GG
+	v := &vcf.Variant{Chrom: "1", Pos: 1002, Ref: "G", Alt: "GG"}
+	result := PredictConsequence(v, transcript)
+
+	assert.Equal(t, ConsequenceFrameshiftVariant, result.Consequence)
+	assert.Equal(t, int64(3), result.ProteinPosition, "should report first changed AA position")
+	assert.Equal(t, byte('K'), result.RefAA, "ref AA at position 3 should be Lys")
+	assert.Equal(t, byte('Q'), result.AltAA, "alt AA at position 3 should be Gln")
+}
+
+func TestPredictConsequence_DeletionProteinPosition(t *testing.T) {
+	// Fix 3: In-frame deletion should report the first deleted amino acid,
+	// not the VCF anchor codon.
+	//
+	// Forward strand, CDS: ATG GCT AAA GGG TAA (M A K G *)
+	// Delete 3 bases (AAA = codon 3) with anchor at last base of codon 2:
+	// VCF: pos=1005 (CDS 6 = last base of codon 2 'T'), ref=TAAA, alt=T
+	// First deleted base = pos 1006 (CDS 7 = first base of codon 3)
+	// Protein position should be 3 (Lys), not 2 (Ala).
+
+	cds := "ATGGCTAAAGGG" + "TAA"
+	transcript := &cache.Transcript{
+		ID: "ENST_DEL_POS", GeneName: "DELPOS", Chrom: "1",
+		Start: 990, End: 1030, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1014,
+		Exons:       []cache.Exon{{Number: 1, Start: 990, End: 1030, CDSStart: 1000, CDSEnd: 1014, Frame: 0}},
+		CDSSequence: cds,
+	}
+
+	v := &vcf.Variant{Chrom: "1", Pos: 1005, Ref: "TAAA", Alt: "T"}
+	result := PredictConsequence(v, transcript)
+
+	assert.Equal(t, ConsequenceInframeDeletion, result.Consequence)
+	assert.Equal(t, int64(3), result.ProteinPosition, "should report first deleted AA position")
+	assert.Equal(t, byte('K'), result.RefAA, "ref AA at deleted position should be Lys")
+}
