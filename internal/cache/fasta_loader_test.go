@@ -15,14 +15,14 @@ func TestFASTALoader_ParseHeader(t *testing.T) {
 		header   string
 		expected string
 	}{
-		// GENCODE format with pipe delimiters
-		{">ENST00000311936.8|ENSG00000133703.14|OTTHUMG|KRAS-201|KRAS|567|", "ENST00000311936"},
-		// Simple Ensembl format with space
-		{">ENST00000311936.8 cds chromosome:GRCh38", "ENST00000311936"},
-		// Just the ID
+		// GENCODE format with pipe delimiters — keeps version
+		{">ENST00000311936.8|ENSG00000133703.14|OTTHUMG|KRAS-201|KRAS|567|", "ENST00000311936.8"},
+		// Simple Ensembl format with space — keeps version
+		{">ENST00000311936.8 cds chromosome:GRCh38", "ENST00000311936.8"},
+		// Just the ID (no version)
 		{">ENST00000311936", "ENST00000311936"},
-		// With version, no delimiter
-		{">ENST00000311936.8", "ENST00000311936"},
+		// With version, no delimiter — keeps version
+		{">ENST00000311936.8", "ENST00000311936.8"},
 	}
 
 	for _, tt := range tests {

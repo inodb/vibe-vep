@@ -116,8 +116,7 @@ func (l *GTFLoader) parseGTF(reader io.Reader, filterChrom string) (map[string]*
 			continue
 		}
 
-		// Strip version suffix for consistent lookup
-		transcriptID = stripVersion(transcriptID)
+		// Keep version suffix in transcript ID (e.g., ENST00000005558.8)
 
 		switch feat.featureType {
 		case "transcript":
@@ -396,6 +395,11 @@ func (l *GENCODELoader) Load(c *Cache) error {
 				if seq := l.fasta.GetSequence(t.ID); seq != "" {
 					t.CDSSequence = seq
 				}
+				// Load CDS + up to 300bp of 3'UTR for stop-codon scanning
+				// (frameshifts and stop-lost need to scan past the CDS end)
+				if extended := l.fasta.GetCDSPlusDownstream(t.ID, 300); extended != "" && len(extended) > len(t.CDSSequence) {
+					t.UTR3Sequence = extended[len(t.CDSSequence):]
+				}
 			}
 		}
 	}
@@ -415,7 +419,7 @@ func (l *GENCODELoader) applyCanonicalOverrides(c *Cache) {
 		}
 	}
 
-	// Apply overrides
+	// Apply overrides (canonical overrides use unversioned IDs)
 	for gene, canonicalID := range l.canonicalOverrides {
 		transcripts, ok := geneTranscripts[gene]
 		if !ok {
@@ -425,7 +429,7 @@ func (l *GENCODELoader) applyCanonicalOverrides(c *Cache) {
 		// Check if the canonical transcript exists for this gene
 		found := false
 		for _, t := range transcripts {
-			if t.ID == canonicalID {
+			if stripVersion(t.ID) == canonicalID {
 				found = true
 				break
 			}
@@ -437,7 +441,7 @@ func (l *GENCODELoader) applyCanonicalOverrides(c *Cache) {
 
 		// Set the override: mark only the canonical transcript
 		for _, t := range transcripts {
-			t.IsCanonical = (t.ID == canonicalID)
+			t.IsCanonical = (stripVersion(t.ID) == canonicalID)
 		}
 	}
 }

@@ -13,17 +13,19 @@ import (
 
 // FASTALoader loads CDS sequences from GENCODE FASTA files.
 type FASTALoader struct {
-	path      string
-	sequences map[string]string    // transcript_id -> full sequence
-	cdsRanges map[string][2]int    // transcript_id -> [cdsStart, cdsEnd] (1-based from header)
+	path       string
+	sequences  map[string]string // versioned transcript_id -> full sequence
+	cdsRanges  map[string][2]int // versioned transcript_id -> [cdsStart, cdsEnd] (1-based from header)
+	baseToFull map[string]string // unversioned ID -> versioned ID (for fallback lookup)
 }
 
 // NewFASTALoader creates a new FASTA loader.
 func NewFASTALoader(path string) *FASTALoader {
 	return &FASTALoader{
-		path:      path,
-		sequences: make(map[string]string),
-		cdsRanges: make(map[string][2]int),
+		path:       path,
+		sequences:  make(map[string]string),
+		cdsRanges:  make(map[string][2]int),
+		baseToFull: make(map[string]string),
 	}
 }
 
@@ -73,6 +75,10 @@ func (l *FASTALoader) parseFASTA(reader io.Reader) error {
 
 			// Parse new header
 			currentID = l.parseHeader(line)
+			// Build base-to-full mapping for unversioned lookups
+			if base := stripVersion(currentID); base != currentID {
+				l.baseToFull[base] = currentID
+			}
 			// Parse and store CDS range from header
 			if cdsStart, cdsEnd, ok := parseCDSRange(line); ok {
 				l.cdsRanges[currentID] = [2]int{cdsStart, cdsEnd}
@@ -108,18 +114,15 @@ func (l *FASTALoader) parseHeader(header string) string {
 
 	// First, split on pipe for GENCODE format
 	if idx := strings.Index(header, "|"); idx != -1 {
-		id := header[:idx]
-		return stripVersion(id)
+		return header[:idx]
 	}
 
 	// Split on space for simple format
 	if idx := strings.Index(header, " "); idx != -1 {
-		id := header[:idx]
-		return stripVersion(id)
+		return header[:idx]
 	}
 
-	// No delimiter, use whole header (minus version)
-	return stripVersion(header)
+	return header
 }
 
 // parseCDSRange extracts CDS start and end positions from a GENCODE FASTA header.
@@ -149,17 +152,10 @@ func parseCDSRange(header string) (start, end int, ok bool) {
 
 // GetSequence returns the CDS sequence for a transcript ID.
 // If CDS boundaries were parsed from the FASTA header, only the CDS portion is returned.
-// The ID should be without version suffix (e.g., "ENST00000311936").
 func (l *FASTALoader) GetSequence(transcriptID string) string {
-	// Try without version first
-	id := stripVersion(transcriptID)
-	seq, ok := l.sequences[id]
+	id, seq, ok := l.lookupSequence(transcriptID)
 	if !ok {
-		seq, ok = l.sequences[transcriptID]
-		if !ok {
-			return ""
-		}
-		id = transcriptID
+		return ""
 	}
 
 	// Extract CDS portion if boundaries are known
@@ -179,13 +175,54 @@ func (l *FASTALoader) SequenceCount() int {
 	return len(l.sequences)
 }
 
+// GetCDSPlusDownstream returns the CDS sequence plus up to maxExtra bases of
+// 3'UTR (downstream of CDS). This is used for scanning past the stop codon
+// in frameshift and stop-lost predictions.
+func (l *FASTALoader) GetCDSPlusDownstream(transcriptID string, maxExtra int) string {
+	id, seq, ok := l.lookupSequence(transcriptID)
+	if !ok {
+		return ""
+	}
+
+	cdsRange, hasCDS := l.cdsRanges[id]
+	if !hasCDS {
+		return seq
+	}
+
+	start := cdsRange[0] - 1 // 0-based
+	end := cdsRange[1]       // exclusive end of CDS
+
+	// Extend into 3'UTR by up to maxExtra bases
+	extEnd := end + maxExtra
+	if extEnd > len(seq) {
+		extEnd = len(seq)
+	}
+
+	if start >= 0 && start < extEnd {
+		return seq[start:extEnd]
+	}
+	return ""
+}
+
 // HasSequence checks if a sequence exists for the given transcript ID.
 func (l *FASTALoader) HasSequence(transcriptID string) bool {
-	id := stripVersion(transcriptID)
-	_, ok := l.sequences[id]
-	if ok {
-		return true
-	}
-	_, ok = l.sequences[transcriptID]
+	_, _, ok := l.lookupSequence(transcriptID)
 	return ok
+}
+
+// lookupSequence finds a sequence by transcript ID, trying exact match first,
+// then falling back to base ID → versioned ID mapping.
+func (l *FASTALoader) lookupSequence(transcriptID string) (id, seq string, ok bool) {
+	// Try exact match first
+	if seq, ok := l.sequences[transcriptID]; ok {
+		return transcriptID, seq, true
+	}
+	// Try base ID → versioned ID mapping (e.g., "ENST00000311936" → "ENST00000311936.8")
+	base := stripVersion(transcriptID)
+	if full, ok := l.baseToFull[base]; ok {
+		if seq, ok := l.sequences[full]; ok {
+			return full, seq, true
+		}
+	}
+	return "", "", false
 }

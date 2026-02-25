@@ -40,6 +40,9 @@ func FormatHGVSp(result *ConsequenceResult) string {
 		return fmt.Sprintf("p.%s%dTer", aaThree(result.RefAA), pos)
 
 	case ConsequenceStopLost:
+		if result.StopLostExtDist > 0 {
+			return fmt.Sprintf("p.Ter%d%sext*%d", pos, aaThree(result.AltAA), result.StopLostExtDist)
+		}
 		return fmt.Sprintf("p.Ter%d%sext*?", pos, aaThree(result.AltAA))
 
 	case ConsequenceStartLost:

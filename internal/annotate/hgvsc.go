@@ -53,21 +53,24 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 
 	if altLen > refLen {
 		// Insertion
-		insertedSeq := alt[1:] // skip shared prefix base on coding strand
+		// VCF indels share a prefix base on the genomic strand.
+		// After reverse-complementing for reverse-strand transcripts, the
+		// shared base becomes the suffix, so the inserted bases are at the
+		// start of alt rather than after position 1.
+		var insertedSeq string
+		if t.IsReverseStrand() {
+			insertedSeq = alt[:len(alt)-len(ref)] // shared base is at the end
+		} else {
+			insertedSeq = alt[len(ref):] // shared base is at the start
+		}
 
-		// Check for duplication: if inserted seq matches the preceding reference
-		if isDuplication(v, t, insertedSeq) {
-			dupLen := len(insertedSeq)
-			if dupLen == 1 {
-				// Single base dup: position is the duplicated base
-				dupPosStr := genomicToHGVScPos(dupGenomicPos(v, t), t)
-				return fmt.Sprintf("c.%sdup", dupPosStr)
+		// Check for duplication: if inserted seq matches adjacent reference bases
+		dup := checkDuplication(v, t, insertedSeq)
+		if dup.isDup {
+			if dup.cdsStart == dup.cdsEnd {
+				return fmt.Sprintf("c.%ddup", dup.cdsStart)
 			}
-			// Multi-base dup
-			dupStart, dupEnd := dupGenomicRange(v, t)
-			startStr := genomicToHGVScPos(dupStart, t)
-			endStr := genomicToHGVScPos(dupEnd, t)
-			return fmt.Sprintf("c.%s_%sdup", startStr, endStr)
+			return fmt.Sprintf("c.%d_%ddup", dup.cdsStart, dup.cdsEnd)
 		}
 
 		// Plain insertion: between the prefix base position and next position
@@ -315,59 +318,57 @@ func exonBoundaryHGVScPos(genomicPos int64, exon *cache.Exon, t *cache.Transcrip
 	return ""
 }
 
-// isDuplication checks if an insertion duplicates the preceding reference sequence.
-func isDuplication(v *vcf.Variant, t *cache.Transcript, insertedSeq string) bool {
-	if len(insertedSeq) == 0 {
-		return false
-	}
+// dupResult holds the CDS position range of a detected duplication.
+type dupResult struct {
+	isDup    bool
+	cdsStart int64 // 1-based CDS position of first duplicated base
+	cdsEnd   int64 // 1-based CDS position of last duplicated base
+}
 
-	// For forward strand, check if the bases before the insertion match
-	// For reverse strand, we need to check in the coding direction
-	// Simple heuristic: check if the genomic bases preceding the insertion
-	// match the inserted sequence
-	_ = t // May use transcript sequence for more accurate check in future
-
-	// Check the CDS sequence if available
-	if len(t.CDSSequence) == 0 {
-		return false
+// checkDuplication checks if an insertion duplicates adjacent reference bases.
+// Per HGVS convention, the inserted sequence must match either the bases
+// immediately before or immediately after the insertion point.
+// Returns the CDS positions of the duplicated bases for direct HGVS formatting.
+func checkDuplication(v *vcf.Variant, t *cache.Transcript, insertedSeq string) dupResult {
+	if len(insertedSeq) == 0 || len(t.CDSSequence) == 0 {
+		return dupResult{}
 	}
 
 	cdsPos := GenomicToCDS(v.Pos, t)
 	if cdsPos < 1 {
-		return false
+		return dupResult{}
 	}
 
-	cdsIdx := int(cdsPos - 1)
+	cdsIdx := int(cdsPos - 1) // 0-based index of the VCF anchor base
 	seqLen := len(insertedSeq)
+	upper := strings.ToUpper(insertedSeq)
 
-	// Check if the bases at [cdsIdx-seqLen+1 .. cdsIdx] match insertedSeq
+	// Check if inserted bases match the bases at the anchor position
+	// (the anchor and preceding bases in CDS).
 	startIdx := cdsIdx - seqLen + 1
-	if startIdx < 0 {
-		return false
-	}
-	endIdx := cdsIdx + 1
-	if endIdx > len(t.CDSSequence) {
-		return false
+	if startIdx >= 0 && cdsIdx+1 <= len(t.CDSSequence) {
+		if strings.ToUpper(t.CDSSequence[startIdx:cdsIdx+1]) == upper {
+			return dupResult{
+				isDup:    true,
+				cdsStart: int64(startIdx + 1), // 1-based
+				cdsEnd:   cdsPos,
+			}
+		}
 	}
 
-	precedingSeq := strings.ToUpper(t.CDSSequence[startIdx:endIdx])
-	return precedingSeq == strings.ToUpper(insertedSeq)
-}
-
-// dupGenomicPos returns the genomic position of the duplicated base for single-base dups.
-func dupGenomicPos(v *vcf.Variant, t *cache.Transcript) int64 {
-	// The duplicated base is at v.Pos (the shared prefix base)
-	return v.Pos
-}
-
-// dupGenomicRange returns the genomic start and end of the duplicated region.
-func dupGenomicRange(v *vcf.Variant, t *cache.Transcript) (int64, int64) {
-	dupLen := int64(len(v.Alt) - len(v.Ref))
-	// Duplicated region ends at v.Pos and extends back dupLen bases
-	start := v.Pos - dupLen + 1
-	end := v.Pos
-	if t.IsReverseStrand() {
-		return end, start
+	// Check if inserted bases match the bases immediately after the anchor
+	// (the bases right after the insertion point in CDS).
+	afterStart := cdsIdx + 1
+	afterEnd := afterStart + seqLen
+	if afterStart >= 0 && afterEnd <= len(t.CDSSequence) {
+		if strings.ToUpper(t.CDSSequence[afterStart:afterEnd]) == upper {
+			return dupResult{
+				isDup:    true,
+				cdsStart: int64(afterStart + 1), // 1-based
+				cdsEnd:   int64(afterEnd),
+			}
+		}
 	}
-	return start, end
+
+	return dupResult{}
 }

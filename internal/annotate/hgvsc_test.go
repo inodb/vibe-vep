@@ -149,6 +149,112 @@ func TestGenomicToHGVScPos_FivePrimeUTR(t *testing.T) {
 	assert.Equal(t, "-2", pos)
 }
 
+func TestFormatHGVSc_DupPrecedingBase(t *testing.T) {
+	// Test: insertion that duplicates the preceding (anchor) base.
+	// Forward strand transcript, CDS = "ATGATCGATCG..."
+	// Insert at pos 1002 (CDS pos 3 = 'G'), ref=G, alt=GG
+	// Inserted 'G' matches CDS pos 3 → c.3dup
+	transcript := createDupTestTranscript()
+
+	v := &vcf.Variant{Chrom: "1", Pos: 1002, Ref: "G", Alt: "GG"}
+	result := PredictConsequence(v, transcript)
+	hgvsc := FormatHGVSc(v, transcript, result)
+
+	assert.Equal(t, "c.3dup", hgvsc)
+}
+
+func TestFormatHGVSc_DupFollowingBase(t *testing.T) {
+	// Test: insertion that duplicates the following base (not the anchor).
+	// Forward strand transcript, CDS = "ATGATCGATCG..."
+	// CDS pos 6='C', pos 7='G'
+	// Insert at pos 1005 (CDS pos 6 = 'C'), ref=C, alt=CG
+	// Inserted 'G' doesn't match CDS pos 6 ('C'), but matches CDS pos 7 ('G') → c.7dup
+	transcript := createDupTestTranscript()
+
+	v := &vcf.Variant{Chrom: "1", Pos: 1005, Ref: "C", Alt: "CG"}
+	result := PredictConsequence(v, transcript)
+	hgvsc := FormatHGVSc(v, transcript, result)
+
+	assert.Equal(t, "c.7dup", hgvsc)
+}
+
+func TestFormatHGVSc_DupMultiBase(t *testing.T) {
+	// Test: multi-base duplication.
+	// CDS = "ATGATCGATCG..."
+	// CDS pos 1-3 = "ATG"
+	// Insert at pos 1002 (CDS 3), ref=G, alt=GATG
+	// Inserted "ATG" matches CDS pos 1-3 → c.1_3dup
+	transcript := createDupTestTranscript()
+
+	v := &vcf.Variant{Chrom: "1", Pos: 1002, Ref: "G", Alt: "GATG"}
+	result := PredictConsequence(v, transcript)
+	hgvsc := FormatHGVSc(v, transcript, result)
+
+	assert.Equal(t, "c.1_3dup", hgvsc)
+}
+
+func TestFormatHGVSc_InsertionNotDup(t *testing.T) {
+	// Test: insertion that does NOT match adjacent bases → plain insertion.
+	// CDS = "ATGATCGATCG..."
+	// Insert at pos 1002 (CDS 3 = 'G'), ref=G, alt=GCC
+	// Inserted 'CC' doesn't match "TG" (preceding) or "AT" (following) → insertion
+	transcript := createDupTestTranscript()
+
+	v := &vcf.Variant{Chrom: "1", Pos: 1002, Ref: "G", Alt: "GCC"}
+	result := PredictConsequence(v, transcript)
+	hgvsc := FormatHGVSc(v, transcript, result)
+
+	assert.Contains(t, hgvsc, "ins")
+	assert.NotContains(t, hgvsc, "dup")
+}
+
+func TestFormatHGVSc_DupReverseStrand(t *testing.T) {
+	// Test: duplication on reverse strand.
+	// KRAS reverse strand. CDS[0]='A', CDS[1]='T', CDS[2]='G', CDS[3]='A', CDS[4]='C', CDS[5]='T'
+	// CDS position 1 = genomic 25245384 (CDSEnd for reverse strand)
+	// CDS position 34 = genomic 25245351 (KRAS G12 position)
+	// CDS positions go: 25245384=1, 25245383=2, 25245382=3, ...
+	// For a simple dup test, use a position where the base is known:
+	// CDS[33] (pos 34) is first base of codon 12 = 'G' (GGT -> Gly)
+	// CDS[34] (pos 35) is second base = 'G'
+	// Insert 'G' at CDS pos 34: should dup pos 34
+	// Genomic pos for CDS 34 = 25245384 - 34 + 1 = 25245351
+	// On reverse strand, insert at 25245351: ref = genomic C (rev comp = G), alt = CC (rev comp = GG)
+	transcript := createKRASTranscript()
+
+	// VCF: pos=25245351, ref=C, alt=CC → on coding strand: ref=G, alt=GG → ins G
+	// CDS pos 34 = 'G', so inserted G matches preceding base → c.34dup
+	v := &vcf.Variant{Chrom: "12", Pos: 25245351, Ref: "C", Alt: "CC"}
+	result := PredictConsequence(v, transcript)
+	hgvsc := FormatHGVSc(v, transcript, result)
+
+	assert.Equal(t, "c.34dup", hgvsc)
+}
+
+// createDupTestTranscript creates a forward-strand transcript with a known CDS for dup testing.
+func createDupTestTranscript() *cache.Transcript {
+	// Single exon forward strand transcript for simplicity.
+	// Exon: 990-1200, CDS: 1000-1101 (102bp = 34 codons)
+	// CDS: pos 1=1000, pos 2=1001, ..., pos 102=1101
+	// CDSSequence[0..101] = "ATGATCGATCG..." (repeating pattern)
+	cds := "ATGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGA"
+	return &cache.Transcript{
+		ID:       "ENST00000DUP001",
+		GeneName: "DUPTEST",
+		Chrom:    "1",
+		Start:    990,
+		End:      1210,
+		Strand:   1,
+		Biotype:  "protein_coding",
+		CDSStart: 1000,
+		CDSEnd:   1101,
+		Exons: []cache.Exon{
+			{Number: 1, Start: 990, End: 1210, CDSStart: 1000, CDSEnd: 1101, Frame: 0},
+		},
+		CDSSequence: cds,
+	}
+}
+
 // createForwardTranscript creates a simple forward-strand transcript for testing.
 func createForwardTranscript() *cache.Transcript {
 	// Simple 2-exon forward strand transcript

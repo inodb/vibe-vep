@@ -17,6 +17,7 @@ type Transcript struct {
 	CDSStart        int64   // CDS start (genomic, 1-based), 0 if non-coding
 	CDSEnd          int64   // CDS end (genomic, 1-based), 0 if non-coding
 	CDSSequence     string  // Coding DNA sequence (loaded on demand)
+	UTR3Sequence    string  // 3'UTR sequence immediately following CDSSequence (for stop scanning)
 	ProteinSequence string  // Translated protein sequence (loaded on demand)
 }
 

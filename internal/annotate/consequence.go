@@ -27,6 +27,7 @@ type ConsequenceResult struct {
 	HGVSp              string
 	HGVSc              string
 	FrameshiftStopDist int // Distance to new stop codon in frameshift (1=at variant pos, 0=unknown)
+	StopLostExtDist    int // Distance to next stop codon in stop-lost (0=unknown)
 }
 
 // PredictConsequence determines the effect of a variant on a transcript.
@@ -235,6 +236,8 @@ func predictCodingConsequence(v *vcf.Variant, t *cache.Transcript, exon *cache.E
 	} else if result.RefAA == '*' {
 		result.Consequence = ConsequenceStopLost
 		result.AminoAcidChange = fmt.Sprintf("*%d%c", codonNum, result.AltAA)
+		// Compute extension length by scanning 3'UTR for next in-frame stop
+		result.StopLostExtDist = computeStopLostExtension(t, altCodon)
 	} else if result.RefAA == 'M' && codonNum == 1 {
 		result.Consequence = ConsequenceStartLost
 		result.AminoAcidChange = fmt.Sprintf("M1%c", result.AltAA)
@@ -308,8 +311,9 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 
 // computeFrameshiftDetails builds the mutant CDS for a frameshift variant and
 // determines the new amino acid at the variant position and the distance to
-// the first new stop codon. Returns altAA=0 if it can't be computed, and
-// stopDist=0 if no new stop codon is found within the mutant sequence.
+// the first new stop codon. If no stop is found in the CDS, it continues
+// scanning into the 3'UTR sequence. Returns altAA=0 if it can't be computed,
+// and stopDist=0 if no new stop codon is found.
 func computeFrameshiftDetails(v *vcf.Variant, t *cache.Transcript, cdsPos int64) (altAA byte, stopDist int) {
 	if len(t.CDSSequence) == 0 || cdsPos < 1 {
 		return 0, 0
@@ -329,13 +333,14 @@ func computeFrameshiftDetails(v *vcf.Variant, t *cache.Transcript, cdsPos int64)
 		endIdx = len(t.CDSSequence)
 	}
 
-	mutCDS := t.CDSSequence[:cdsIdx] + alt + t.CDSSequence[endIdx:]
+	// Build mutant sequence: CDS with the variant applied, plus 3'UTR for scanning
+	mutSeq := t.CDSSequence[:cdsIdx] + alt + t.CDSSequence[endIdx:] + t.UTR3Sequence
 
 	// Translate from the codon containing the variant position forward
 	codonStart := (cdsIdx / 3) * 3
 	dist := 1
-	for i := codonStart; i+3 <= len(mutCDS); i += 3 {
-		codon := mutCDS[i : i+3]
+	for i := codonStart; i+3 <= len(mutSeq); i += 3 {
+		codon := mutSeq[i : i+3]
 		aa := TranslateCodon(codon)
 		if i == codonStart {
 			altAA = aa
@@ -348,6 +353,31 @@ func computeFrameshiftDetails(v *vcf.Variant, t *cache.Transcript, cdsPos int64)
 
 	// No stop found in mutant sequence
 	return altAA, 0
+}
+
+// computeStopLostExtension scans the 3'UTR for the next in-frame stop codon
+// after a stop-lost variant. The altCodon is the mutated stop codon.
+// Returns the number of codons to the new stop (including the new stop codon),
+// or 0 if no stop is found within the available 3'UTR sequence.
+func computeStopLostExtension(t *cache.Transcript, altCodon string) int {
+	if len(t.UTR3Sequence) < 3 {
+		return 0
+	}
+
+	// The extension starts after the mutated codon. We need to scan the
+	// 3'UTR in-frame. The last 3 bases of CDSSequence are the (mutated) stop
+	// codon, so the 3'UTR immediately follows in frame.
+	dist := 1
+	for i := 0; i+3 <= len(t.UTR3Sequence); i += 3 {
+		codon := t.UTR3Sequence[i : i+3]
+		aa := TranslateCodon(codon)
+		if aa == '*' {
+			return dist
+		}
+		dist++
+	}
+
+	return 0
 }
 
 // indelCreatesStop checks if an indel creates a stop codon near the variant site.

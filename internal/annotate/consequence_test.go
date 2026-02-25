@@ -539,6 +539,102 @@ func TestPredictConsequence_InframeDeletion(t *testing.T) {
 	assert.Equal(t, ImpactModerate, result.Impact)
 }
 
+func TestPredictConsequence_FrameshiftWithStopDistance(t *testing.T) {
+	// Test that frameshift computes the distance to the next stop codon.
+	// CDS: ATG GCT GCA GGG GGG TAA (18bp: M A A G G *)
+	// UTR3: "ACTAAGGG"
+	//
+	// Insert 'A' at CDS pos 7 (genomic 1006), ref=G, alt=GA:
+	// Mutant codons: ATG GCT GAC AGG GGG GTA A[CTAA]GGG
+	// → GAC AGG GGG GTA AAC TAA
+	//   Pos 3: Ala→Asp, 4: Arg, 5: Gly, 6: Val, 7: Asn, 8: Ter
+	// fsTer = 8 - 3 + 1 = 6
+
+	cds2 := "ATGGCTGCAGGGGGG" + "TAA" // 18bp: M A A G G *
+	utr3 := "ACTAAGGG"                 // provides stop in shifted frame
+
+	transcript := &cache.Transcript{
+		ID:           "ENST_FS_TEST",
+		GeneName:     "FSTEST",
+		Chrom:        "1",
+		Start:        990,
+		End:          1030,
+		Strand:       1,
+		Biotype:      "protein_coding",
+		CDSStart:     1000,
+		CDSEnd:       1017,
+		Exons:        []cache.Exon{{Number: 1, Start: 990, End: 1030, CDSStart: 1000, CDSEnd: 1017, Frame: 0}},
+		CDSSequence:  cds2,
+		UTR3Sequence: utr3,
+	}
+
+	// Insert 'A' at CDS pos 7 (genomic 1006)
+	v := &vcf.Variant{Chrom: "1", Pos: 1006, Ref: "G", Alt: "GA"}
+	result := PredictConsequence(v, transcript)
+
+	assert.Equal(t, ConsequenceFrameshiftVariant, result.Consequence)
+	assert.Greater(t, result.FrameshiftStopDist, 0, "expected fsTer distance > 0")
+	assert.Equal(t, "p.Ala3AspfsTer6", result.HGVSp)
+}
+
+func TestPredictConsequence_StopLostWithExtension(t *testing.T) {
+	// Test that stop-lost computes the extension distance to the next stop codon.
+	// Forward-strand transcript with known UTR3.
+	// CDS ends with TAA stop codon.
+	// Mutation: TAA → TCA (Ser) — stop lost.
+	// UTR3 provides the next stop codon at a known distance.
+	//
+	// CDS: ATG GCT GCA TAA (12bp: M A A *)
+	// UTR3: "GCATAA..." → first codons in UTR3: GCA TAA
+	//   After stop-lost: ...TCA (Ser) + UTR3: GCA TAA
+	//   So the extension is: Ser at original stop pos, then GCA=Ala, then TAA=stop
+	//   ext*3 (Ser + Ala + stop = 2 amino acids before new stop → ext*3? or ext*2?)
+	//   VEP convention: ext*N where N = number of amino acids in the extension
+	//   including the new stop position (or the number of added AAs?)
+	//   Actually ext*N = N amino acids are added before the new stop.
+	//   So: Ser (replaces stop) + Ala (from UTR3 codon 1) + stop (from UTR3 codon 2)
+	//   That's 1 AA from UTR3 before stop → ext*2? ext*1?
+	//   Let me check: VEP ext* counts from the first new AA at the stop position.
+	//   p.Ter4Serext*N: original stop at pos 4, changed to Ser.
+	//   Distance = number of codons from UTR3 until stop = 2 (GCA, TAA)
+	//   But TAA is stop, so only 1 AA (Ala) before stop.
+	//   ext*2 means: 2 codons scanned in UTR3 (1 AA + stop)
+	//
+	// Our implementation: computeStopLostExtension counts codons until stop.
+	// dist starts at 1, each codon increments. If stop found, return dist.
+	// For UTR3 = "GCATAA": codon 1 = "GCA" (not stop, dist=2), codon 2 = "TAA" (stop, return 2)
+	// So ext*2.
+
+	cds := "ATGGCTGCATAA" // 12bp: M A A *
+	utr3 := "GCATAA"      // GCA + TAA: one AA then stop
+
+	transcript := &cache.Transcript{
+		ID:           "ENST_SL_TEST",
+		GeneName:     "SLTEST",
+		Chrom:        "1",
+		Start:        990,
+		End:          1020,
+		Strand:       1,
+		Biotype:      "protein_coding",
+		CDSStart:     1000,
+		CDSEnd:       1011,
+		Exons:        []cache.Exon{{Number: 1, Start: 990, End: 1020, CDSStart: 1000, CDSEnd: 1011, Frame: 0}},
+		CDSSequence:  cds,
+		UTR3Sequence: utr3,
+	}
+
+	// Mutate the first base of the stop codon TAA → CAA (Gln)
+	// Stop codon at CDS pos 10-12, genomic pos 1009-1011
+	// TAA → CAA: change T→C at genomic 1009
+	v := &vcf.Variant{Chrom: "1", Pos: 1009, Ref: "T", Alt: "C"}
+	result := PredictConsequence(v, transcript)
+
+	assert.Equal(t, ConsequenceStopLost, result.Consequence)
+	assert.Equal(t, int64(4), result.ProteinPosition) // Stop is at protein pos 4
+	assert.Equal(t, 2, result.StopLostExtDist, "expected ext*2")
+	assert.Equal(t, "p.Ter4Glnext*2", result.HGVSp)
+}
+
 func BenchmarkPredictConsequence(b *testing.B) {
 	transcript := createKRASTranscript()
 
