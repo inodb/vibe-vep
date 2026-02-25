@@ -75,7 +75,7 @@ Annotate Options:
   --assembly      Genome assembly: GRCh37 or GRCh38 (default: GRCh38)
   --validate      Validate MAF annotations against predictions
   --validate-all  Show all variants in validation (default: mismatches only)
-  -f, --output-format   Output format: tab, vcf (default: tab)
+  -f, --output-format   Output format: tab, maf (default: auto-detect from input)
   -o, --output    Output file (default: stdout)
   --canonical     Only report canonical transcript annotations
 
@@ -94,15 +94,15 @@ The repository includes a small [example VCF](examples/example.vcf) containing t
 vibe-vep annotate examples/example.vcf
 ```
 
-Expected output ([examples/example_output.txt](examples/example_output.txt)):
+Expected output ([examples/example_output.txt](examples/example_output.txt)) — tab-delimited with one line per overlapping transcript:
 
 ```
-#Uploaded_variation	Location	Allele	Gene	Feature	Feature_type	Consequence	cDNA_position	CDS_position	Protein_position	Amino_acids	Codons	Existing_variation	IMPACT	BIOTYPE	CANONICAL	EXON	INTRON	HGVSp	HGVSc
-rs121913529	12:25245351	A	KRAS	ENST00000311936	Transcript	missense_variant	-	34	12	G12C	ggt/Tgt	-	MODERATE	protein_coding	YES	2/5	-	p.Gly12Cys	c.34G>T
-rs121913529	12:25245351	A	KRAS	ENST00000256078	Transcript	missense_variant	-	34	12	G12C	ggt/Tgt	-	MODERATE	protein_coding	-	2/6	-	p.Gly12Cys	c.34G>T
+#Uploaded_variation  Location      Allele  Gene  Feature          Consequence       ...  HGVSp        HGVSc
+rs121913529         12:25245351   A       KRAS  ENST00000686969  missense_variant  ...  p.Gly12Cys   c.34G>T
+rs121913529         12:25245351   A       KRAS  ENST00000256078  missense_variant  ...  p.Gly12Cys   c.34G>T
+rs121913529         12:25245351   A       KRAS  ENST00000311936  missense_variant  ...  p.Gly12Cys   c.34G>T
+...
 ```
-
-Each line in the output corresponds to one transcript overlapping the variant. The canonical transcript (`CANONICAL=YES`) is listed first.
 
 ### Annotating a MAF file
 
@@ -112,12 +112,17 @@ The repository also includes a small [example MAF](examples/example.maf) with th
 vibe-vep annotate examples/example.maf
 ```
 
-Expected output ([examples/example_maf_output.txt](examples/example_maf_output.txt)):
+When the input is MAF, the output defaults to MAF format — all original columns are preserved and annotation columns are updated with fresh VEP predictions. Expected output ([examples/example_maf_output.maf](examples/example_maf_output.maf)):
 
 ```
-#Uploaded_variation	Location	Allele	Gene	Feature	Feature_type	Consequence	cDNA_position	CDS_position	Protein_position	Amino_acids	Codons	Existing_variation	IMPACT	BIOTYPE	CANONICAL	EXON	INTRON	HGVSp	HGVSc
-.	12:25245351	A	KRAS	ENST00000311936	Transcript	missense_variant	-	34	12	G12C	ggt/Tgt	-	MODERATE	protein_coding	YES	2/5	-	p.Gly12Cys	c.34G>T
-.	12:25245351	A	KRAS	ENST00000256078	Transcript	missense_variant	-	34	12	G12C	ggt/Tgt	-	MODERATE	protein_coding	-	2/6	-	p.Gly12Cys	c.34G>T
+Hugo_Symbol  Entrez_Gene_Id  Center  ...  Consequence       Variant_Classification  ...  HGVSc    HGVSp        HGVSp_Short  Transcript_ID
+KRAS         3845            .       ...  missense_variant  Missense_Mutation       ...  c.34G>T  p.Gly12Cys   p.G12C       ENST00000311936
+```
+
+Use `-f tab` to get tab-delimited VEP-style output instead:
+
+```bash
+vibe-vep annotate -f tab examples/example.maf
 ```
 
 ### Other examples
@@ -227,7 +232,13 @@ Remaining mismatches are primarily:
 
 ## Output Format
 
-Default tab-delimited output includes:
+### MAF output (default for MAF input)
+
+When the input is a MAF file, vibe-vep outputs MAF format by default. All original columns are preserved and annotation columns (`Hugo_Symbol`, `Consequence`, `Variant_Classification`, `HGVSp`, `HGVSp_Short`, `HGVSc`, `Transcript_ID`) are updated with fresh VEP predictions. Original values are kept when VEP has no prediction (e.g., intergenic variants).
+
+### Tab output (default for VCF input)
+
+Tab-delimited output includes:
 
 | Column | Description |
 |--------|-------------|
@@ -281,8 +292,8 @@ vibe-vep annotate --validate testdata/tcga/chol_tcga_gdc_data_mutations.txt
 
 - [ ] **Feature parity for MAF annotation** — Match the annotation capabilities of the [genome-nexus-annotation-pipeline](https://github.com/genome-nexus/genome-nexus-annotation-pipeline), which currently relies on Genome Nexus Server + VEP
   - [x] Consequence prediction (~99.8% concordance with GDC/VEP across 1M+ TCGA variants, see [Validation Results](#validation-results))
-  - [ ] HGVSp/HGVSc notation
-  - [ ] Full MAF output format (all required columns)
+  - [x] HGVSp/HGVSc notation
+  - [x] Full MAF output format (all required columns)
 - [ ] **Re-annotate datahub GDC studies** — Validate by re-annotating [cBioPortal/datahub](https://github.com/cBioPortal/datahub) GDC studies with vibe-vep
 - [ ] **Replace genome-nexus-annotation-pipeline for datahub** — Use vibe-vep as the annotation tool for datahub processing
 

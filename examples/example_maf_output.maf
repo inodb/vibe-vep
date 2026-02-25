@@ -1,0 +1,2 @@
+Hugo_Symbol	Entrez_Gene_Id	Center	NCBI_Build	Chromosome	Start_Position	End_Position	Strand	Consequence	Variant_Classification	Variant_Type	Reference_Allele	Tumor_Seq_Allele1	Tumor_Seq_Allele2	dbSNP_RS	Tumor_Sample_Barcode	HGVSc	HGVSp	HGVSp_Short	Transcript_ID
+KRAS	3845	.	GRCh38	12	25245351	25245351	+	missense_variant	Missense_Mutation	SNP	C	C	A	rs121913529	SAMPLE-01	c.34G>T	p.Gly12Cys	p.G12C	ENST00000311936
