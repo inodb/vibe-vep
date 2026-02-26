@@ -19,9 +19,12 @@ type ValidationWriter struct {
 	matches        int
 	mismatches     int
 	total          int
-	hgvspMatches    int
-	hgvspMismatches int
-	hgvspSkipped    int // non-coding variants with no HGVSp to compare
+	hgvspExact          int // exact HGVSp match
+	hgvspFuzzyFS        int // fuzzy frameshift match (both fs, positions differ)
+	hgvspMismatches     int
+	hgvspSkippedEmpty   int // both MAF and VEP HGVSp empty
+	hgvspSkippedIntronic int // MAF has non-standard p.*N* notation
+	hgvspSkippedSplice  int // splice consequence, VEP has no protein effect
 	hgvscMatches    int
 	hgvscMismatches int
 	hgvscSkipped    int
@@ -83,13 +86,21 @@ func (v *ValidationWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAF
 	// Check HGVSp match
 	hgvspMatch := false
 	hgvspMatchStr := "-"
+	vepHGVSpShort := hgvspToShort(vepHGVSp)
 	if mafHGVSp == "" && vepHGVSp == "" {
-		// Both empty (non-coding) — skip HGVSp comparison
-		v.hgvspSkipped++
-	} else if hgvspValuesMatch(mafHGVSp, vepHGVSp) {
-		v.hgvspMatches++
+		v.hgvspSkippedEmpty++
+	} else if mafHGVSp == vepHGVSpShort {
+		v.hgvspExact++
 		hgvspMatch = true
 		hgvspMatchStr = "Y"
+	} else if isFrameshiftHGVSp(mafHGVSp) && isFrameshiftHGVSp(vepHGVSpShort) {
+		v.hgvspFuzzyFS++
+		hgvspMatch = true
+		hgvspMatchStr = "~"
+	} else if isNonStandardIntronicHGVSp(mafHGVSp) && vepHGVSp == "" {
+		v.hgvspSkippedIntronic++
+	} else if isSpliceConsequence(vepConseq) && vepHGVSp == "" {
+		v.hgvspSkippedSplice++
 	} else {
 		v.hgvspMismatches++
 		hgvspMatchStr = "N"
@@ -109,8 +120,8 @@ func (v *ValidationWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAF
 		hgvscMatchStr = "N"
 	}
 
-	// Only write if showAll or any mismatch
-	showRow := v.showAll || !conseqMatch || (!hgvspMatch && hgvspMatchStr != "-") || (!hgvscMatch && hgvscMatchStr != "-")
+	// Only write if showAll or any mismatch/fuzzy
+	showRow := v.showAll || !conseqMatch || (!hgvspMatch && hgvspMatchStr != "-") || hgvspMatchStr == "~" || (!hgvscMatch && hgvscMatchStr != "-")
 	if showRow {
 		_, err := fmt.Fprintf(v.w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			variantStr,
@@ -143,7 +154,7 @@ func (v *ValidationWriter) Summary() (total, matches, mismatches int) {
 
 // HGVSpSummary returns HGVSp match statistics.
 func (v *ValidationWriter) HGVSpSummary() (matches, mismatches, skipped int) {
-	return v.hgvspMatches, v.hgvspMismatches, v.hgvspSkipped
+	return v.hgvspExact + v.hgvspFuzzyFS, v.hgvspMismatches, v.hgvspSkippedEmpty + v.hgvspSkippedIntronic + v.hgvspSkippedSplice
 }
 
 // HGVScSummary returns HGVSc match statistics.
@@ -157,18 +168,25 @@ func (v *ValidationWriter) WriteSummary(w io.Writer) {
 	if v.total > 0 {
 		conseqRate = float64(v.matches) / float64(v.total) * 100
 	}
-	hgvspTotal := v.hgvspMatches + v.hgvspMismatches
+	hgvspMatches := v.hgvspExact + v.hgvspFuzzyFS
+	hgvspTotal := hgvspMatches + v.hgvspMismatches
 	hgvspRate := float64(0)
 	if hgvspTotal > 0 {
-		hgvspRate = float64(v.hgvspMatches) / float64(hgvspTotal) * 100
+		hgvspRate = float64(hgvspMatches) / float64(hgvspTotal) * 100
 	}
+	hgvspSkipped := v.hgvspSkippedEmpty + v.hgvspSkippedIntronic + v.hgvspSkippedSplice
 	fmt.Fprintf(w, "\nValidation Summary:\n")
 	fmt.Fprintf(w, "  Total variants:       %d\n", v.total)
 	fmt.Fprintf(w, "  Consequence matches:  %d (%.1f%%)\n", v.matches, conseqRate)
 	fmt.Fprintf(w, "  Consequence mismatch: %d (%.1f%%)\n", v.mismatches, 100-conseqRate)
-	fmt.Fprintf(w, "  HGVSp matches:        %d/%d (%.1f%%)\n", v.hgvspMatches, hgvspTotal, hgvspRate)
+	fmt.Fprintf(w, "  HGVSp matches:        %d/%d (%.1f%%)\n", hgvspMatches, hgvspTotal, hgvspRate)
+	fmt.Fprintf(w, "    exact:              %d\n", v.hgvspExact)
+	fmt.Fprintf(w, "    fuzzy (frameshift): %d\n", v.hgvspFuzzyFS)
 	fmt.Fprintf(w, "  HGVSp mismatches:     %d/%d\n", v.hgvspMismatches, hgvspTotal)
-	fmt.Fprintf(w, "  HGVSp skipped:        %d (non-coding)\n", v.hgvspSkipped)
+	fmt.Fprintf(w, "  HGVSp skipped:        %d\n", hgvspSkipped)
+	fmt.Fprintf(w, "    both empty:         %d\n", v.hgvspSkippedEmpty)
+	fmt.Fprintf(w, "    non-standard p.*N*: %d\n", v.hgvspSkippedIntronic)
+	fmt.Fprintf(w, "    splice (no protein):%d\n", v.hgvspSkippedSplice)
 	hgvscTotal := v.hgvscMatches + v.hgvscMismatches
 	hgvscRate := float64(0)
 	if hgvscTotal > 0 {
@@ -276,6 +294,23 @@ func isCodingConsequence(conseq string) bool {
 	return false
 }
 
+// isNonStandardIntronicHGVSp checks for MAF-specific p.*###* notation
+// used for intronic variants. This is not standard HGVS.
+func isNonStandardIntronicHGVSp(hgvsp string) bool {
+	return len(hgvsp) > 3 && strings.HasPrefix(hgvsp, "p.*") && strings.HasSuffix(hgvsp, "*")
+}
+
+// isFrameshiftHGVSp checks if an HGVSp value represents a frameshift.
+func isFrameshiftHGVSp(hgvsp string) bool {
+	return strings.Contains(hgvsp, "fs")
+}
+
+// isSpliceConsequence checks if a consequence string contains a splice site term.
+func isSpliceConsequence(conseq string) bool {
+	return strings.Contains(conseq, "splice_donor_variant") ||
+		strings.Contains(conseq, "splice_acceptor_variant")
+}
+
 // hgvspToShort converts 3-letter HGVSp notation to single-letter.
 // e.g., "p.Gly12Cys" → "p.G12C", "p.Ter130=" → "p.*130="
 func hgvspToShort(hgvsp string) string {
@@ -299,7 +334,14 @@ func hgvspValuesMatch(mafHGVSp, vepHGVSp string) bool {
 	}
 	// Normalize VEP 3-letter to single-letter for comparison
 	vepShort := hgvspToShort(vepHGVSp)
-	return mafHGVSp == vepShort
+	if mafHGVSp == vepShort {
+		return true
+	}
+	// Fuzzy match: both are frameshifts (positions may differ due to GENCODE version)
+	if isFrameshiftHGVSp(mafHGVSp) && isFrameshiftHGVSp(vepShort) {
+		return true
+	}
+	return false
 }
 
 // hgvscValuesMatch compares MAF HGVSc with VEP HGVSc.

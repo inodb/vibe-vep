@@ -210,3 +210,98 @@ func TestValidationWriter_MismatchesOnly(t *testing.T) {
 	assert.Len(t, lines, 2)
 	assert.Contains(t, output, "TP53")
 }
+
+func TestIsNonStandardIntronicHGVSp(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"p.*130*", true},     // typical MAF intronic notation
+		{"p.*1*", true},       // single digit
+		{"p.*12345*", true},   // large number
+		{"p.G12C", false},     // missense
+		{"p.*130fs", false},   // frameshift starting at stop
+		{"p.*130=", false},    // synonymous stop
+		{"", false},           // empty
+		{"p.*", false},        // just p.* (3 chars, prefix+suffix overlap)
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, isNonStandardIntronicHGVSp(tt.input), "isNonStandardIntronicHGVSp(%q)", tt.input)
+	}
+}
+
+func TestIsFrameshiftHGVSp(t *testing.T) {
+	assert.True(t, isFrameshiftHGVSp("p.G12fs"))
+	assert.True(t, isFrameshiftHGVSp("p.G12Afs*33"))
+	assert.False(t, isFrameshiftHGVSp("p.G12C"))
+	assert.False(t, isFrameshiftHGVSp(""))
+}
+
+func TestIsSpliceConsequence(t *testing.T) {
+	assert.True(t, isSpliceConsequence("splice_donor_variant"))
+	assert.True(t, isSpliceConsequence("splice_acceptor_variant"))
+	assert.True(t, isSpliceConsequence("splice_donor_variant,intron_variant"))
+	assert.False(t, isSpliceConsequence("splice_region_variant"))
+	assert.False(t, isSpliceConsequence("missense_variant"))
+}
+
+func TestHgvspValuesMatch_FrameshiftFuzzy(t *testing.T) {
+	// Both frameshifts with different positions → match (GENCODE version shift)
+	assert.True(t, hgvspValuesMatch("p.G12fs", "p.Gly12fs"))
+	assert.True(t, hgvspValuesMatch("p.A10fs*33", "p.Ala15fs*40"))
+	// One frameshift, one not → no match
+	assert.False(t, hgvspValuesMatch("p.G12fs", "p.Gly12Cys"))
+	assert.False(t, hgvspValuesMatch("p.G12C", "p.Gly12fs"))
+	// Exact match still works
+	assert.True(t, hgvspValuesMatch("p.G12C", "p.Gly12Cys"))
+	// Both empty
+	assert.True(t, hgvspValuesMatch("", ""))
+}
+
+func TestWriteComparison_SkipsNonStandardIntronic(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewValidationWriter(&buf, false)
+	w.WriteHeader()
+
+	variant := &vcf.Variant{Chrom: "1", Pos: 100, Ref: "A", Alt: "T"}
+	mafAnn := &maf.MAFAnnotation{
+		HugoSymbol:  "TP53",
+		Consequence: "intron",
+		HGVSpShort:  "p.*130*",
+	}
+	vepAnns := []*annotate.Annotation{{
+		Consequence: "intron_variant",
+		HGVSp:      "",
+	}}
+
+	w.WriteComparison(variant, mafAnn, vepAnns)
+	w.Flush()
+
+	_, mismatches, skipped := w.HGVSpSummary()
+	assert.Equal(t, 0, mismatches)
+	assert.Equal(t, 1, skipped)
+}
+
+func TestWriteComparison_SkipsSpliceEmptyHGVSp(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewValidationWriter(&buf, false)
+	w.WriteHeader()
+
+	variant := &vcf.Variant{Chrom: "1", Pos: 100, Ref: "ACGT", Alt: "A"}
+	mafAnn := &maf.MAFAnnotation{
+		HugoSymbol:  "TP53",
+		Consequence: "Splice_Site",
+		HGVSpShort:  "p.X125_splice",
+	}
+	vepAnns := []*annotate.Annotation{{
+		Consequence: "splice_acceptor_variant,intron_variant",
+		HGVSp:      "",
+	}}
+
+	w.WriteComparison(variant, mafAnn, vepAnns)
+	w.Flush()
+
+	_, mismatches, skipped := w.HGVSpSummary()
+	assert.Equal(t, 0, mismatches)
+	assert.Equal(t, 1, skipped)
+}
