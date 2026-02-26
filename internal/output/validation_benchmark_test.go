@@ -15,7 +15,7 @@ import (
 	"github.com/inodb/vibe-vep/internal/output"
 )
 
-// TestValidationBenchmark runs validation against all TCGA MAF files and generates
+// TestValidationBenchmark runs comparison against all TCGA MAF files and generates
 // a markdown report at testdata/tcga/validation_report.md.
 //
 // Skipped with -short (large files, not for CI). Run with:
@@ -54,7 +54,7 @@ func TestValidationBenchmark(t *testing.T) {
 	}
 	t.Logf("loaded %d transcripts", c.TranscriptCount())
 
-	// Collect results per study
+	allCols := map[string]bool{"consequence": true, "hgvsp": true, "hgvsc": true}
 	var results []studyResult
 
 	for _, mafFile := range mafFiles {
@@ -67,7 +67,7 @@ func TestValidationBenchmark(t *testing.T) {
 			defer parser.Close()
 
 			ann := annotate.NewAnnotator(c)
-			valWriter := output.NewValidationWriter(os.Stderr, false)
+			cmpWriter := output.NewCompareWriter(os.Stderr, allCols, false)
 
 			start := time.Now()
 			for {
@@ -82,32 +82,29 @@ func TestValidationBenchmark(t *testing.T) {
 				if err != nil {
 					continue
 				}
-				if err := valWriter.WriteComparison(v, mafAnn, vepAnns); err != nil {
+				if err := cmpWriter.WriteComparison(v, mafAnn, vepAnns); err != nil {
 					t.Fatalf("write comparison: %v", err)
 				}
 			}
 			elapsed := time.Since(start)
 
-			total, matches, mismatches := valWriter.Summary()
-			hgvspM, hgvspMM, hgvspS := valWriter.HGVSpSummary()
-			hgvscM, hgvscMM, hgvscS := valWriter.HGVScSummary()
+			counts := cmpWriter.Counts()
+			total := cmpWriter.Total()
+
+			// Extract consequence counts
+			conseqMatch := counts["consequence"][output.CatMatch] + counts["consequence"][output.CatUpstreamReclass]
+			conseqMismatch := counts["consequence"][output.CatMismatch]
 
 			t.Logf("%s: %d variants, %.1f%% consequence match, %s",
-				name, total, float64(matches)/float64(total)*100, elapsed)
+				name, total, float64(conseqMatch)/float64(total)*100, elapsed)
 
 			results = append(results, studyResult{
 				name:           name,
 				variants:       total,
-				conseqMatches:  matches,
-				conseqMismatch: mismatches,
-				hgvspMatches:   hgvspM,
-				hgvspMismatch:  hgvspMM,
-				hgvspSkipped:   hgvspS,
-				hgvspDetail:    valWriter.HGVSpDetailedSummary(),
-				hgvscMatches:   hgvscM,
-				hgvscMismatch:  hgvscMM,
-				hgvscSkipped:   hgvscS,
+				categoryCounts: counts,
 				duration:       elapsed,
+				conseqMatch:    conseqMatch,
+				conseqMismatch: conseqMismatch,
 			})
 		})
 	}
@@ -118,10 +115,18 @@ func TestValidationBenchmark(t *testing.T) {
 }
 
 // studyName extracts the study name from a MAF file path.
-// e.g. "testdata/tcga/chol_tcga_gdc_data_mutations.txt" -> "chol_tcga_gdc"
 func studyName(path string) string {
 	base := filepath.Base(path)
 	return strings.TrimSuffix(base, "_data_mutations.txt")
+}
+
+type studyResult struct {
+	name           string
+	variants       int
+	categoryCounts map[string]map[output.Category]int
+	duration       time.Duration
+	conseqMatch    int
+	conseqMismatch int
 }
 
 // writeReport generates a markdown validation report.
@@ -140,85 +145,71 @@ func writeReport(t *testing.T, path string, results []studyResult, transcriptCou
 
 	var totVariants, totMatch, totMismatch int
 	for _, r := range results {
-		rate := float64(r.conseqMatches) / float64(r.variants) * 100
+		rate := float64(r.conseqMatch) / float64(r.variants) * 100
 		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %d | %.1f%% |\n",
-			r.name, r.variants, r.conseqMatches, r.conseqMismatch, rate))
+			r.name, r.variants, r.conseqMatch, r.conseqMismatch, rate))
 		totVariants += r.variants
-		totMatch += r.conseqMatches
+		totMatch += r.conseqMatch
 		totMismatch += r.conseqMismatch
 	}
 	totRate := float64(totMatch) / float64(totVariants) * 100
 	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%d** | **%.1f%%** |\n\n",
 		totVariants, totMatch, totMismatch, totRate))
 
-	// HGVSp match table
-	sb.WriteString("## HGVSp Match\n\n")
-	sb.WriteString("| Study | Compared | Match | Mismatch | Match Rate |\n")
-	sb.WriteString("|-------|----------|-------|----------|------------|\n")
+	// Per-column category breakdown
+	colOrder := []string{"consequence", "hgvsp", "hgvsc"}
+	colNames := map[string]string{
+		"consequence": "Consequence",
+		"hgvsp":       "HGVSp",
+		"hgvsc":       "HGVSc",
+	}
 
-	var totHM, totHMM int
-	for _, r := range results {
-		codingTotal := r.hgvspMatches + r.hgvspMismatch
-		rate := float64(0)
-		if codingTotal > 0 {
-			rate = float64(r.hgvspMatches) / float64(codingTotal) * 100
+	for _, col := range colOrder {
+		sb.WriteString(fmt.Sprintf("## %s Category Breakdown\n\n", colNames[col]))
+
+		// Collect all categories across studies
+		allCats := make(map[output.Category]bool)
+		for _, r := range results {
+			for cat := range r.categoryCounts[col] {
+				allCats[cat] = true
+			}
 		}
-		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %d | %.1f%% |\n",
-			r.name, codingTotal, r.hgvspMatches, r.hgvspMismatch, rate))
-		totHM += r.hgvspMatches
-		totHMM += r.hgvspMismatch
-	}
-	totHTotal := totHM + totHMM
-	totHRate := float64(0)
-	if totHTotal > 0 {
-		totHRate = float64(totHM) / float64(totHTotal) * 100
-	}
-	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%d** | **%.1f%%** |\n\n",
-		totHTotal, totHM, totHMM, totHRate))
-
-	// HGVSp match breakdown
-	sb.WriteString("### HGVSp Match Breakdown\n\n")
-	sb.WriteString("| Study | Exact | Fuzzy (fs) | Skipped: empty | Skipped: p.*N* | Skipped: splice |\n")
-	sb.WriteString("|-------|-------|------------|----------------|----------------|------------------|\n")
-
-	var totExact, totFuzzy, totSkEmpty, totSkIntronic, totSkSplice int
-	for _, r := range results {
-		d := r.hgvspDetail
-		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %d | %d | %d |\n",
-			r.name, d.Exact, d.FuzzyFrameshift, d.SkippedEmpty, d.SkippedIntronic, d.SkippedSplice))
-		totExact += d.Exact
-		totFuzzy += d.FuzzyFrameshift
-		totSkEmpty += d.SkippedEmpty
-		totSkIntronic += d.SkippedIntronic
-		totSkSplice += d.SkippedSplice
-	}
-	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%d** | **%d** | **%d** |\n\n",
-		totExact, totFuzzy, totSkEmpty, totSkIntronic, totSkSplice))
-
-	// HGVSc match table
-	sb.WriteString("## HGVSc Match\n\n")
-	sb.WriteString("| Study | Variants | Match | Mismatch | Match Rate |\n")
-	sb.WriteString("|-------|----------|-------|----------|------------|\n")
-
-	var totCM, totCMM int
-	for _, r := range results {
-		codingTotal := r.hgvscMatches + r.hgvscMismatch
-		rate := float64(0)
-		if codingTotal > 0 {
-			rate = float64(r.hgvscMatches) / float64(codingTotal) * 100
+		var catList []output.Category
+		for cat := range allCats {
+			catList = append(catList, cat)
 		}
-		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %d | %.1f%% |\n",
-			r.name, codingTotal, r.hgvscMatches, r.hgvscMismatch, rate))
-		totCM += r.hgvscMatches
-		totCMM += r.hgvscMismatch
+		sort.Slice(catList, func(i, j int) bool { return catList[i] < catList[j] })
+
+		// Header
+		sb.WriteString("| Study |")
+		for _, cat := range catList {
+			sb.WriteString(fmt.Sprintf(" %s |", cat))
+		}
+		sb.WriteString("\n|-------|")
+		for range catList {
+			sb.WriteString("------|")
+		}
+		sb.WriteString("\n")
+
+		// Rows
+		totals := make(map[output.Category]int)
+		for _, r := range results {
+			sb.WriteString(fmt.Sprintf("| %s |", r.name))
+			for _, cat := range catList {
+				count := r.categoryCounts[col][cat]
+				totals[cat] += count
+				sb.WriteString(fmt.Sprintf(" %d |", count))
+			}
+			sb.WriteString("\n")
+		}
+
+		// Total row
+		sb.WriteString("| **Total** |")
+		for _, cat := range catList {
+			sb.WriteString(fmt.Sprintf(" **%d** |", totals[cat]))
+		}
+		sb.WriteString("\n\n")
 	}
-	totCTotal := totCM + totCMM
-	totCRate := float64(0)
-	if totCTotal > 0 {
-		totCRate = float64(totCM) / float64(totCTotal) * 100
-	}
-	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%d** | **%.1f%%** |\n\n",
-		totCTotal, totCM, totCMM, totCRate))
 
 	// Performance table
 	sb.WriteString("## Performance\n\n")
@@ -284,19 +275,4 @@ func findGENCODEFiles(t *testing.T) (gtfPath, fastaPath, canonicalPath string) {
 	}
 
 	return
-}
-
-type studyResult = struct {
-	name           string
-	variants       int
-	conseqMatches  int
-	conseqMismatch int
-	hgvspMatches   int
-	hgvspMismatch  int
-	hgvspSkipped   int
-	hgvspDetail    output.HGVSpDetail
-	hgvscMatches   int
-	hgvscMismatch  int
-	hgvscSkipped   int
-	duration       time.Duration
 }

@@ -4,6 +4,7 @@ package output
 import (
 	"fmt"
 	"io"
+	"regexp"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -13,51 +14,90 @@ import (
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
 
-// ValidationWriter writes comparison output between MAF annotations and VEP predictions.
-type ValidationWriter struct {
-	w              *tabwriter.Writer
-	matches        int
-	mismatches     int
-	total          int
-	hgvspExact          int // exact HGVSp match
-	hgvspFuzzyFS        int // fuzzy frameshift match (both fs, positions differ)
-	hgvspMismatches     int
-	hgvspSkippedEmpty   int // both MAF and VEP HGVSp empty
-	hgvspSkippedIntronic int // MAF has non-standard p.*N* notation
-	hgvspSkippedSplice  int // splice consequence, VEP has no protein effect
-	hgvscMatches    int
-	hgvscMismatches int
-	hgvscSkipped    int
-	showAll         bool // if false, only show mismatches
+// Category classifies the comparison result for a single column.
+type Category string
+
+const (
+	CatMatch            Category = "match"
+	CatBothEmpty        Category = "both_empty"
+	CatFuzzyFS          Category = "fuzzy_fs"
+	CatSpliceVsSyn      Category = "splice_vs_syn"
+	CatMafNonstandard   Category = "maf_nonstandard"
+	CatSpliceNoProtein  Category = "splice_no_protein"
+	CatPositionShift    Category = "position_shift"
+	CatVepEmpty         Category = "vep_empty"
+	CatMafEmpty         Category = "maf_empty"
+	CatUpstreamReclass  Category = "upstream_reclassified"
+	CatMismatch         Category = "mismatch"
+)
+
+// isShownByDefault returns whether rows with this category are shown without --all.
+func isShownByDefault(col string, cat Category) bool {
+	switch cat {
+	case CatMatch, CatBothEmpty:
+		return false
+	case CatMafNonstandard, CatSpliceNoProtein:
+		return false
+	}
+	return true
 }
 
-// NewValidationWriter creates a new validation output writer.
-func NewValidationWriter(w io.Writer, showAll bool) *ValidationWriter {
-	return &ValidationWriter{
+// CompareWriter writes comparison output between MAF annotations and VEP predictions,
+// with category-based classification instead of simple Y/N match indicators.
+type CompareWriter struct {
+	w       *tabwriter.Writer
+	columns map[string]bool             // enabled columns
+	counts  map[string]map[Category]int // column → category → count
+	total   int
+	showAll bool
+}
+
+// NewCompareWriter creates a new comparison output writer.
+// columns is a set of column names to compare (e.g. "consequence", "hgvsp", "hgvsc").
+func NewCompareWriter(w io.Writer, columns map[string]bool, showAll bool) *CompareWriter {
+	counts := make(map[string]map[Category]int)
+	for col := range columns {
+		counts[col] = make(map[Category]int)
+	}
+	return &CompareWriter{
 		w:       tabwriter.NewWriter(w, 0, 0, 2, ' ', 0),
+		columns: columns,
+		counts:  counts,
 		showAll: showAll,
 	}
 }
 
-// WriteHeader writes the validation output header.
-func (v *ValidationWriter) WriteHeader() error {
-	_, err := fmt.Fprintln(v.w, "Variant\tGene\tMAF_Consequence\tVEP_Consequence\tMAF_HGVSp\tVEP_HGVSp\tMAF_HGVSc\tVEP_HGVSc\tConseq_Match\tHGVSp_Match\tHGVSc_Match")
+// WriteHeader writes the comparison output header.
+func (c *CompareWriter) WriteHeader() error {
+	parts := []string{"Variant", "Gene"}
+	if c.columns["consequence"] {
+		parts = append(parts, "MAF_Consequence", "VEP_Consequence")
+	}
+	if c.columns["hgvsp"] {
+		parts = append(parts, "MAF_HGVSp", "VEP_HGVSp")
+	}
+	if c.columns["hgvsc"] {
+		parts = append(parts, "MAF_HGVSc", "VEP_HGVSc")
+	}
+	if c.columns["consequence"] {
+		parts = append(parts, "Conseq")
+	}
+	if c.columns["hgvsp"] {
+		parts = append(parts, "HGVSp")
+	}
+	if c.columns["hgvsc"] {
+		parts = append(parts, "HGVSc")
+	}
+	_, err := fmt.Fprintln(c.w, strings.Join(parts, "\t"))
 	return err
 }
 
 // WriteComparison writes a comparison between MAF annotation and VEP prediction.
-func (v *ValidationWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotation) error {
-	v.total++
+func (c *CompareWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotation) error {
+	c.total++
 
-	// Find the best matching VEP annotation with priority:
-	// 1. Exact transcript ID match
-	// 2. Same gene + canonical
-	// 3. Same gene (any transcript)
-	// 4. Any canonical
-	// 5. First annotation
 	bestAnn := SelectBestAnnotation(mafAnn, vepAnns)
 
-	// Build comparison
 	variantStr := fmt.Sprintf("%s:%d %s>%s", variant.Chrom, variant.Pos, variant.Ref, variant.Alt)
 
 	mafConseq := mafAnn.Consequence
@@ -67,75 +107,60 @@ func (v *ValidationWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAF
 	var vepConseq, vepHGVSp, vepHGVSc string
 	if bestAnn != nil {
 		vepConseq = bestAnn.Consequence
-		vepHGVSp = bestAnn.HGVSp
+		vepHGVSp = hgvspToShort(bestAnn.HGVSp)
 		vepHGVSc = bestAnn.HGVSc
 	}
 
-	// Check consequence match
-	conseqMatch := consequencesMatch(mafConseq, vepConseq)
-
-	var conseqMatchStr string
-	if conseqMatch {
-		v.matches++
-		conseqMatchStr = "Y"
-	} else {
-		v.mismatches++
-		conseqMatchStr = "N"
+	// Categorize each enabled column
+	categories := make(map[string]Category)
+	if c.columns["consequence"] {
+		cat := categorizeConsequence(mafConseq, vepConseq)
+		categories["consequence"] = cat
+		c.counts["consequence"][cat]++
+	}
+	if c.columns["hgvsp"] {
+		cat := categorizeHGVSp(mafHGVSp, vepHGVSp, vepConseq, mafHGVSc, vepHGVSc)
+		categories["hgvsp"] = cat
+		c.counts["hgvsp"][cat]++
+	}
+	if c.columns["hgvsc"] {
+		cat := categorizeHGVSc(mafHGVSc, vepHGVSc)
+		categories["hgvsc"] = cat
+		c.counts["hgvsc"][cat]++
 	}
 
-	// Check HGVSp match
-	hgvspMatch := false
-	hgvspMatchStr := "-"
-	vepHGVSpShort := hgvspToShort(vepHGVSp)
-	if mafHGVSp == "" && vepHGVSp == "" {
-		v.hgvspSkippedEmpty++
-	} else if mafHGVSp == vepHGVSpShort {
-		v.hgvspExact++
-		hgvspMatch = true
-		hgvspMatchStr = "Y"
-	} else if isFrameshiftHGVSp(mafHGVSp) && isFrameshiftHGVSp(vepHGVSpShort) {
-		v.hgvspFuzzyFS++
-		hgvspMatch = true
-		hgvspMatchStr = "~"
-	} else if isNonStandardIntronicHGVSp(mafHGVSp) && vepHGVSp == "" {
-		v.hgvspSkippedIntronic++
-	} else if isSpliceConsequence(vepConseq) && vepHGVSp == "" {
-		v.hgvspSkippedSplice++
-	} else {
-		v.hgvspMismatches++
-		hgvspMatchStr = "N"
+	// Decide whether to show row
+	showRow := c.showAll
+	if !showRow {
+		for col, cat := range categories {
+			if isShownByDefault(col, cat) {
+				showRow = true
+				break
+			}
+		}
 	}
 
-	// Check HGVSc match
-	hgvscMatch := false
-	hgvscMatchStr := "-"
-	if mafHGVSc == "" && vepHGVSc == "" {
-		v.hgvscSkipped++
-	} else if hgvscValuesMatch(mafHGVSc, vepHGVSc) {
-		v.hgvscMatches++
-		hgvscMatch = true
-		hgvscMatchStr = "Y"
-	} else {
-		v.hgvscMismatches++
-		hgvscMatchStr = "N"
-	}
-
-	// Only write if showAll or any mismatch/fuzzy
-	showRow := v.showAll || !conseqMatch || (!hgvspMatch && hgvspMatchStr != "-") || hgvspMatchStr == "~" || (!hgvscMatch && hgvscMatchStr != "-")
 	if showRow {
-		_, err := fmt.Fprintf(v.w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			variantStr,
-			mafAnn.HugoSymbol,
-			mafConseq,
-			vepConseq,
-			mafHGVSp,
-			vepHGVSp,
-			mafHGVSc,
-			vepHGVSc,
-			conseqMatchStr,
-			hgvspMatchStr,
-			hgvscMatchStr,
-		)
+		parts := []string{variantStr, mafAnn.HugoSymbol}
+		if c.columns["consequence"] {
+			parts = append(parts, mafConseq, vepConseq)
+		}
+		if c.columns["hgvsp"] {
+			parts = append(parts, mafHGVSp, vepHGVSp)
+		}
+		if c.columns["hgvsc"] {
+			parts = append(parts, mafHGVSc, vepHGVSc)
+		}
+		if c.columns["consequence"] {
+			parts = append(parts, string(categories["consequence"]))
+		}
+		if c.columns["hgvsp"] {
+			parts = append(parts, string(categories["hgvsp"]))
+		}
+		if c.columns["hgvsc"] {
+			parts = append(parts, string(categories["hgvsc"]))
+		}
+		_, err := fmt.Fprintln(c.w, strings.Join(parts, "\t"))
 		return err
 	}
 
@@ -143,81 +168,157 @@ func (v *ValidationWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAF
 }
 
 // Flush flushes the writer.
-func (v *ValidationWriter) Flush() error {
-	return v.w.Flush()
+func (c *CompareWriter) Flush() error {
+	return c.w.Flush()
 }
 
-// Summary returns match statistics.
-func (v *ValidationWriter) Summary() (total, matches, mismatches int) {
-	return v.total, v.matches, v.mismatches
+// Total returns the total number of variants compared.
+func (c *CompareWriter) Total() int {
+	return c.total
 }
 
-// HGVSpSummary returns HGVSp match statistics.
-func (v *ValidationWriter) HGVSpSummary() (matches, mismatches, skipped int) {
-	return v.hgvspExact + v.hgvspFuzzyFS, v.hgvspMismatches, v.hgvspSkippedEmpty + v.hgvspSkippedIntronic + v.hgvspSkippedSplice
+// Counts returns the category counts for all columns.
+func (c *CompareWriter) Counts() map[string]map[Category]int {
+	return c.counts
 }
 
-// HGVSpDetail holds a detailed breakdown of HGVSp match categories.
-type HGVSpDetail struct {
-	Exact           int // exact single-letter match
-	FuzzyFrameshift int // both are frameshifts, positions differ
-	Mismatches      int
-	SkippedEmpty    int // both MAF and VEP empty
-	SkippedIntronic int // MAF has non-standard p.*N*
-	SkippedSplice   int // splice consequence, VEP has no protein effect
-}
+// WriteSummary writes category counts per column to the given writer.
+func (c *CompareWriter) WriteSummary(w io.Writer) {
+	fmt.Fprintf(w, "\nComparison Summary (%d variants):\n", c.total)
 
-// HGVSpDetailedSummary returns a detailed breakdown of HGVSp match categories.
-func (v *ValidationWriter) HGVSpDetailedSummary() HGVSpDetail {
-	return HGVSpDetail{
-		Exact:           v.hgvspExact,
-		FuzzyFrameshift: v.hgvspFuzzyFS,
-		Mismatches:      v.hgvspMismatches,
-		SkippedEmpty:    v.hgvspSkippedEmpty,
-		SkippedIntronic: v.hgvspSkippedIntronic,
-		SkippedSplice:   v.hgvspSkippedSplice,
+	// Print columns in stable order
+	colOrder := []string{"consequence", "hgvsp", "hgvsc"}
+	colNames := map[string]string{
+		"consequence": "Consequence",
+		"hgvsp":       "HGVSp",
+		"hgvsc":       "HGVSc",
+	}
+
+	for _, col := range colOrder {
+		if !c.columns[col] {
+			continue
+		}
+		cats := c.counts[col]
+		fmt.Fprintf(w, "\n  %s:\n", colNames[col])
+
+		// Sort categories by count descending
+		type catCount struct {
+			cat   Category
+			count int
+		}
+		var sorted []catCount
+		for cat, count := range cats {
+			sorted = append(sorted, catCount{cat, count})
+		}
+		sort.Slice(sorted, func(i, j int) bool {
+			if sorted[i].count != sorted[j].count {
+				return sorted[i].count > sorted[j].count
+			}
+			return sorted[i].cat < sorted[j].cat
+		})
+
+		for _, cc := range sorted {
+			fmt.Fprintf(w, "    %-20s%d\n", cc.cat, cc.count)
+		}
 	}
 }
 
-// HGVScSummary returns HGVSc match statistics.
-func (v *ValidationWriter) HGVScSummary() (matches, mismatches, skipped int) {
-	return v.hgvscMatches, v.hgvscMismatches, v.hgvscSkipped
+// categorizeConsequence classifies the consequence comparison.
+func categorizeConsequence(mafConseq, vepConseq string) Category {
+	normMAF := normalizeConsequence(mafConseq)
+	normVEP := normalizeConsequence(vepConseq)
+
+	if normMAF == normVEP {
+		return CatMatch
+	}
+
+	// When MAF says upstream/downstream, our tool may find a more specific consequence.
+	if normMAF == "downstream_gene_variant" || normMAF == "upstream_gene_variant" {
+		return CatUpstreamReclass
+	}
+
+	// Primary term match covers sub-annotation differences.
+	if primaryConsequence(normMAF) == primaryConsequence(normVEP) {
+		return CatMatch
+	}
+
+	return CatMismatch
 }
 
-// WriteSummary writes a summary of the validation results.
-func (v *ValidationWriter) WriteSummary(w io.Writer) {
-	conseqRate := float64(0)
-	if v.total > 0 {
-		conseqRate = float64(v.matches) / float64(v.total) * 100
+// spliceVsSynRe matches MAF splice notation like p.X125_splice.
+var spliceVsSynRe = regexp.MustCompile(`^p\.[A-Z]\d+_splice$`)
+
+// synNotationRe matches VEP synonymous notation like p.Xxx123= or p.X123=.
+var synNotationRe = regexp.MustCompile(`^p\.\w+=`)
+
+// categorizeHGVSp classifies the HGVSp comparison.
+// Both mafHGVSp and vepHGVSp should be in single-letter amino acid format.
+func categorizeHGVSp(mafHGVSp, vepHGVSp, vepConseq, mafHGVSc, vepHGVSc string) Category {
+	if mafHGVSp == "" && vepHGVSp == "" {
+		return CatBothEmpty
 	}
-	hgvspMatches := v.hgvspExact + v.hgvspFuzzyFS
-	hgvspTotal := hgvspMatches + v.hgvspMismatches
-	hgvspRate := float64(0)
-	if hgvspTotal > 0 {
-		hgvspRate = float64(hgvspMatches) / float64(hgvspTotal) * 100
+
+	if mafHGVSp == vepHGVSp {
+		return CatMatch
 	}
-	hgvspSkipped := v.hgvspSkippedEmpty + v.hgvspSkippedIntronic + v.hgvspSkippedSplice
-	fmt.Fprintf(w, "\nValidation Summary:\n")
-	fmt.Fprintf(w, "  Total variants:       %d\n", v.total)
-	fmt.Fprintf(w, "  Consequence matches:  %d (%.1f%%)\n", v.matches, conseqRate)
-	fmt.Fprintf(w, "  Consequence mismatch: %d (%.1f%%)\n", v.mismatches, 100-conseqRate)
-	fmt.Fprintf(w, "  HGVSp matches:        %d/%d (%.1f%%)\n", hgvspMatches, hgvspTotal, hgvspRate)
-	fmt.Fprintf(w, "    exact:              %d\n", v.hgvspExact)
-	fmt.Fprintf(w, "    fuzzy (frameshift): %d\n", v.hgvspFuzzyFS)
-	fmt.Fprintf(w, "  HGVSp mismatches:     %d/%d\n", v.hgvspMismatches, hgvspTotal)
-	fmt.Fprintf(w, "  HGVSp skipped:        %d\n", hgvspSkipped)
-	fmt.Fprintf(w, "    both empty:         %d\n", v.hgvspSkippedEmpty)
-	fmt.Fprintf(w, "    non-standard p.*N*: %d\n", v.hgvspSkippedIntronic)
-	fmt.Fprintf(w, "    splice (no protein):%d\n", v.hgvspSkippedSplice)
-	hgvscTotal := v.hgvscMatches + v.hgvscMismatches
-	hgvscRate := float64(0)
-	if hgvscTotal > 0 {
-		hgvscRate = float64(v.hgvscMatches) / float64(hgvscTotal) * 100
+
+	if isFrameshiftHGVSp(mafHGVSp) && isFrameshiftHGVSp(vepHGVSp) {
+		return CatFuzzyFS
 	}
-	fmt.Fprintf(w, "  HGVSc matches:        %d/%d (%.1f%%)\n", v.hgvscMatches, hgvscTotal, hgvscRate)
-	fmt.Fprintf(w, "  HGVSc mismatches:     %d/%d\n", v.hgvscMismatches, hgvscTotal)
-	fmt.Fprintf(w, "  HGVSc skipped:        %d\n", v.hgvscSkipped)
+
+	if spliceVsSynRe.MatchString(mafHGVSp) && synNotationRe.MatchString(vepHGVSp) {
+		return CatSpliceVsSyn
+	}
+
+	if isNonStandardIntronicHGVSp(mafHGVSp) && vepHGVSp == "" {
+		return CatMafNonstandard
+	}
+
+	if isSpliceConsequence(vepConseq) && vepHGVSp == "" {
+		return CatSpliceNoProtein
+	}
+
+	if mafHGVSp == "" && vepHGVSp != "" {
+		return CatMafEmpty
+	}
+
+	if vepHGVSp == "" && mafHGVSp != "" {
+		return CatVepEmpty
+	}
+
+	// Position shift: both non-empty, same amino acid change but different positions.
+	// Covers GENCODE version differences where transcript coordinates shifted.
+	if mafHGVSp != "" && vepHGVSp != "" {
+		if hgvspChangeType(mafHGVSp) == hgvspChangeType(vepHGVSp) {
+			return CatPositionShift
+		}
+		// Also catch indel position shifts where HGVSc matches but HGVSp positions differ
+		if hgvscValuesMatch(mafHGVSc, vepHGVSc) {
+			return CatPositionShift
+		}
+	}
+
+	return CatMismatch
 }
+
+// categorizeHGVSc classifies the HGVSc comparison.
+func categorizeHGVSc(mafHGVSc, vepHGVSc string) Category {
+	if mafHGVSc == "" && vepHGVSc == "" {
+		return CatBothEmpty
+	}
+	if hgvscValuesMatch(mafHGVSc, vepHGVSc) {
+		return CatMatch
+	}
+	if mafHGVSc == "" {
+		return CatMafEmpty
+	}
+	if vepHGVSc == "" {
+		return CatVepEmpty
+	}
+	return CatMismatch
+}
+
+// --- Shared helpers (moved from validation.go) ---
 
 // transcriptBaseID strips the version suffix (e.g. ".4") from a transcript ID.
 // "ENST00000333418.4" → "ENST00000333418", "ENST00000333418" → "ENST00000333418".
@@ -271,7 +372,7 @@ func SelectBestAnnotation(mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotat
 	return bestAnn
 }
 
-// AnnotationBetter returns true if ann is a better pick than current for validation.
+// AnnotationBetter returns true if ann is a better pick than current for comparison.
 // Priority: canonical > protein-coding biotype > higher impact.
 func AnnotationBetter(ann, current *annotate.Annotation) bool {
 	if ann.IsCanonical != current.IsCanonical {
@@ -339,7 +440,6 @@ func hgvspToShort(hgvsp string) string {
 	result := hgvsp
 	for single, three := range annotate.AminoAcidSingleToThree {
 		if single == '*' {
-			// Replace Ter with * for stop codons
 			result = strings.ReplaceAll(result, three, "*")
 		} else {
 			result = strings.ReplaceAll(result, three, string(single))
@@ -348,22 +448,17 @@ func hgvspToShort(hgvsp string) string {
 	return result
 }
 
-// hgvspValuesMatch compares MAF HGVSp (single-letter) with VEP HGVSp (3-letter)
-// by normalizing both to single-letter format.
-func hgvspValuesMatch(mafHGVSp, vepHGVSp string) bool {
-	if mafHGVSp == "" && vepHGVSp == "" {
-		return true
+// hgvspChangeType extracts the amino acid change signature from a single-letter
+// HGVSp by stripping position numbers.
+// e.g. "p.Y1145C" → "p.YC", "p.A735=" → "p.A=", "p.I874del" → "p.Idel"
+func hgvspChangeType(hgvsp string) string {
+	var b strings.Builder
+	for _, r := range hgvsp {
+		if r < '0' || r > '9' {
+			b.WriteRune(r)
+		}
 	}
-	// Normalize VEP 3-letter to single-letter for comparison
-	vepShort := hgvspToShort(vepHGVSp)
-	if mafHGVSp == vepShort {
-		return true
-	}
-	// Fuzzy match: both are frameshifts (positions may differ due to GENCODE version)
-	if isFrameshiftHGVSp(mafHGVSp) && isFrameshiftHGVSp(vepShort) {
-		return true
-	}
-	return false
+	return b.String()
 }
 
 // hgvscValuesMatch compares MAF HGVSc with VEP HGVSc.
@@ -373,7 +468,6 @@ func hgvscValuesMatch(mafHGVSc, vepHGVSc string) bool {
 	if mafHGVSc == "" && vepHGVSc == "" {
 		return true
 	}
-	// Strip transcript ID prefix from MAF value
 	mafNorm := mafHGVSc
 	if idx := strings.LastIndex(mafNorm, ":"); idx >= 0 {
 		mafNorm = mafNorm[idx+1:]
@@ -383,28 +477,22 @@ func hgvscValuesMatch(mafHGVSc, vepHGVSc string) bool {
 
 // consequencesMatch checks if MAF and VEP consequences should be considered matching.
 func consequencesMatch(mafConseq, vepConseq string) bool {
-	normMAF := normalizeConsequence(mafConseq)
-	normVEP := normalizeConsequence(vepConseq)
+	return categorizeConsequence(mafConseq, vepConseq) == CatMatch
+}
 
-	if normMAF == normVEP {
+// hgvspValuesMatch compares MAF HGVSp (single-letter) with VEP HGVSp (3-letter)
+// by normalizing both to single-letter format.
+func hgvspValuesMatch(mafHGVSp, vepHGVSp string) bool {
+	if mafHGVSp == "" && vepHGVSp == "" {
 		return true
 	}
-
-	// When MAF says upstream/downstream, the variant is outside the MAF's
-	// transcript. Our tool may find a different (often longer) transcript that
-	// contains the variant, giving a more specific consequence. This is expected
-	// when different canonical transcript sets are used.
-	if normMAF == "downstream_gene_variant" || normMAF == "upstream_gene_variant" {
+	vepShort := hgvspToShort(vepHGVSp)
+	if mafHGVSp == vepShort {
 		return true
 	}
-
-	// Fallback: if the primary (highest-impact) term matches, treat as match.
-	// This handles cases where MAF and VEP agree on the main consequence but
-	// differ in sub-annotations (e.g. extra NMD_transcript_variant modifiers).
-	if primaryConsequence(normMAF) == primaryConsequence(normVEP) {
+	if isFrameshiftHGVSp(mafHGVSp) && isFrameshiftHGVSp(vepShort) {
 		return true
 	}
-
 	return false
 }
 
@@ -448,10 +536,10 @@ func normalizeConsequence(conseq string) string {
 		"igr":                      "intergenic_variant",
 		"3'flank":                  "downstream_gene_variant",
 		"5'flank":                  "upstream_gene_variant",
-		"protein_altering_variant":  "inframe_variant", // generic MAF term for in-frame changes
-		"inframe_deletion":          "inframe_variant",
-		"inframe_insertion":         "inframe_variant",
-		"mature_mirna_variant":      "non_coding_transcript_exon_variant", // miRNA exon variant
+		"protein_altering_variant": "inframe_variant",
+		"inframe_deletion":         "inframe_variant",
+		"inframe_insertion":        "inframe_variant",
+		"mature_mirna_variant":     "non_coding_transcript_exon_variant",
 	}
 
 	// Split on comma, normalize each term
@@ -505,11 +593,9 @@ func normalizeConsequence(conseq string) string {
 			if hasPrimary && t == "splice_region_variant" {
 				continue
 			}
-			// Drop UTR terms when a HIGH-impact consequence is present
 			if hasHighImpact && (t == "5_prime_utr_variant" || t == "3_prime_utr_variant") {
 				continue
 			}
-			// Drop stop_gained/stop_lost co-occurring with frameshift (inconsistently reported)
 			if hasFrameshift && (t == "stop_gained" || t == "stop_lost") {
 				continue
 			}
