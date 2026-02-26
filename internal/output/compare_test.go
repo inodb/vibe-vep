@@ -24,6 +24,7 @@ func TestCategorizeConsequence(t *testing.T) {
 		{"primary term match", "missense_variant", "missense_variant,NMD_transcript_variant", CatMatch},
 		{"upstream reclassified", "5'Flank", "5_prime_utr_variant", CatUpstreamReclass},
 		{"downstream reclassified", "3'Flank", "intron_variant", CatUpstreamReclass},
+		{"no cds data", "synonymous_variant", "coding_sequence_variant", CatNoCDS},
 		{"mismatch", "missense_variant", "synonymous_variant", CatMismatch},
 	}
 	for _, tt := range tests {
@@ -126,7 +127,7 @@ func TestCategorizeHGVSc(t *testing.T) {
 		{"position shift del", "ENST00000295754.10:c.94+16291_94+16307del", "c.94+16290_94+16306del", CatPositionShift},
 		{"position shift dup", "ENST00000357077.9:c.4426dup", "c.4427dup", CatPositionShift},
 		{"mismatch delins vs del", "ENST00000324385.9:c.1382_1407delinsG", "c.1383_1407del", CatMismatch},
-		{"mismatch dup vs ins", "ENST00000397901.8:c.*46_*49dup", "c.*49_*50insAAGG", CatMismatch},
+		{"dup vs ins", "ENST00000397901.8:c.*46_*49dup", "c.*49_*50insAAGG", CatDupVsIns},
 		{"mismatch different SNV", "ENST00000361923.2:c.1428C>G", "c.999A>T", CatMismatch},
 	}
 	for _, tt := range tests {

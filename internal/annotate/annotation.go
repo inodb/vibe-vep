@@ -32,6 +32,9 @@ const (
 	ConsequenceStopRetained        = "stop_retained_variant"
 	ConsequenceStartRetained       = "start_retained_variant"
 
+	// LOW impact (generic coding)
+	ConsequenceCodingSequenceVariant = "coding_sequence_variant"
+
 	// MODIFIER impact
 	ConsequenceIntronVariant       = "intron_variant"
 	Consequence5PrimeUTR           = "5_prime_UTR_variant"
@@ -80,7 +83,8 @@ func GetImpact(consequence string) string {
 			ConsequenceInframeDeletion:
 			impact = ImpactModerate
 		case ConsequenceSynonymousVariant, ConsequenceSpliceRegion,
-			ConsequenceStopRetained, ConsequenceStartRetained:
+			ConsequenceStopRetained, ConsequenceStartRetained,
+			ConsequenceCodingSequenceVariant:
 			impact = ImpactLow
 		default:
 			impact = ImpactModifier

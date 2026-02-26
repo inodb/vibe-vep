@@ -26,6 +26,8 @@ const (
 	CatVepEmpty         Category = "vep_empty"
 	CatMafEmpty         Category = "maf_empty"
 	CatUpstreamReclass  Category = "upstream_reclassified"
+	CatNoCDS            Category = "no_cds_data"
+	CatDupVsIns         Category = "dup_vs_ins"
 	CatMismatch         Category = "mismatch"
 )
 
@@ -34,7 +36,7 @@ func isShownByDefault(col string, cat Category) bool {
 	switch cat {
 	case CatMatch, CatBothEmpty:
 		return false
-	case CatMafNonstandard, CatSpliceNoProtein:
+	case CatMafNonstandard, CatSpliceNoProtein, CatNoCDS, CatDupVsIns:
 		return false
 	}
 	return true
@@ -235,6 +237,12 @@ func categorizeConsequence(mafConseq, vepConseq string) Category {
 		return CatUpstreamReclass
 	}
 
+	// coding_sequence_variant means we lacked CDS data to determine the specific
+	// coding consequence. Accept any coding consequence from MAF as a match.
+	if normVEP == "coding_sequence_variant" && isCodingConsequence(mafConseq) {
+		return CatNoCDS
+	}
+
 	// Primary term match covers sub-annotation differences.
 	if primaryConsequence(normMAF) == primaryConsequence(normVEP) {
 		return CatMatch
@@ -274,6 +282,10 @@ func categorizeHGVSp(mafHGVSp, vepHGVSp, vepConseq, mafHGVSc, vepHGVSc string) C
 
 	if isSpliceConsequence(vepConseq) && vepHGVSp == "" {
 		return CatSpliceNoProtein
+	}
+
+	if strings.Contains(vepConseq, "coding_sequence_variant") && vepHGVSp == "" {
+		return CatNoCDS
 	}
 
 	if mafHGVSp == "" && vepHGVSp != "" {
@@ -317,6 +329,18 @@ func categorizeHGVSc(mafHGVSc, vepHGVSc string) Category {
 	if hgvscOperation(mafHGVSc) != "" && hgvscOperation(mafHGVSc) == hgvscOperation(vepHGVSc) {
 		return CatPositionShift
 	}
+
+	// Dup vs ins: one side reports a duplication, the other an insertion.
+	// This occurs when we lack reference sequence context for non-CDS positions.
+	mafNorm := mafHGVSc
+	if idx := strings.LastIndex(mafNorm, ":"); idx >= 0 {
+		mafNorm = mafNorm[idx+1:]
+	}
+	if (strings.Contains(mafNorm, "dup") && strings.Contains(vepHGVSc, "ins")) ||
+		(strings.Contains(mafNorm, "ins") && strings.Contains(vepHGVSc, "dup")) {
+		return CatDupVsIns
+	}
+
 	return CatMismatch
 }
 
@@ -584,7 +608,6 @@ func normalizeConsequence(conseq string) string {
 		// Drop modifier-only terms that don't change the primary consequence
 		switch term {
 		case "non_coding_transcript_variant", "nmd_transcript_variant",
-			"coding_sequence_variant",
 			"splice_polypyrimidine_tract_variant":
 			continue
 		}

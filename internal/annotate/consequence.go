@@ -202,7 +202,7 @@ func predictCodingConsequence(v *vcf.Variant, t *cache.Transcript, exon *cache.E
 	// SNV - calculate amino acid change
 	if len(t.CDSSequence) == 0 {
 		// No CDS sequence available, can't determine AA change
-		result.Consequence = ConsequenceMissenseVariant // Assume missense
+		result.Consequence = ConsequenceCodingSequenceVariant
 		result.Impact = GetImpact(result.Consequence)
 		return result
 	}
@@ -210,7 +210,7 @@ func predictCodingConsequence(v *vcf.Variant, t *cache.Transcript, exon *cache.E
 	// Get reference codon
 	refCodon := GetCodon(t.CDSSequence, codonNum)
 	if len(refCodon) != 3 {
-		result.Consequence = ConsequenceMissenseVariant
+		result.Consequence = ConsequenceCodingSequenceVariant
 		result.Impact = GetImpact(result.Consequence)
 		return result
 	}
