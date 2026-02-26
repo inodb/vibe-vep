@@ -103,6 +103,7 @@ func TestValidationBenchmark(t *testing.T) {
 				hgvspMatches:   hgvspM,
 				hgvspMismatch:  hgvspMM,
 				hgvspSkipped:   hgvspS,
+				hgvspDetail:    valWriter.HGVSpDetailedSummary(),
 				hgvscMatches:   hgvscM,
 				hgvscMismatch:  hgvscMM,
 				hgvscSkipped:   hgvscS,
@@ -152,8 +153,8 @@ func writeReport(t *testing.T, path string, results []studyResult, transcriptCou
 
 	// HGVSp match table
 	sb.WriteString("## HGVSp Match\n\n")
-	sb.WriteString("| Study | Coding Variants | Match | Mismatch | Match Rate |\n")
-	sb.WriteString("|-------|----------------|-------|----------|------------|\n")
+	sb.WriteString("| Study | Compared | Match | Mismatch | Match Rate |\n")
+	sb.WriteString("|-------|----------|-------|----------|------------|\n")
 
 	var totHM, totHMM int
 	for _, r := range results {
@@ -174,6 +175,25 @@ func writeReport(t *testing.T, path string, results []studyResult, transcriptCou
 	}
 	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%d** | **%.1f%%** |\n\n",
 		totHTotal, totHM, totHMM, totHRate))
+
+	// HGVSp match breakdown
+	sb.WriteString("### HGVSp Match Breakdown\n\n")
+	sb.WriteString("| Study | Exact | Fuzzy (fs) | Skipped: empty | Skipped: p.*N* | Skipped: splice |\n")
+	sb.WriteString("|-------|-------|------------|----------------|----------------|------------------|\n")
+
+	var totExact, totFuzzy, totSkEmpty, totSkIntronic, totSkSplice int
+	for _, r := range results {
+		d := r.hgvspDetail
+		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %d | %d | %d |\n",
+			r.name, d.Exact, d.FuzzyFrameshift, d.SkippedEmpty, d.SkippedIntronic, d.SkippedSplice))
+		totExact += d.Exact
+		totFuzzy += d.FuzzyFrameshift
+		totSkEmpty += d.SkippedEmpty
+		totSkIntronic += d.SkippedIntronic
+		totSkSplice += d.SkippedSplice
+	}
+	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%d** | **%d** | **%d** |\n\n",
+		totExact, totFuzzy, totSkEmpty, totSkIntronic, totSkSplice))
 
 	// HGVSc match table
 	sb.WriteString("## HGVSc Match\n\n")
@@ -274,6 +294,7 @@ type studyResult = struct {
 	hgvspMatches   int
 	hgvspMismatch  int
 	hgvspSkipped   int
+	hgvspDetail    output.HGVSpDetail
 	hgvscMatches   int
 	hgvscMismatch  int
 	hgvscSkipped   int

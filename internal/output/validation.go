@@ -157,6 +157,28 @@ func (v *ValidationWriter) HGVSpSummary() (matches, mismatches, skipped int) {
 	return v.hgvspExact + v.hgvspFuzzyFS, v.hgvspMismatches, v.hgvspSkippedEmpty + v.hgvspSkippedIntronic + v.hgvspSkippedSplice
 }
 
+// HGVSpDetail holds a detailed breakdown of HGVSp match categories.
+type HGVSpDetail struct {
+	Exact           int // exact single-letter match
+	FuzzyFrameshift int // both are frameshifts, positions differ
+	Mismatches      int
+	SkippedEmpty    int // both MAF and VEP empty
+	SkippedIntronic int // MAF has non-standard p.*N*
+	SkippedSplice   int // splice consequence, VEP has no protein effect
+}
+
+// HGVSpDetailedSummary returns a detailed breakdown of HGVSp match categories.
+func (v *ValidationWriter) HGVSpDetailedSummary() HGVSpDetail {
+	return HGVSpDetail{
+		Exact:           v.hgvspExact,
+		FuzzyFrameshift: v.hgvspFuzzyFS,
+		Mismatches:      v.hgvspMismatches,
+		SkippedEmpty:    v.hgvspSkippedEmpty,
+		SkippedIntronic: v.hgvspSkippedIntronic,
+		SkippedSplice:   v.hgvspSkippedSplice,
+	}
+}
+
 // HGVScSummary returns HGVSc match statistics.
 func (v *ValidationWriter) HGVScSummary() (matches, mismatches, skipped int) {
 	return v.hgvscMatches, v.hgvscMismatches, v.hgvscSkipped
