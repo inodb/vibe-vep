@@ -315,7 +315,26 @@ func categorizeHGVSc(mafHGVSc, vepHGVSc string) Category {
 	if vepHGVSc == "" {
 		return CatVepEmpty
 	}
+	// Position shift: same operation (base change or indel type) at different positions.
+	if hgvscOperation(mafHGVSc) != "" && hgvscOperation(mafHGVSc) == hgvscOperation(vepHGVSc) {
+		return CatPositionShift
+	}
 	return CatMismatch
+}
+
+// hgvscOpRe extracts the operation from an HGVSc value:
+// SNVs: "A>G" from "c.1428A>G"
+// Indels: "del", "dup", "delinsGGC", "insTTC" etc.
+var hgvscOpRe = regexp.MustCompile(`([ACGT]>[ACGT]|(?:del|dup|ins)\w*)$`)
+
+// hgvscOperation extracts the change operation from an HGVSc value,
+// stripping transcript prefix and position information.
+func hgvscOperation(hgvsc string) string {
+	// Strip transcript prefix
+	if idx := strings.LastIndex(hgvsc, ":"); idx >= 0 {
+		hgvsc = hgvsc[idx+1:]
+	}
+	return hgvscOpRe.FindString(hgvsc)
 }
 
 // --- Shared helpers (moved from validation.go) ---
