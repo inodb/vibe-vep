@@ -316,8 +316,6 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 			// Check if in-frame insertion creates a stop codon
 			if indelCreatesStop(v, t, result.CDSPosition) {
 				result.Consequence = ConsequenceStopGained
-				result.Impact = GetImpact(result.Consequence)
-				return result
 			}
 		} else {
 			result.Consequence = ConsequenceInframeDeletion
@@ -538,6 +536,39 @@ func GenomicToCDS(genomicPos int64, t *cache.Transcript) int64 {
 			if genomicPos < cdsStart {
 				// Position is after this exon (in genomic terms, before in CDS terms)
 				cdsPos += cdsEnd - cdsStart + 1
+			}
+		}
+	}
+
+	return 0
+}
+
+// GenomicToTranscriptPos converts a genomic position to a transcript-relative
+// exonic position (1-based). This is used for non-coding transcripts where
+// positions are counted from the transcript 5' end. Returns 0 if the position
+// is not within an exon.
+func GenomicToTranscriptPos(genomicPos int64, t *cache.Transcript) int64 {
+	var pos int64
+
+	if t.IsForwardStrand() {
+		for _, exon := range t.Exons {
+			if genomicPos >= exon.Start && genomicPos <= exon.End {
+				pos += genomicPos - exon.Start + 1
+				return pos
+			}
+			if genomicPos > exon.End {
+				pos += exon.End - exon.Start + 1
+			}
+		}
+	} else {
+		for i := len(t.Exons) - 1; i >= 0; i-- {
+			exon := t.Exons[i]
+			if genomicPos >= exon.Start && genomicPos <= exon.End {
+				pos += exon.End - genomicPos + 1
+				return pos
+			}
+			if genomicPos < exon.Start {
+				pos += exon.End - exon.Start + 1
 			}
 		}
 	}

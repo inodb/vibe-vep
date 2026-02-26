@@ -7,8 +7,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"text/tabwriter"
-
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/maf"
 	"github.com/inodb/vibe-vep/internal/vcf"
@@ -42,10 +40,10 @@ func isShownByDefault(col string, cat Category) bool {
 	return true
 }
 
-// CompareWriter writes comparison output between MAF annotations and VEP predictions,
-// with category-based classification instead of simple Y/N match indicators.
+// CompareWriter writes tab-delimited comparison output between MAF annotations
+// and VEP predictions, with category-based classification.
 type CompareWriter struct {
-	w       *tabwriter.Writer
+	w       io.Writer
 	columns map[string]bool             // enabled columns
 	counts  map[string]map[Category]int // column → category → count
 	total   int
@@ -60,7 +58,7 @@ func NewCompareWriter(w io.Writer, columns map[string]bool, showAll bool) *Compa
 		counts[col] = make(map[Category]int)
 	}
 	return &CompareWriter{
-		w:       tabwriter.NewWriter(w, 0, 0, 2, ' ', 0),
+		w:       w,
 		columns: columns,
 		counts:  counts,
 		showAll: showAll,
@@ -167,9 +165,9 @@ func (c *CompareWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAFAnn
 	return nil
 }
 
-// Flush flushes the writer.
+// Flush is a no-op (kept for interface compatibility).
 func (c *CompareWriter) Flush() error {
-	return c.w.Flush()
+	return nil
 }
 
 // Total returns the total number of variants compared.
@@ -392,7 +390,7 @@ func SelectBestAnnotation(mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotat
 }
 
 // AnnotationBetter returns true if ann is a better pick than current for comparison.
-// Priority: canonical > protein-coding biotype > higher impact.
+// Priority: canonical > protein-coding biotype > higher impact > has HGVSp.
 func AnnotationBetter(ann, current *annotate.Annotation) bool {
 	if ann.IsCanonical != current.IsCanonical {
 		return ann.IsCanonical
@@ -402,7 +400,17 @@ func AnnotationBetter(ann, current *annotate.Annotation) bool {
 	if annCoding != curCoding {
 		return annCoding
 	}
-	return annotate.ImpactRank(ann.Impact) > annotate.ImpactRank(current.Impact)
+	annImpact := annotate.ImpactRank(ann.Impact)
+	curImpact := annotate.ImpactRank(current.Impact)
+	if annImpact != curImpact {
+		return annImpact > curImpact
+	}
+	// Prefer annotations with HGVSp (e.g. protein_coding over protein_coding_LoF
+	// which may lack CDS sequence data)
+	if (ann.HGVSp != "") != (current.HGVSp != "") {
+		return ann.HGVSp != ""
+	}
+	return false
 }
 
 // isProteinCodingBiotype returns true if the biotype has coding potential.

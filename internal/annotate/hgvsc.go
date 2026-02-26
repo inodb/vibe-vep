@@ -20,9 +20,10 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		return ""
 	}
 
-	// Non-coding transcripts use n. notation — skip for now
+	// Determine prefix: c. for coding, n. for non-coding
+	prefix := "c."
 	if !t.IsProteinCoding() {
-		return ""
+		prefix = "n."
 	}
 
 	// Get ref/alt on coding strand
@@ -41,7 +42,7 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 
 	// SNV
 	if !v.IsIndel() {
-		return "c." + startPosStr + ref + ">" + alt
+		return prefix + startPosStr + ref + ">" + alt
 	}
 
 	// Indel handling
@@ -120,7 +121,7 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		}
 		afterStr := genomicToHGVScPos(insAfterPos, t)
 		beforeStr := genomicToHGVScPos(insBeforePos, t)
-		return "c." + afterStr + "_" + beforeStr + "ins" + insertedSeq
+		return prefix + afterStr + "_" + beforeStr + "ins" + insertedSeq
 	}
 
 	// Deletion (or delins if alt has extra bases beyond shared prefix)
@@ -174,20 +175,20 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 			return "c." + strconv.Itoa(sStart+1) + "_" + strconv.Itoa(sEnd+1) + "del"
 		}
 
-		// Fall back to genomic-based positions for intronic/UTR deletions
+		// Fall back to genomic-based positions for intronic/UTR/non-coding deletions
 		delStartStr := genomicToHGVScPos(delStartGenomic, t)
 		if len(codingExtraAlt) > 0 {
 			if delStartGenomic == delEndGenomic {
-				return "c." + delStartStr + "delins" + codingExtraAlt
+				return prefix + delStartStr + "delins" + codingExtraAlt
 			}
 			delEndStr := genomicToHGVScPos(delEndGenomic, t)
-			return "c." + delStartStr + "_" + delEndStr + "delins" + codingExtraAlt
+			return prefix + delStartStr + "_" + delEndStr + "delins" + codingExtraAlt
 		}
 		if delStartGenomic == delEndGenomic {
-			return "c." + delStartStr + "del"
+			return prefix + delStartStr + "del"
 		}
 		delEndStr := genomicToHGVScPos(delEndGenomic, t)
-		return "c." + delStartStr + "_" + delEndStr + "del"
+		return prefix + delStartStr + "_" + delEndStr + "del"
 	}
 
 	// MNV (same length ref/alt, len > 1) — treat as delins
@@ -196,27 +197,37 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		if t.IsReverseStrand() {
 			startPosStr, endPosStr = genomicToHGVScPos(v.Pos+int64(refLen)-1, t), startPosStr
 		}
-		return "c." + startPosStr + "_" + endPosStr + "delins" + alt
+		return prefix + startPosStr + "_" + endPosStr + "delins" + alt
 	}
 
 	return ""
 }
 
 // genomicToHGVScPos converts a genomic position to an HGVSc position string.
-// Returns strings like "76", "88+1", "89-2", "-14", "*6".
+// For coding transcripts, returns strings like "76", "88+1", "89-2", "-14", "*6".
+// For non-coding transcripts, returns transcript-relative positions like "127", "42+5".
 func genomicToHGVScPos(pos int64, t *cache.Transcript) string {
-	if !t.IsProteinCoding() {
-		return ""
-	}
-
 	// Check if position is in an exon
 	exon := t.FindExon(pos)
 	if exon != nil {
-		return exonicHGVScPos(pos, exon, t)
+		if t.IsProteinCoding() {
+			return exonicHGVScPos(pos, exon, t)
+		}
+		return nonCodingExonicPos(pos, t)
 	}
 
 	// Intronic position — find flanking exons
 	return intronicHGVScPos(pos, t)
+}
+
+// nonCodingExonicPos returns the transcript position for an exonic position in a
+// non-coding transcript. Position 1 is the first exonic base at the 5' end.
+func nonCodingExonicPos(pos int64, t *cache.Transcript) string {
+	txPos := GenomicToTranscriptPos(pos, t)
+	if txPos > 0 {
+		return strconv.FormatInt(txPos, 10)
+	}
+	return ""
 }
 
 // exonicHGVScPos returns the HGVSc position for an exonic position.
@@ -374,6 +385,11 @@ func intronicHGVScPos(pos int64, t *cache.Transcript) string {
 // exonBoundaryHGVScPos returns the HGVSc position string for an exon boundary.
 // The boundary is the exon position closest to the intron.
 func exonBoundaryHGVScPos(genomicPos int64, exon *cache.Exon, t *cache.Transcript) string {
+	// Non-coding transcripts use transcript-relative position
+	if !t.IsProteinCoding() {
+		return nonCodingExonicPos(genomicPos, t)
+	}
+
 	// If the boundary is in the CDS, use CDS position
 	if exon.IsCoding() && genomicPos >= exon.CDSStart && genomicPos <= exon.CDSEnd {
 		cdsPos := GenomicToCDS(genomicPos, t)
