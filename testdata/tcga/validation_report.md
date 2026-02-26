@@ -1,69 +1,69 @@
 # TCGA Validation Report
 
-Generated: 2026-02-26 04:07 UTC  
+Generated: 2026-02-26 12:49 UTC  
 GENCODE transcripts loaded: 254070
 
 ## Consequence Match
 
 | Study | Variants | Match | Mismatch | Match Rate |
 |-------|----------|-------|----------|------------|
-| blca_tcga_gdc | 116684 | 116516 | 168 | 99.9% |
+| blca_tcga_gdc | 116684 | 116513 | 171 | 99.9% |
 | brca_tcga_gdc | 89012 | 88874 | 138 | 99.8% |
 | chol_tcga_gdc | 3764 | 3760 | 4 | 99.9% |
-| coad_tcga_gdc | 244552 | 244136 | 416 | 99.8% |
-| gbm_tcga_gdc | 54870 | 54786 | 84 | 99.8% |
-| luad_tcga_gdc | 190868 | 190582 | 286 | 99.9% |
-| skcm_tcga_gdc | 353450 | 352782 | 668 | 99.8% |
-| **Total** | **1053200** | **1051436** | **1764** | **99.8%** |
+| coad_tcga_gdc | 244552 | 244131 | 421 | 99.8% |
+| gbm_tcga_gdc | 54870 | 54785 | 85 | 99.8% |
+| luad_tcga_gdc | 190868 | 190581 | 287 | 99.8% |
+| skcm_tcga_gdc | 353450 | 352780 | 670 | 99.8% |
+| **Total** | **1053200** | **1051424** | **1776** | **99.8%** |
 
-## HGVSp Match
+## Consequence Category Breakdown
 
-| Study | Compared | Match | Mismatch | Match Rate |
-|-------|----------|-------|----------|------------|
-| blca_tcga_gdc | 113507 | 111277 | 2230 | 98.0% |
-| brca_tcga_gdc | 87015 | 84984 | 2031 | 97.7% |
-| chol_tcga_gdc | 3647 | 3539 | 108 | 97.0% |
-| coad_tcga_gdc | 236750 | 231237 | 5513 | 97.7% |
-| gbm_tcga_gdc | 53539 | 52418 | 1121 | 97.9% |
-| luad_tcga_gdc | 185974 | 182542 | 3432 | 98.2% |
-| skcm_tcga_gdc | 344052 | 337119 | 6933 | 98.0% |
-| **Total** | **1024484** | **1003116** | **21368** | **97.9%** |
+| Study | match | mismatch | upstream_reclassified |
+|-------|------|------|------|
+| blca_tcga_gdc | 115608 | 171 | 905 |
+| brca_tcga_gdc | 88330 | 138 | 544 |
+| chol_tcga_gdc | 3730 | 4 | 30 |
+| coad_tcga_gdc | 242459 | 421 | 1672 |
+| gbm_tcga_gdc | 54414 | 85 | 371 |
+| luad_tcga_gdc | 189231 | 287 | 1350 |
+| skcm_tcga_gdc | 350214 | 670 | 2566 |
+| **Total** | **1043986** | **1776** | **7438** |
 
-### HGVSp Match Breakdown
+## HGVSp Category Breakdown
 
-| Study | Exact | Fuzzy (fs) | Skipped: empty | Skipped: p.*N* | Skipped: splice |
-|-------|-------|------------|----------------|----------------|------------------|
-| blca_tcga_gdc | 110672 | 605 | 483 | 2637 | 57 |
-| brca_tcga_gdc | 83991 | 993 | 336 | 1567 | 94 |
-| chol_tcga_gdc | 3466 | 73 | 24 | 85 | 8 |
-| coad_tcga_gdc | 228342 | 2895 | 2310 | 5448 | 44 |
-| gbm_tcga_gdc | 51854 | 564 | 200 | 1117 | 14 |
-| luad_tcga_gdc | 181542 | 1000 | 723 | 4118 | 53 |
-| skcm_tcga_gdc | 336665 | 454 | 1415 | 7931 | 52 |
-| **Total** | **996532** | **6584** | **5491** | **22903** | **322** |
+| Study | both_empty | fuzzy_fs | maf_empty | maf_nonstandard | match | mismatch | position_shift | splice_no_protein | splice_vs_syn | vep_empty |
+|-------|------|------|------|------|------|------|------|------|------|------|
+| blca_tcga_gdc | 483 | 605 | 741 | 2637 | 110668 | 158 | 591 | 57 | 616 | 128 |
+| brca_tcga_gdc | 336 | 993 | 447 | 1567 | 83996 | 149 | 823 | 94 | 476 | 131 |
+| chol_tcga_gdc | 24 | 73 | 23 | 85 | 3466 | 4 | 53 | 8 | 21 | 7 |
+| coad_tcga_gdc | 2308 | 2894 | 1315 | 5448 | 228363 | 267 | 2065 | 44 | 1373 | 475 |
+| gbm_tcga_gdc | 200 | 564 | 302 | 1117 | 51849 | 79 | 332 | 14 | 326 | 87 |
+| luad_tcga_gdc | 725 | 999 | 1076 | 4118 | 181493 | 258 | 820 | 54 | 1005 | 320 |
+| skcm_tcga_gdc | 1415 | 454 | 2008 | 7931 | 336671 | 429 | 1180 | 52 | 2673 | 637 |
+| **Total** | **5491** | **6582** | **5912** | **22903** | **996506** | **1344** | **5864** | **323** | **6490** | **1785** |
 
-## HGVSc Match
+## HGVSc Category Breakdown
 
-| Study | Variants | Match | Mismatch | Match Rate |
-|-------|----------|-------|----------|------------|
-| blca_tcga_gdc | 116590 | 113899 | 2691 | 97.7% |
-| brca_tcga_gdc | 88953 | 87048 | 1905 | 97.9% |
-| chol_tcga_gdc | 3761 | 3654 | 107 | 97.2% |
-| coad_tcga_gdc | 244364 | 238864 | 5500 | 97.7% |
-| gbm_tcga_gdc | 54822 | 53579 | 1243 | 97.7% |
-| luad_tcga_gdc | 190667 | 186224 | 4443 | 97.7% |
-| skcm_tcga_gdc | 353101 | 344891 | 8210 | 97.7% |
-| **Total** | **1052258** | **1028159** | **24099** | **97.7%** |
+| Study | both_empty | maf_empty | match | mismatch | position_shift | vep_empty |
+|-------|------|------|------|------|------|------|
+| blca_tcga_gdc | 94 | 814 | 113896 | 146 | 380 | 1354 |
+| brca_tcga_gdc | 59 | 487 | 87054 | 157 | 406 | 849 |
+| chol_tcga_gdc | 3 | 28 | 3654 | 10 | 20 | 49 |
+| coad_tcga_gdc | 188 | 1490 | 238887 | 363 | 1197 | 2427 |
+| gbm_tcga_gdc | 48 | 324 | 53574 | 43 | 248 | 633 |
+| luad_tcga_gdc | 201 | 1153 | 186173 | 305 | 641 | 2395 |
+| skcm_tcga_gdc | 349 | 2223 | 344896 | 251 | 1331 | 4400 |
+| **Total** | **942** | **6519** | **1028134** | **1275** | **4223** | **12107** |
 
 ## Performance
 
 | Study | Variants | Time | Variants/sec |
 |-------|----------|------|-------------|
-| blca_tcga_gdc | 116684 | 19.875s | 5871 |
-| brca_tcga_gdc | 89012 | 15.621s | 5698 |
-| chol_tcga_gdc | 3764 | 797ms | 4723 |
-| coad_tcga_gdc | 244552 | 35.573s | 6875 |
-| gbm_tcga_gdc | 54870 | 9.994s | 5490 |
-| luad_tcga_gdc | 190868 | 31.368s | 6085 |
-| skcm_tcga_gdc | 353450 | 47.923s | 7375 |
-| **Total** | **1053200** | **2m41.152s** | **6535** |
+| blca_tcga_gdc | 116684 | 22.285s | 5236 |
+| brca_tcga_gdc | 89012 | 21.689s | 4104 |
+| chol_tcga_gdc | 3764 | 1.15s | 3274 |
+| coad_tcga_gdc | 244552 | 36.835s | 6639 |
+| gbm_tcga_gdc | 54870 | 11.274s | 4867 |
+| luad_tcga_gdc | 190868 | 34.782s | 5488 |
+| skcm_tcga_gdc | 353450 | 48.472s | 7292 |
+| **Total** | **1053200** | **2m56.488s** | **5968** |
