@@ -10,7 +10,7 @@ An experiment in vibe coding a lightweight variant effect predictor for use by t
 - **GENCODE Annotations**: Uses GENCODE GTF/FASTA (~95MB download vs 17GB VEP cache)
 - **Consequence Prediction**: Classifies variants using Sequence Ontology terms
 - **Validation Mode**: Compare existing MAF annotations against predictions
-- **Fast**: ~720k+ variants/sec annotation throughput (see [validation report](testdata/tcga/validation_report.md))
+- **Fast**: ~4,000 variants/sec end-to-end (parse + annotate + write), single-threaded (see [validation report](testdata/tcga/validation_report.md))
 
 ## Installation
 
@@ -258,9 +258,10 @@ When an [OncoKB cancer gene list](https://www.oncokb.org/cancerGenes) is configu
 
 ## Performance
 
-- **Annotation speed**: ~720,000 variants/sec (after cache is loaded)
+- **End-to-end throughput**: ~4,000 variants/sec (MAF parse + annotate + compare + write, single-threaded)
 - **Cache loading**: ~25 seconds to load 254k GENCODE v46 transcripts
 - **Memory**: Proportional to transcript count (~254k for GENCODE v46)
+- **Total benchmark**: 1,052,366 variants across 7 TCGA studies in ~4.5 minutes
 
 ## Configuration
 
