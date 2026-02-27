@@ -70,11 +70,12 @@ func main() {
 
 func newAnnotateCmd(verbose *bool) *cobra.Command {
 	var (
-		assembly      string
-		outputFormat  string
-		outputFile    string
-		canonicalOnly bool
-		inputFormat   string
+		assembly        string
+		outputFormat    string
+		outputFile      string
+		canonicalOnly   bool
+		inputFormat     string
+		canonicalSource string
 	)
 
 	cmd := &cobra.Command{
@@ -92,7 +93,7 @@ func newAnnotateCmd(verbose *bool) *cobra.Command {
 				return fmt.Errorf("creating logger: %w", err)
 			}
 			defer logger.Sync()
-			return runAnnotate(logger, args[0], assembly, outputFormat, outputFile, canonicalOnly, inputFormat)
+			return runAnnotate(logger, args[0], assembly, outputFormat, outputFile, canonicalOnly, inputFormat, canonicalSource)
 		},
 	}
 
@@ -101,15 +102,17 @@ func newAnnotateCmd(verbose *bool) *cobra.Command {
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file (default: stdout)")
 	cmd.Flags().BoolVar(&canonicalOnly, "canonical", false, "Only report canonical transcript annotations")
 	cmd.Flags().StringVar(&inputFormat, "input-format", "", "Input format: vcf, maf (auto-detected if not specified)")
+	cmd.Flags().StringVar(&canonicalSource, "canonical-source", "mskcc", "Canonical transcript source: mskcc, oncokb")
 
 	return cmd
 }
 
 func newCompareCmd(verbose *bool) *cobra.Command {
 	var (
-		assembly string
-		columns  string
-		all      bool
+		assembly        string
+		columns         string
+		all             bool
+		canonicalSource string
 	)
 
 	cmd := &cobra.Command{
@@ -136,18 +139,19 @@ func newCompareCmd(verbose *bool) *cobra.Command {
 				}
 			}
 
-			return runCompare(logger, args[0], assembly, colMap, all)
+			return runCompare(logger, args[0], assembly, colMap, all, canonicalSource)
 		},
 	}
 
 	cmd.Flags().StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
 	cmd.Flags().StringVar(&columns, "columns", "consequence,hgvsp,hgvsc", "Columns to compare (comma-separated)")
 	cmd.Flags().BoolVar(&all, "all", false, "Show all rows, not just non-matches")
+	cmd.Flags().StringVar(&canonicalSource, "canonical-source", "mskcc", "Canonical transcript source: mskcc, oncokb")
 
 	return cmd
 }
 
-func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFile string, canonicalOnly bool, inputFormat string) error {
+func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFile string, canonicalOnly bool, inputFormat, canonicalSource string) error {
 	// Detect input format if not specified
 	detectedFormat := inputFormat
 	if detectedFormat == "" {
@@ -190,8 +194,10 @@ func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFi
 	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
 
 	if canonicalPath != "" {
-		logger.Info("loading canonical overrides", zap.String("path", canonicalPath))
-		overrides, err := cache.LoadCanonicalOverrides(canonicalPath)
+		logger.Info("loading canonical overrides",
+			zap.String("path", canonicalPath),
+			zap.String("source", canonicalSource))
+		overrides, err := cache.LoadCanonicalOverridesWithSource(canonicalPath, canonicalSource)
 		if err != nil {
 			logger.Warn("could not load canonical overrides", zap.Error(err))
 		} else {
@@ -264,7 +270,7 @@ func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFi
 	return fmt.Errorf("unknown output format %q", outputFormat)
 }
 
-func runCompare(logger *zap.Logger, inputPath, assembly string, columns map[string]bool, showAll bool) error {
+func runCompare(logger *zap.Logger, inputPath, assembly string, columns map[string]bool, showAll bool, canonicalSource string) error {
 	parser, err := maf.NewParser(inputPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -289,8 +295,10 @@ func runCompare(logger *zap.Logger, inputPath, assembly string, columns map[stri
 	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
 
 	if canonicalPath != "" {
-		logger.Info("loading canonical overrides", zap.String("path", canonicalPath))
-		overrides, err := cache.LoadCanonicalOverrides(canonicalPath)
+		logger.Info("loading canonical overrides",
+			zap.String("path", canonicalPath),
+			zap.String("source", canonicalSource))
+		overrides, err := cache.LoadCanonicalOverridesWithSource(canonicalPath, canonicalSource)
 		if err != nil {
 			logger.Warn("could not load canonical overrides", zap.Error(err))
 		} else {
