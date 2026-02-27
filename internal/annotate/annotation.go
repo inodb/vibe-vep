@@ -35,6 +35,12 @@ const (
 	// LOW impact (generic coding)
 	ConsequenceCodingSequenceVariant = "coding_sequence_variant"
 
+	// Compound consequences (pre-built to avoid runtime concatenation).
+	ConsequenceSpliceRegionIntron  = "splice_region_variant,intron_variant"
+	ConsequenceStopLost3PrimeUTR   = "stop_lost,3_prime_UTR_variant"
+	ConsequenceStopGainedInframeDel = "stop_gained,inframe_deletion"
+	ConsequenceFrameshiftStopLost  = "frameshift_variant,stop_lost"
+
 	// MODIFIER impact
 	ConsequenceIntronVariant       = "intron_variant"
 	Consequence5PrimeUTR           = "5_prime_UTR_variant"

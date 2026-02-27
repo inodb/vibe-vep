@@ -2,7 +2,7 @@
 package annotate
 
 import (
-	"strconv"
+
 
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/vcf"
@@ -69,7 +69,7 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 			result.Consequence = spliceSite
 			result.Impact = GetImpact(spliceSite)
 		} else if isSpliceRegion(v.Pos, t) {
-			result.Consequence = ConsequenceSpliceRegion + "," + ConsequenceIntronVariant
+			result.Consequence = ConsequenceSpliceRegionIntron
 			result.Impact = GetImpact(ConsequenceSpliceRegion)
 		} else {
 			result.Consequence = ConsequenceIntronVariant
@@ -88,7 +88,7 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 	}
 
 	// Set exon number
-	result.ExonNumber = strconv.Itoa(exon.Number) + "/" + strconv.Itoa(len(t.Exons))
+	result.ExonNumber = formatExonNumber(exon.Number, len(t.Exons))
 
 	// Check if transcript is protein coding
 	if !t.IsProteinCoding() {
@@ -154,7 +154,7 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 					stopCodonStart, stopCodonEnd = t.CDSStart, t.CDSStart+2
 				}
 				if indelEnd >= stopCodonStart && v.Pos <= stopCodonEnd {
-					result.Consequence = ConsequenceStopLost + "," + Consequence3PrimeUTR
+					result.Consequence = ConsequenceStopLost3PrimeUTR
 					result.Impact = GetImpact(ConsequenceStopLost)
 					return result
 				}
@@ -189,7 +189,7 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 		result.Impact = GetImpact(spliceSite)
 	} else if isSpliceRegion(v.Pos, t) {
 		// Append splice_region_variant if near exon boundary
-		result.Consequence += "," + ConsequenceSpliceRegion
+		result.Consequence = appendSpliceRegion(result.Consequence)
 	}
 
 	return result
@@ -258,18 +258,18 @@ func predictCodingConsequence(v *vcf.Variant, t *cache.Transcript, exon *cache.E
 		}
 	} else if result.AltAA == '*' {
 		result.Consequence = ConsequenceStopGained
-		result.AminoAcidChange = string(result.RefAA) + strconv.FormatInt(codonNum, 10) + "*"
+		result.AminoAcidChange = formatAAChange(result.RefAA, codonNum, '*')
 	} else if result.RefAA == '*' {
 		result.Consequence = ConsequenceStopLost
-		result.AminoAcidChange = "*" + strconv.FormatInt(codonNum, 10) + string(result.AltAA)
+		result.AminoAcidChange = formatAAChange('*', codonNum, result.AltAA)
 		// Compute extension length by scanning 3'UTR for next in-frame stop
 		result.StopLostExtDist = computeStopLostExtension(t, altCodon)
 	} else if result.RefAA == 'M' && codonNum == 1 {
 		result.Consequence = ConsequenceStartLost
-		result.AminoAcidChange = "M1" + string(result.AltAA)
+		result.AminoAcidChange = formatAAChange('M', 1, result.AltAA)
 	} else {
 		result.Consequence = ConsequenceMissenseVariant
-		result.AminoAcidChange = string(result.RefAA) + strconv.FormatInt(codonNum, 10) + string(result.AltAA)
+		result.AminoAcidChange = formatAAChange(result.RefAA, codonNum, result.AltAA)
 	}
 
 	result.Impact = GetImpact(result.Consequence)
@@ -380,13 +380,13 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 			result.Consequence = ConsequenceInframeDeletion
 			// Check if in-frame deletion creates a stop codon at the junction
 			if indelCreatesStop(v, t, result.CDSPosition) {
-				result.Consequence = ConsequenceStopGained + "," + ConsequenceInframeDeletion
+				result.Consequence = ConsequenceStopGainedInframeDel
 			}
 			// Check if in-frame deletion spans the stop codon (stop_lost)
 			if stopCodonCDSPos > 0 && result.CDSPosition > 0 {
 				indelEndCDS := result.CDSPosition + int64(refLen) - 1
 				if indelEndCDS >= stopCodonCDSPos {
-					result.Consequence = ConsequenceStopLost + "," + Consequence3PrimeUTR
+					result.Consequence = ConsequenceStopLost3PrimeUTR
 				}
 			}
 			// Compute protein-level change (may reveal delins if junction creates new AA)
@@ -418,7 +418,7 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 		if stopCodonCDSPos > 0 && result.CDSPosition > 0 {
 			indelEndCDS := result.CDSPosition + int64(refLen) - 1
 			if indelEndCDS >= stopCodonCDSPos {
-				result.Consequence = ConsequenceFrameshiftVariant + "," + ConsequenceStopLost
+				result.Consequence = ConsequenceFrameshiftStopLost
 			}
 		}
 		// Compute the new amino acid and distance to first stop codon
@@ -827,6 +827,72 @@ func spliceSiteType(pos int64, t *cache.Transcript) string {
 }
 
 // indelSpliceSiteType checks if an indel's span overlaps a splice site.
+// formatExonNumber builds "N/M" string using a stack-allocated buffer.
+func formatExonNumber(num, total int) string {
+	var buf [16]byte
+	n := putInt64(buf[:], int64(num))
+	buf[n] = '/'
+	n++
+	n += putInt64(buf[n:], int64(total))
+	return string(buf[:n])
+}
+
+// formatAAChange builds an amino acid change string like "G12C" or "*100A"
+// using a stack-allocated buffer to avoid multiple string concatenations.
+func formatAAChange(refAA byte, pos int64, altAA byte) string {
+	var buf [24]byte // refAA + up to 20 digit position + altAA
+	n := 0
+	buf[n] = refAA
+	n++
+	n += putInt64(buf[n:], pos)
+	buf[n] = altAA
+	n++
+	return string(buf[:n])
+}
+
+// putInt64 writes a positive int64 as decimal digits into buf and returns
+// the number of bytes written.
+func putInt64(buf []byte, v int64) int {
+	if v == 0 {
+		buf[0] = '0'
+		return 1
+	}
+	// Write digits in reverse, then reverse.
+	var tmp [20]byte
+	n := 0
+	for v > 0 {
+		tmp[n] = byte('0' + v%10)
+		v /= 10
+		n++
+	}
+	for i := 0; i < n; i++ {
+		buf[i] = tmp[n-1-i]
+	}
+	return n
+}
+
+// spliceRegionCompound maps single consequences to their compound form with
+// splice_region_variant appended. Pre-built to avoid runtime concatenation.
+var spliceRegionCompound = map[string]string{
+	ConsequenceMissenseVariant:     ConsequenceMissenseVariant + "," + ConsequenceSpliceRegion,
+	ConsequenceSynonymousVariant:   ConsequenceSynonymousVariant + "," + ConsequenceSpliceRegion,
+	ConsequenceStopGained:          ConsequenceStopGained + "," + ConsequenceSpliceRegion,
+	ConsequenceStopRetained:        ConsequenceStopRetained + "," + ConsequenceSpliceRegion,
+	ConsequenceFrameshiftVariant:   ConsequenceFrameshiftVariant + "," + ConsequenceSpliceRegion,
+	ConsequenceInframeDeletion:     ConsequenceInframeDeletion + "," + ConsequenceSpliceRegion,
+	ConsequenceInframeInsertion:    ConsequenceInframeInsertion + "," + ConsequenceSpliceRegion,
+	ConsequenceCodingSequenceVariant: ConsequenceCodingSequenceVariant + "," + ConsequenceSpliceRegion,
+}
+
+// appendSpliceRegion appends ",splice_region_variant" to a consequence string.
+// Uses a pre-built lookup for common cases to avoid runtime concatenation.
+func appendSpliceRegion(consequence string) string {
+	if compound, ok := spliceRegionCompound[consequence]; ok {
+		return compound
+	}
+	return consequence + "," + ConsequenceSpliceRegion
+}
+
 // For deletions, the affected range is [pos, pos+len(ref)-1]. If any position
 // in that range hits a ±1-2bp splice site, returns the splice consequence.
 // Returns empty string for SNVs or if no splice site is hit.
