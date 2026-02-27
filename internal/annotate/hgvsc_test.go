@@ -508,20 +508,41 @@ func BenchmarkFormatHGVSc_Insertion(b *testing.B) {
 // TestAllocRegression_FormatHGVSc verifies allocation count for HGVSc formatting.
 func TestAllocRegression_FormatHGVSc(t *testing.T) {
 	transcript := createKRASTranscript()
-	snv := &vcf.Variant{Chrom: "12", Pos: 25245351, Ref: "C", Alt: "A"}
-	result := PredictConsequence(snv, transcript)
 
-	allocs := testing.AllocsPerRun(100, func() {
-		FormatHGVSc(snv, transcript, result)
-	})
-
-	// SNV HGVSc: ReverseComplement (1 alloc each for ref+alt) + position string + concat.
-	// Budget: ~5 allocs.
-	const maxAllocs = 8
-	if int(allocs) > maxAllocs {
-		t.Errorf("FormatHGVSc allocation regression: got %.0f, want <= %d", allocs, maxAllocs)
+	tests := []struct {
+		name      string
+		v         *vcf.Variant
+		maxAllocs int
+	}{
+		{
+			name:      "SNV",
+			v:         &vcf.Variant{Chrom: "12", Pos: 25245351, Ref: "C", Alt: "A"},
+			maxAllocs: 1, // single final string alloc
+		},
+		{
+			name:      "Deletion",
+			v:         &vcf.Variant{Chrom: "12", Pos: 25245350, Ref: "GG", Alt: "G"},
+			maxAllocs: 1, // single final string alloc
+		},
+		{
+			name:      "Insertion",
+			v:         &vcf.Variant{Chrom: "12", Pos: 25245350, Ref: "C", Alt: "CCC"},
+			maxAllocs: 1, // single final string alloc
+		},
 	}
-	t.Logf("FormatHGVSc(SNV) allocs: %.0f (budget: %d)", allocs, maxAllocs)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := PredictConsequence(tt.v, transcript)
+			allocs := testing.AllocsPerRun(100, func() {
+				FormatHGVSc(tt.v, transcript, result)
+			})
+			if int(allocs) > tt.maxAllocs {
+				t.Errorf("FormatHGVSc(%s) allocation regression: got %.0f, want <= %d", tt.name, allocs, tt.maxAllocs)
+			}
+			t.Logf("FormatHGVSc(%s) allocs: %.0f (budget: %d)", tt.name, allocs, tt.maxAllocs)
+		})
+	}
 }
 
 func TestFormatHGVSc_ReverseStrandDupDetection(t *testing.T) {

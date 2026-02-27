@@ -9,6 +9,9 @@ import (
 
 // FormatHGVSc formats the HGVS coding DNA notation for a variant on a transcript.
 // Returns empty string for non-coding transcripts or upstream/downstream variants.
+//
+// The function is optimized for minimal allocations on CDS-based paths (SNV, deletion,
+// insertion) by using stack-allocated buffers and lazy computation of reverse complement.
 func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult) string {
 	if t == nil || v == nil || result == nil {
 		return ""
@@ -26,189 +29,44 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		prefix = "n."
 	}
 
-	// Get ref/alt on coding strand
-	ref := v.Ref
-	alt := v.Alt
-	if t.IsReverseStrand() {
-		ref = ReverseComplement(ref)
-		alt = ReverseComplement(alt)
-	}
-
-	// Determine position string for the variant start
-	startPosStr := genomicToHGVScPos(v.Pos, t)
-	if startPosStr == "" {
-		return ""
-	}
-
-	// SNV
+	// SNV (and MNV — same length ref/alt): compute RC and return immediately.
+	// This avoids computing RC for the more common indel CDS paths.
 	if !v.IsIndel() {
+		ref := v.Ref
+		alt := v.Alt
+		if t.IsReverseStrand() {
+			ref = ReverseComplement(ref)
+			alt = ReverseComplement(alt)
+		}
+		startPosStr := genomicToHGVScPos(v.Pos, t)
+		if startPosStr == "" {
+			return ""
+		}
 		return prefix + startPosStr + ref + ">" + alt
 	}
 
-	// Indel handling
-	// VCF indels share a prefix base: REF=A ALT=ATAC means insert TAC after pos
-	// DEL: REF=ATAC ALT=A means delete TAC after pos
+	// Indel handling — defer RC computation to branches that need it.
 	refLen := len(v.Ref)
 	altLen := len(v.Alt)
 
 	if altLen > refLen {
-		// Insertion
-		// VCF indels share a prefix base on the genomic strand.
-		// After reverse-complementing for reverse-strand transcripts, the
-		// shared base becomes the suffix, so the inserted bases are at the
-		// start of alt rather than after position 1.
-		var insertedSeq string
-		if t.IsReverseStrand() {
-			insertedSeq = alt[:len(alt)-len(ref)] // shared base is at the end
-		} else {
-			insertedSeq = alt[len(ref):] // shared base is at the start
-		}
-
-		// 3' shift insertion in CDS space, then check dup at shifted position
-		cdsPos := GenomicToCDS(v.Pos, t)
-		if cdsPos > 0 && len(t.CDSSequence) > 0 {
-			cdsIdx := int(cdsPos - 1) // 0-based anchor index
-			if t.IsReverseStrand() {
-				cdsIdx-- // RC makes shared base a suffix; insertion is before CDS position
-			}
-			if cdsIdx < 0 {
-				cdsIdx = 0
-			}
-			shiftedSeq, shiftedIdx := shiftInsertionThreePrime(insertedSeq, cdsIdx, t.CDSSequence)
-			seqLen := len(shiftedSeq)
-
-			// Check dup: inserted bases match preceding bases at shifted position
-			dupStart := shiftedIdx - seqLen + 1
-			if dupStart >= 0 && shiftedIdx+1 <= len(t.CDSSequence) &&
-				t.CDSSequence[dupStart:shiftedIdx+1] == shiftedSeq {
-				if seqLen == 1 {
-					return "c." + strconv.Itoa(shiftedIdx+1) + "dup"
-				}
-				return "c." + strconv.Itoa(dupStart+1) + "_" + strconv.Itoa(shiftedIdx+1) + "dup"
-			}
-
-			// Check dup: inserted bases match following bases at shifted position
-			afterStart := shiftedIdx + 1
-			afterEnd := afterStart + seqLen
-			if afterStart >= 0 && afterEnd <= len(t.CDSSequence) &&
-				t.CDSSequence[afterStart:afterEnd] == shiftedSeq {
-				if seqLen == 1 {
-					return "c." + strconv.Itoa(afterStart+1) + "dup"
-				}
-				return "c." + strconv.Itoa(afterStart+1) + "_" + strconv.Itoa(afterEnd) + "dup"
-			}
-
-			// Plain insertion at shifted CDS position
-			if shiftedIdx+2 <= len(t.CDSSequence) {
-				return "c." + strconv.Itoa(shiftedIdx+1) + "_" + strconv.Itoa(shiftedIdx+2) + "ins" + shiftedSeq
-			}
-		}
-
-		// Fall back to genomic-based positions for non-CDS insertions
-		dup := checkDuplication(v, t, insertedSeq)
-		if dup.isDup {
-			if dup.cdsStart == dup.cdsEnd {
-				return "c." + strconv.FormatInt(dup.cdsStart, 10) + "dup"
-			}
-			return "c." + strconv.FormatInt(dup.cdsStart, 10) + "_" + strconv.FormatInt(dup.cdsEnd, 10) + "dup"
-		}
-
-		insAfterPos := v.Pos
-		insBeforePos := v.Pos + 1
-		if t.IsReverseStrand() {
-			insAfterPos = v.Pos + 1
-			insBeforePos = v.Pos
-		}
-		afterStr := genomicToHGVScPos(insAfterPos, t)
-		beforeStr := genomicToHGVScPos(insBeforePos, t)
-		return prefix + afterStr + "_" + beforeStr + "ins" + insertedSeq
+		return formatHGVScInsertion(v, t, prefix, refLen, altLen)
 	}
 
-	// Deletion (or delins if alt has extra bases beyond shared prefix)
 	if refLen > altLen {
-		// Compute actual shared prefix length on genomic strand
-		sharedLen := 0
-		for sharedLen < refLen && sharedLen < altLen && v.Ref[sharedLen] == v.Alt[sharedLen] {
-			sharedLen++
-		}
-		if sharedLen == 0 {
-			sharedLen = 1
-		}
-		if sharedLen > altLen {
-			sharedLen = altLen
-		}
-
-		delStartGenomic := v.Pos + int64(sharedLen)
-		delEndGenomic := v.Pos + int64(refLen) - 1
-		extraAlt := ""
-		if sharedLen < altLen {
-			extraAlt = v.Alt[sharedLen:]
-		}
-
-		// Also clip shared suffix between remaining ref and extra alt.
-		// This normalizes delins to pure del when trailing bases match.
-		// Example: REF=ATGCA ALT=ACA → prefix A, suffix CA → pure del of TG
-		if len(extraAlt) > 0 {
-			remainRef := v.Ref[sharedLen:]
-			sharedSuffix := 0
-			for sharedSuffix < len(remainRef) && sharedSuffix < len(extraAlt) &&
-				remainRef[len(remainRef)-1-sharedSuffix] == extraAlt[len(extraAlt)-1-sharedSuffix] {
-				sharedSuffix++
-			}
-			if sharedSuffix > 0 {
-				delEndGenomic -= int64(sharedSuffix)
-				extraAlt = extraAlt[:len(extraAlt)-sharedSuffix]
-			}
-		}
-
-		if t.IsReverseStrand() {
-			delStartGenomic, delEndGenomic = delEndGenomic, delStartGenomic
-		}
-
-		// Convert extra alt bases to coding strand
-		codingExtraAlt := extraAlt
-		if t.IsReverseStrand() && len(extraAlt) > 0 {
-			codingExtraAlt = ReverseComplement(extraAlt)
-		}
-
-		// Try CDS-based positioning
-		delStartCDS := GenomicToCDS(delStartGenomic, t)
-		delEndCDS := GenomicToCDS(delEndGenomic, t)
-		if delStartCDS > 0 && delEndCDS > 0 && len(t.CDSSequence) > 0 {
-			if len(codingExtraAlt) > 0 {
-				// Delins: no 3' shift per HGVS convention
-				startStr := strconv.Itoa(int(delStartCDS))
-				if delStartCDS == delEndCDS {
-					return "c." + startStr + "delins" + codingExtraAlt
-				}
-				return "c." + startStr + "_" + strconv.Itoa(int(delEndCDS)) + "delins" + codingExtraAlt
-			}
-			// Pure deletion: apply 3' shift
-			sStart, sEnd := shiftDeletionThreePrime(int(delStartCDS-1), int(delEndCDS-1), t.CDSSequence)
-			if sStart == sEnd {
-				return "c." + strconv.Itoa(sStart+1) + "del"
-			}
-			return "c." + strconv.Itoa(sStart+1) + "_" + strconv.Itoa(sEnd+1) + "del"
-		}
-
-		// Fall back to genomic-based positions for intronic/UTR/non-coding deletions
-		delStartStr := genomicToHGVScPos(delStartGenomic, t)
-		if len(codingExtraAlt) > 0 {
-			if delStartGenomic == delEndGenomic {
-				return prefix + delStartStr + "delins" + codingExtraAlt
-			}
-			delEndStr := genomicToHGVScPos(delEndGenomic, t)
-			return prefix + delStartStr + "_" + delEndStr + "delins" + codingExtraAlt
-		}
-		if delStartGenomic == delEndGenomic {
-			return prefix + delStartStr + "del"
-		}
-		delEndStr := genomicToHGVScPos(delEndGenomic, t)
-		return prefix + delStartStr + "_" + delEndStr + "del"
+		return formatHGVScDeletion(v, t, prefix, refLen, altLen)
 	}
 
-	// MNV (same length ref/alt, len > 1) — treat as delins
+	// MNV (same length ref/alt, len > 1) — treat as delins.
+	// Note: unreachable because !v.IsIndel() is true for same-length variants.
 	if refLen > 1 {
+		ref := v.Ref
+		alt := v.Alt
+		if t.IsReverseStrand() {
+			ref = ReverseComplement(ref)
+			alt = ReverseComplement(alt)
+		}
+		startPosStr := genomicToHGVScPos(v.Pos, t)
 		endPosStr := genomicToHGVScPos(v.Pos+int64(refLen)-1, t)
 		if t.IsReverseStrand() {
 			startPosStr, endPosStr = genomicToHGVScPos(v.Pos+int64(refLen)-1, t), startPosStr
@@ -217,6 +75,226 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 	}
 
 	return ""
+}
+
+// formatHGVScInsertion handles the insertion path of FormatHGVSc.
+// It computes the inserted sequence on the coding strand using a stack buffer
+// to avoid allocations from ReverseComplement.
+func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, refLen, altLen int) string {
+	insLen := altLen - refLen
+
+	// Compute inserted sequence on coding strand into a stack buffer.
+	// For reverse strand, we write the reverse complement directly to avoid
+	// allocating a string from ReverseComplement().
+	var seqStack [64]byte
+	var seq []byte
+	if insLen <= len(seqStack) {
+		seq = seqStack[:insLen]
+	} else {
+		seq = make([]byte, insLen)
+	}
+
+	if t.IsReverseStrand() {
+		// RC(v.Alt)[:altLen-refLen] == RC(v.Alt[refLen:])
+		genomicInserted := v.Alt[refLen:]
+		for i := 0; i < insLen; i++ {
+			seq[i] = Complement(genomicInserted[insLen-1-i])
+		}
+	} else {
+		copy(seq, v.Alt[refLen:])
+	}
+
+	// 3' shift insertion in CDS space, then check dup at shifted position
+	cdsPos := GenomicToCDS(v.Pos, t)
+	if cdsPos > 0 && len(t.CDSSequence) > 0 {
+		cdsIdx := int(cdsPos - 1) // 0-based anchor index
+		if t.IsReverseStrand() {
+			cdsIdx-- // RC makes shared base a suffix; insertion is before CDS position
+		}
+		if cdsIdx < 0 {
+			cdsIdx = 0
+		}
+
+		// Shift insertion in place (modifies seq)
+		shiftedIdx := shiftInsertionBuf(seq, cdsIdx, t.CDSSequence)
+		seqLen := len(seq)
+
+		// Check dup: inserted bases match preceding bases at shifted position.
+		// Go optimizes string([]byte) == string comparisons to avoid allocation.
+		dupStart := shiftedIdx - seqLen + 1
+		if dupStart >= 0 && shiftedIdx+1 <= len(t.CDSSequence) &&
+			t.CDSSequence[dupStart:shiftedIdx+1] == string(seq) {
+			return cdsPosRangeStr(dupStart+1, shiftedIdx+1, "dup")
+		}
+
+		// Check dup: inserted bases match following bases at shifted position
+		afterStart := shiftedIdx + 1
+		afterEnd := afterStart + seqLen
+		if afterStart >= 0 && afterEnd <= len(t.CDSSequence) &&
+			t.CDSSequence[afterStart:afterEnd] == string(seq) {
+			return cdsPosRangeStr(afterStart+1, afterEnd, "dup")
+		}
+
+		// Plain insertion at shifted CDS position
+		if shiftedIdx+2 <= len(t.CDSSequence) {
+			var buf [128]byte
+			n := copy(buf[:], "c.")
+			n += putInt64(buf[n:], int64(shiftedIdx+1))
+			buf[n] = '_'
+			n++
+			n += putInt64(buf[n:], int64(shiftedIdx+2))
+			n += copy(buf[n:], "ins")
+			n += copy(buf[n:], seq)
+			return string(buf[:n])
+		}
+	}
+
+	// Fall back to genomic-based positions for non-CDS insertions.
+	// These paths use string concat (less common, not on the hot path).
+	insertedSeq := string(seq)
+
+	dup := checkDuplication(v, t, insertedSeq)
+	if dup.isDup {
+		if dup.cdsStart == dup.cdsEnd {
+			return "c." + strconv.FormatInt(dup.cdsStart, 10) + "dup"
+		}
+		return "c." + strconv.FormatInt(dup.cdsStart, 10) + "_" + strconv.FormatInt(dup.cdsEnd, 10) + "dup"
+	}
+
+	insAfterPos := v.Pos
+	insBeforePos := v.Pos + 1
+	if t.IsReverseStrand() {
+		insAfterPos = v.Pos + 1
+		insBeforePos = v.Pos
+	}
+	afterStr := genomicToHGVScPos(insAfterPos, t)
+	beforeStr := genomicToHGVScPos(insBeforePos, t)
+	return prefix + afterStr + "_" + beforeStr + "ins" + insertedSeq
+}
+
+// formatHGVScDeletion handles the deletion (and delins) path of FormatHGVSc.
+// It avoids calling ReverseComplement for the ref/alt at the top since the
+// deletion CDS path only needs CDS positions and possibly RC of the extra alt bases.
+func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, refLen, altLen int) string {
+	// Compute actual shared prefix length on genomic strand
+	sharedLen := 0
+	for sharedLen < refLen && sharedLen < altLen && v.Ref[sharedLen] == v.Alt[sharedLen] {
+		sharedLen++
+	}
+	if sharedLen == 0 {
+		sharedLen = 1
+	}
+	if sharedLen > altLen {
+		sharedLen = altLen
+	}
+
+	delStartGenomic := v.Pos + int64(sharedLen)
+	delEndGenomic := v.Pos + int64(refLen) - 1
+	extraAlt := ""
+	if sharedLen < altLen {
+		extraAlt = v.Alt[sharedLen:]
+	}
+
+	// Clip shared suffix between remaining ref and extra alt.
+	if len(extraAlt) > 0 {
+		remainRef := v.Ref[sharedLen:]
+		sharedSuffix := 0
+		for sharedSuffix < len(remainRef) && sharedSuffix < len(extraAlt) &&
+			remainRef[len(remainRef)-1-sharedSuffix] == extraAlt[len(extraAlt)-1-sharedSuffix] {
+			sharedSuffix++
+		}
+		if sharedSuffix > 0 {
+			delEndGenomic -= int64(sharedSuffix)
+			extraAlt = extraAlt[:len(extraAlt)-sharedSuffix]
+		}
+	}
+
+	if t.IsReverseStrand() {
+		delStartGenomic, delEndGenomic = delEndGenomic, delStartGenomic
+	}
+
+	// Try CDS-based positioning (hot path — optimized with stack buffers)
+	delStartCDS := GenomicToCDS(delStartGenomic, t)
+	delEndCDS := GenomicToCDS(delEndGenomic, t)
+	if delStartCDS > 0 && delEndCDS > 0 && len(t.CDSSequence) > 0 {
+		if len(extraAlt) > 0 {
+			// Delins: no 3' shift per HGVS convention.
+			// Write RC of extra alt directly into the output buffer for reverse strand.
+			var buf [128]byte
+			n := copy(buf[:], "c.")
+			n += putInt64(buf[n:], delStartCDS)
+			if delStartCDS != delEndCDS {
+				buf[n] = '_'
+				n++
+				n += putInt64(buf[n:], delEndCDS)
+			}
+			n += copy(buf[n:], "delins")
+			if t.IsReverseStrand() {
+				// Write reverse complement of extraAlt directly into buffer
+				eLen := len(extraAlt)
+				for i := 0; i < eLen; i++ {
+					buf[n+i] = Complement(extraAlt[eLen-1-i])
+				}
+				n += eLen
+			} else {
+				n += copy(buf[n:], extraAlt)
+			}
+			return string(buf[:n])
+		}
+		// Pure deletion: apply 3' shift
+		sStart, sEnd := shiftDeletionThreePrime(int(delStartCDS-1), int(delEndCDS-1), t.CDSSequence)
+		return cdsPosRangeStr(sStart+1, sEnd+1, "del")
+	}
+
+	// Fall back to genomic-based positions for intronic/UTR/non-coding deletions.
+	// Convert extra alt bases to coding strand (only needed for fallback path).
+	codingExtraAlt := extraAlt
+	if t.IsReverseStrand() && len(extraAlt) > 0 {
+		codingExtraAlt = ReverseComplement(extraAlt)
+	}
+
+	delStartStr := genomicToHGVScPos(delStartGenomic, t)
+	if len(codingExtraAlt) > 0 {
+		if delStartGenomic == delEndGenomic {
+			return prefix + delStartStr + "delins" + codingExtraAlt
+		}
+		delEndStr := genomicToHGVScPos(delEndGenomic, t)
+		return prefix + delStartStr + "_" + delEndStr + "delins" + codingExtraAlt
+	}
+	if delStartGenomic == delEndGenomic {
+		return prefix + delStartStr + "del"
+	}
+	delEndStr := genomicToHGVScPos(delEndGenomic, t)
+	return prefix + delStartStr + "_" + delEndStr + "del"
+}
+
+// cdsPosRangeStr builds a CDS position string like "c.34del", "c.34_36del",
+// "c.35dup", etc. using a stack-allocated buffer for zero intermediate allocations.
+func cdsPosRangeStr(start, end int, suffix string) string {
+	var buf [64]byte
+	n := copy(buf[:], "c.")
+	n += putInt64(buf[n:], int64(start))
+	if start != end {
+		buf[n] = '_'
+		n++
+		n += putInt64(buf[n:], int64(end))
+	}
+	n += copy(buf[n:], suffix)
+	return string(buf[:n])
+}
+
+// shiftInsertionBuf shifts an insertion rightward (3' direction) in CDS space.
+// It operates on the provided mutable byte slice, avoiding allocations.
+// Returns the new anchor index.
+func shiftInsertionBuf(seq []byte, cdsAnchorIdx int, cdsSeq string) int {
+	idx := cdsAnchorIdx
+	for idx+1 < len(cdsSeq) && cdsSeq[idx+1] == seq[0] {
+		first := seq[0]
+		copy(seq, seq[1:])
+		seq[len(seq)-1] = first
+		idx++
+	}
+	return idx
 }
 
 // genomicToHGVScPos converts a genomic position to an HGVSc position string.
