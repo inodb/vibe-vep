@@ -1,9 +1,6 @@
 package annotate
 
-import (
-	"strconv"
-	"strings"
-)
+import "strings"
 
 // aaThree converts a single-letter amino acid code to its three-letter code.
 // Returns "Xaa" for unknown amino acids.
@@ -21,6 +18,7 @@ func formatAASequence(aas string) string {
 		return ""
 	}
 	var b strings.Builder
+	b.Grow(len(aas) * 3)
 	for i := 0; i < len(aas); i++ {
 		b.WriteString(aaThree(aas[i]))
 	}
@@ -29,6 +27,8 @@ func formatAASequence(aas string) string {
 
 // FormatHGVSp formats the HGVS protein notation for a consequence result.
 // Returns an empty string for non-coding consequences.
+//
+// Uses a stack-allocated buffer for common short cases to minimize allocations.
 func FormatHGVSp(result *ConsequenceResult) string {
 	if result.ProteinPosition < 1 {
 		return ""
@@ -42,77 +42,128 @@ func FormatHGVSp(result *ConsequenceResult) string {
 
 	pos := result.ProteinPosition
 
-	posStr := strconv.FormatInt(pos, 10)
+	// For most cases we can build in a stack-allocated buffer (≤64 bytes).
+	// Only complex cases (delins, insertion with long AA sequences) overflow.
+	var buf [64]byte
+	n := 0
 
 	switch conseq {
 	case ConsequenceMissenseVariant:
-		return "p." + aaThree(result.RefAA) + posStr + aaThree(result.AltAA)
+		// p.Xxx###Xxx (max ~15 chars)
+		n += copy(buf[n:], "p.")
+		n += copy(buf[n:], aaThree(result.RefAA))
+		n += putInt64(buf[n:], pos)
+		n += copy(buf[n:], aaThree(result.AltAA))
+		return string(buf[:n])
 
 	case ConsequenceSynonymousVariant:
-		return "p." + aaThree(result.RefAA) + posStr + "="
+		// p.Xxx###=
+		n += copy(buf[n:], "p.")
+		n += copy(buf[n:], aaThree(result.RefAA))
+		n += putInt64(buf[n:], pos)
+		buf[n] = '='
+		n++
+		return string(buf[:n])
 
 	case ConsequenceStopGained:
-		return "p." + aaThree(result.RefAA) + posStr + "Ter"
+		// p.Xxx###Ter
+		n += copy(buf[n:], "p.")
+		n += copy(buf[n:], aaThree(result.RefAA))
+		n += putInt64(buf[n:], pos)
+		n += copy(buf[n:], "Ter")
+		return string(buf[:n])
 
 	case ConsequenceStopLost:
+		// p.Ter###Xxxext*N or p.Ter###Xxxext*?
+		n += copy(buf[n:], "p.Ter")
+		n += putInt64(buf[n:], pos)
+		n += copy(buf[n:], aaThree(result.AltAA))
 		if result.StopLostExtDist > 0 {
-			return "p.Ter" + posStr + aaThree(result.AltAA) + "ext*" + strconv.Itoa(result.StopLostExtDist)
+			n += copy(buf[n:], "ext*")
+			n += putInt64(buf[n:], int64(result.StopLostExtDist))
+		} else {
+			n += copy(buf[n:], "ext*?")
 		}
-		return "p.Ter" + posStr + aaThree(result.AltAA) + "ext*?"
+		return string(buf[:n])
 
 	case ConsequenceStartLost:
 		return "p.Met1?"
 
 	case ConsequenceStopRetained:
-		return "p.Ter" + posStr + "="
+		// p.Ter###=
+		n += copy(buf[n:], "p.Ter")
+		n += putInt64(buf[n:], pos)
+		buf[n] = '='
+		n++
+		return string(buf[:n])
 
 	case ConsequenceFrameshiftVariant:
+		n += copy(buf[n:], "p.")
 		if result.RefAA != 0 {
-			altStr := ""
-			if result.AltAA != 0 {
-				altStr = aaThree(result.AltAA)
-			}
-			if result.FrameshiftStopDist > 0 {
-				return "p." + aaThree(result.RefAA) + posStr + altStr + "fsTer" + strconv.Itoa(result.FrameshiftStopDist)
-			}
-			return "p." + aaThree(result.RefAA) + posStr + altStr + "fs"
+			n += copy(buf[n:], aaThree(result.RefAA))
 		}
-		return "p." + posStr + "fs"
+		n += putInt64(buf[n:], pos)
+		if result.AltAA != 0 {
+			n += copy(buf[n:], aaThree(result.AltAA))
+		}
+		if result.FrameshiftStopDist > 0 {
+			n += copy(buf[n:], "fsTer")
+			n += putInt64(buf[n:], int64(result.FrameshiftStopDist))
+		} else {
+			n += copy(buf[n:], "fs")
+		}
+		return string(buf[:n])
 
 	case ConsequenceInframeDeletion:
-		suffix := "del"
-		if len(result.InsertedAAs) > 0 {
-			suffix = "delins" + formatAASequence(result.InsertedAAs)
-		}
-		if result.ProteinEndPosition > result.ProteinPosition && result.EndAA != 0 {
-			endPosStr := strconv.FormatInt(result.ProteinEndPosition, 10)
-			if result.RefAA != 0 {
-				return "p." + aaThree(result.RefAA) + posStr + "_" + aaThree(result.EndAA) + endPosStr + suffix
-			}
-			return "p." + posStr + "_" + endPosStr + suffix
-		}
+		n += copy(buf[n:], "p.")
 		if result.RefAA != 0 {
-			return "p." + aaThree(result.RefAA) + posStr + suffix
+			n += copy(buf[n:], aaThree(result.RefAA))
 		}
-		return "p." + posStr + suffix
+		n += putInt64(buf[n:], pos)
+		if result.ProteinEndPosition > result.ProteinPosition && result.EndAA != 0 {
+			buf[n] = '_'
+			n++
+			n += copy(buf[n:], aaThree(result.EndAA))
+			n += putInt64(buf[n:], result.ProteinEndPosition)
+		}
+		if len(result.InsertedAAs) > 0 {
+			n += copy(buf[n:], "delins")
+			return string(buf[:n]) + formatAASequence(result.InsertedAAs)
+		}
+		n += copy(buf[n:], "del")
+		return string(buf[:n])
 
 	case ConsequenceInframeInsertion:
+		n += copy(buf[n:], "p.")
 		if result.IsDup {
-			if result.ProteinEndPosition > result.ProteinPosition && result.EndAA != 0 {
-				endPosStr := strconv.FormatInt(result.ProteinEndPosition, 10)
-				return "p." + aaThree(result.RefAA) + posStr + "_" + aaThree(result.EndAA) + endPosStr + "dup"
+			if result.RefAA != 0 {
+				n += copy(buf[n:], aaThree(result.RefAA))
 			}
-			return "p." + aaThree(result.RefAA) + posStr + "dup"
+			n += putInt64(buf[n:], pos)
+			if result.ProteinEndPosition > result.ProteinPosition && result.EndAA != 0 {
+				buf[n] = '_'
+				n++
+				n += copy(buf[n:], aaThree(result.EndAA))
+				n += putInt64(buf[n:], result.ProteinEndPosition)
+			}
+			n += copy(buf[n:], "dup")
+			return string(buf[:n])
 		}
-		pos1Str := strconv.FormatInt(pos+1, 10)
-		insAAs := formatAASequence(result.InsertedAAs)
 		if result.RefAA != 0 {
-			return "p." + aaThree(result.RefAA) + posStr + "_" + pos1Str + "ins" + insAAs
+			n += copy(buf[n:], aaThree(result.RefAA))
 		}
-		return "p." + posStr + "_" + pos1Str + "ins" + insAAs
+		n += putInt64(buf[n:], pos)
+		buf[n] = '_'
+		n++
+		n += putInt64(buf[n:], pos+1)
+		n += copy(buf[n:], "ins")
+		return string(buf[:n]) + formatAASequence(result.InsertedAAs)
 
 	case ConsequenceSpliceDonor, ConsequenceSpliceAcceptor:
-		return "p.X" + posStr + "_splice"
+		n += copy(buf[n:], "p.X")
+		n += putInt64(buf[n:], pos)
+		n += copy(buf[n:], "_splice")
+		return string(buf[:n])
 
 	default:
 		return ""
