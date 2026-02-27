@@ -956,3 +956,32 @@ func TestPredictConsequence_DeletionFrom3UTRSpansStopCodon(t *testing.T) {
 	assert.Contains(t, result.Consequence, ConsequenceStopLost,
 		"deletion from 3'UTR spanning into stop codon should include stop_lost")
 }
+
+func TestPredictConsequence_StopCodonInsertionRetained(t *testing.T) {
+	// Insertion at the last base of the stop codon should be classified as
+	// inframe_insertion,stop_retained_variant when the stop codon is preserved.
+	//
+	// Forward strand: CDS = ATG GCT GCA TAA (12bp: M A A *)
+	// Stop codon at CDS positions 10-12 (TAA).
+	// Insert 'G' at CDS pos 12 (last base of stop): ref=A, alt=AG
+	// Mutant CDS: ATG GCT GCA TAA G... → stop codon TAA is still at pos 10-12
+	// The insertion is after the stop codon reading frame → stop_retained_variant.
+
+	cds := "ATGGCTGCATAA" // 12bp: M A A *
+	transcript := &cache.Transcript{
+		ID: "ENST_STOP_INS", GeneName: "STOPINS", Chrom: "1",
+		Start: 990, End: 1020, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1011,
+		Exons:       []cache.Exon{{Number: 1, Start: 990, End: 1020, CDSStart: 1000, CDSEnd: 1011, Frame: 0}},
+		CDSSequence: cds,
+	}
+
+	// Insert at genomic 1011 (CDS pos 12 = last base of stop codon TAA)
+	v := &vcf.Variant{Chrom: "1", Pos: 1011, Ref: "A", Alt: "AG"}
+	result := PredictConsequence(v, transcript)
+
+	assert.Contains(t, result.Consequence, ConsequenceStopRetained,
+		"insertion at last stop codon base should be stop_retained_variant")
+	assert.Contains(t, result.Consequence, ConsequenceInframeInsertion,
+		"should also be classified as inframe_insertion")
+}

@@ -325,6 +325,17 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 		stopCodonCDSPos = int64(len(t.CDSSequence)) - 2 // 1-based start of last codon
 	}
 
+	// Insertions at or after the stop codon: if the stop codon remains intact
+	// in the mutant CDS, classify as inframe_insertion,stop_retained_variant.
+	if diff > 0 && stopCodonCDSPos > 0 && result.CDSPosition >= stopCodonCDSPos {
+		if stopCodonPreserved(v, t, result.CDSPosition) {
+			result.Consequence = ConsequenceInframeInsertion + "," + ConsequenceStopRetained
+			result.Impact = GetImpact(ConsequenceInframeInsertion)
+			result.HGVSp = FormatHGVSp(result)
+			return result
+		}
+	}
+
 	if diff%3 == 0 {
 		// In-frame
 		if diff > 0 {
@@ -634,6 +645,40 @@ func computeInframeProteinChange(v *vcf.Variant, t *cache.Transcript, cdsPos int
 		insertedAAs = string(mutAAs[first : mi+1])
 	}
 	return
+}
+
+// stopCodonPreserved checks whether an insertion at/after the stop codon
+// preserves the original stop codon in the mutant CDS. It builds the local
+// mutant sequence around the stop codon and verifies the original stop codon
+// triplet is still present at its expected position.
+func stopCodonPreserved(v *vcf.Variant, t *cache.Transcript, cdsPos int64) bool {
+	if len(t.CDSSequence) < 3 || cdsPos < 1 {
+		return false
+	}
+
+	cdsIdx := int(cdsPos - 1)
+	ref, alt := v.Ref, v.Alt
+	if t.IsReverseStrand() {
+		ref = ReverseComplement(ref)
+		alt = ReverseComplement(alt)
+	}
+
+	endIdx := cdsIdx + len(ref)
+	if endIdx > len(t.CDSSequence) {
+		endIdx = len(t.CDSSequence)
+	}
+
+	mutCDS := t.CDSSequence[:cdsIdx] + alt + t.CDSSequence[endIdx:]
+
+	// The original stop codon starts at the same position in the mutant
+	stopStart := len(t.CDSSequence) - 3
+	if stopStart < 0 || stopStart+3 > len(mutCDS) {
+		return false
+	}
+
+	origStop := t.CDSSequence[stopStart : stopStart+3]
+	mutStop := mutCDS[stopStart : stopStart+3]
+	return TranslateCodon(origStop) == '*' && TranslateCodon(mutStop) == '*'
 }
 
 // indelCreatesStop checks if an indel creates a stop codon near the variant site.

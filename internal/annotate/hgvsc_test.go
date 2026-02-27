@@ -698,3 +698,138 @@ func TestFormatHGVSc_DelinsReverseStrand(t *testing.T) {
 
 	assert.Equal(t, "c.34_36delinsT", hgvsc)
 }
+
+func TestFormatHGVSc_SpliceJunctionDup_ForwardStrand(t *testing.T) {
+	// Forward strand, 2-exon transcript. Insertion at the intronic position
+	// just before exon 2 start duplicates the first exonic CDS base.
+	//
+	// Exon 1: 990-1020 (CDS 1000-1020, 21bp)
+	// Intron: 1021-1099
+	// Exon 2: 1100-1200 (CDS 1100-1180, 81bp)
+	// CDS = 21bp (exon1) + 81bp (exon2) = 102bp
+	//
+	// CDS pos 22 = first base of exon 2 (genomic 1100).
+	// Insert at genomic 1099 (intronic, last intron base): ref=N, alt=NA
+	// On forward strand, inserted 'A' should match CDS[21] (0-based) = CDS pos 22.
+	cds := "ATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATG"
+	// CDS[21] = 'A' (starts new ATG repeat at pos 22)
+	transcript := &cache.Transcript{
+		ID: "ENST_SJ_FWD", GeneName: "SJFWD", Chrom: "1",
+		Start: 990, End: 1200, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1180,
+		Exons: []cache.Exon{
+			{Number: 1, Start: 990, End: 1020, CDSStart: 1000, CDSEnd: 1020, Frame: 0},
+			{Number: 2, Start: 1100, End: 1200, CDSStart: 1100, CDSEnd: 1180, Frame: 0},
+		},
+		CDSSequence: cds,
+	}
+
+	// Intronic insertion: pos=1099 (intron), ref=T, alt=TA
+	// Inserted 'A' on forward strand. CDS pos 22 = cds[21] = 'A'. Match → dup.
+	v := &vcf.Variant{Chrom: "1", Pos: 1099, Ref: "T", Alt: "TA"}
+	result := PredictConsequence(v, transcript)
+	hgvsc := FormatHGVSc(v, transcript, result)
+
+	assert.Equal(t, "c.22dup", hgvsc)
+}
+
+func TestFormatHGVSc_SpliceJunctionDup_ReverseStrand(t *testing.T) {
+	// Reverse strand, 2-exon transcript. Insertion at the intronic position
+	// just after exon 1 end (genomically) duplicates the last exonic CDS base.
+	//
+	// Reverse strand layout (genomic order):
+	// Exon 2: 1000-1020 (lower genomic, later in transcript)
+	// Intron: 1021-1099
+	// Exon 1: 1100-1200 (higher genomic, first in transcript)
+	//
+	// CDS on reverse strand: exon 1 first (1200→1100), then exon 2 (1020→1000)
+	// CDS pos 1 = genomic 1200 (start of exon 1 on coding strand)
+	//
+	// Insert at genomic 1021 (intron, just after exon 2 end):
+	// On reverse strand, v.Pos=1021 is intronic. v.Pos+1=1022 is also intronic.
+	// Actually v.Pos=1020 is exon 2 end. Let me reconsider.
+	//
+	// For reverse strand c.X_X+1insN pattern:
+	// v.Pos is exonic (CDS>0), v.Pos+1 is intronic (CDS=0).
+	// v.Pos = exon boundary = last genomic base of exon 2 = 1020.
+	// Inserted base on coding strand should match CDS base at v.Pos.
+
+	cds := "ATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATG"
+	// Exon 1 contributes first 101bp of CDS (genomic 1200→1100, CDS 1-101)
+	// Exon 2 contributes last 21bp (genomic 1020→1000, CDS 102-122)
+	// CDS pos 102 maps to genomic 1020 (exon 2 CDSEnd on reverse strand)
+	// cds[101] = 'G' (0-based, the 102nd character in ATG repeat)
+	transcript := &cache.Transcript{
+		ID: "ENST_SJ_REV", GeneName: "SJREV", Chrom: "1",
+		Start: 1000, End: 1200, Strand: -1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1200,
+		Exons: []cache.Exon{
+			{Number: 2, Start: 1000, End: 1020, CDSStart: 1000, CDSEnd: 1020, Frame: 0},
+			{Number: 1, Start: 1100, End: 1200, CDSStart: 1100, CDSEnd: 1200, Frame: 0},
+		},
+		CDSSequence: cds,
+	}
+
+	// v.Pos=1020 (exon 2 end, exonic). v.Pos+1=1021 (intronic).
+	// GenomicToCDS(1020) for reverse strand = CDS pos at boundary.
+	// Inserted base: ref=A, alt=AC → genomic inserted 'C', RC='G' on coding strand.
+	// Check: does 'G' match CDS base at the boundary?
+	cdsAtBoundary := GenomicToCDS(1020, transcript)
+	t.Logf("CDS pos at boundary (1020): %d, CDS base: %c", cdsAtBoundary, cds[cdsAtBoundary-1])
+
+	// Insert C (genomic) → G (coding) at boundary
+	v := &vcf.Variant{Chrom: "1", Pos: 1020, Ref: "A", Alt: "AC"}
+	result := PredictConsequence(v, transcript)
+	hgvsc := FormatHGVSc(v, transcript, result)
+
+	// Should detect dup of the boundary CDS base
+	assert.Contains(t, hgvsc, "dup", "expected splice junction dup on reverse strand")
+}
+
+func TestFormatHGVSc_SpliceJunctionDup_MultiBase(t *testing.T) {
+	// Forward strand, insert 3 bases at intronic position that match
+	// the first 3 exonic CDS bases → multi-base dup.
+	cds := "ATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATG"
+	transcript := &cache.Transcript{
+		ID: "ENST_SJ_MULTI", GeneName: "SJMULTI", Chrom: "1",
+		Start: 990, End: 1200, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1180,
+		Exons: []cache.Exon{
+			{Number: 1, Start: 990, End: 1020, CDSStart: 1000, CDSEnd: 1020, Frame: 0},
+			{Number: 2, Start: 1100, End: 1200, CDSStart: 1100, CDSEnd: 1180, Frame: 0},
+		},
+		CDSSequence: cds,
+	}
+
+	// CDS[21..23] = "ATG" (CDS pos 22-24)
+	// Insert "ATG" at intronic pos 1099
+	v := &vcf.Variant{Chrom: "1", Pos: 1099, Ref: "T", Alt: "TATG"}
+	result := PredictConsequence(v, transcript)
+	hgvsc := FormatHGVSc(v, transcript, result)
+
+	assert.Equal(t, "c.22_24dup", hgvsc)
+}
+
+func TestFormatHGVSc_SpliceJunctionInsert_NonMatching(t *testing.T) {
+	// Forward strand, insert base at intronic position that does NOT match
+	// the exonic CDS base → should remain a plain insertion, not dup.
+	cds := "ATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATG"
+	transcript := &cache.Transcript{
+		ID: "ENST_SJ_NODUP", GeneName: "SJNODUP", Chrom: "1",
+		Start: 990, End: 1200, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1180,
+		Exons: []cache.Exon{
+			{Number: 1, Start: 990, End: 1020, CDSStart: 1000, CDSEnd: 1020, Frame: 0},
+			{Number: 2, Start: 1100, End: 1200, CDSStart: 1100, CDSEnd: 1180, Frame: 0},
+		},
+		CDSSequence: cds,
+	}
+
+	// CDS[21] = 'A', insert 'C' (doesn't match) at intronic pos 1099
+	v := &vcf.Variant{Chrom: "1", Pos: 1099, Ref: "T", Alt: "TC"}
+	result := PredictConsequence(v, transcript)
+	hgvsc := FormatHGVSc(v, transcript, result)
+
+	assert.NotContains(t, hgvsc, "dup", "non-matching insertion should not be dup")
+	assert.Contains(t, hgvsc, "ins", "should be a plain insertion")
+}

@@ -161,6 +161,17 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 		return "c." + strconv.FormatInt(dup.cdsStart, 10) + "_" + strconv.FormatInt(dup.cdsEnd, 10) + "dup"
 	}
 
+	// Check for duplication at splice junctions where one flanking position
+	// is intronic (CDS=0) and the other is exonic. The CDS-based dup check
+	// above bails when the anchor is intronic, but the inserted base may
+	// still duplicate the exon boundary base.
+	if sjDup := checkSpliceJunctionDup(v, t, insertedSeq); sjDup.isDup {
+		if sjDup.cdsStart == sjDup.cdsEnd {
+			return "c." + strconv.FormatInt(sjDup.cdsStart, 10) + "dup"
+		}
+		return "c." + strconv.FormatInt(sjDup.cdsStart, 10) + "_" + strconv.FormatInt(sjDup.cdsEnd, 10) + "dup"
+	}
+
 	insAfterPos := v.Pos
 	insBeforePos := v.Pos + 1
 	if t.IsReverseStrand() {
@@ -543,6 +554,61 @@ type dupResult struct {
 	isDup    bool
 	cdsStart int64 // 1-based CDS position of first duplicated base
 	cdsEnd   int64 // 1-based CDS position of last duplicated base
+}
+
+// checkSpliceJunctionDup detects duplications at exon-intron boundaries where
+// the VCF anchor is intronic (CDS=0) but the adjacent exonic base matches the
+// inserted sequence. This handles two patterns:
+//   - Forward strand c.X-1_XinsN: anchor (v.Pos) intronic, v.Pos+1 exonic
+//   - Reverse strand c.X_X+1insN: anchor (v.Pos) exonic, v.Pos+1 intronic
+//
+// In both cases, the CDS-based dup detection in formatHGVScInsertion skips
+// these because GenomicToCDS returns 0 for the intronic position.
+func checkSpliceJunctionDup(v *vcf.Variant, t *cache.Transcript, insertedSeq string) dupResult {
+	if len(insertedSeq) == 0 || len(t.CDSSequence) == 0 {
+		return dupResult{}
+	}
+
+	// Try both flanking positions to find which one is exonic
+	cdsLeft := GenomicToCDS(v.Pos, t)
+	cdsRight := GenomicToCDS(v.Pos+1, t)
+
+	// We only handle the case where exactly one side is exonic
+	if (cdsLeft > 0) == (cdsRight > 0) {
+		return dupResult{}
+	}
+
+	seqLen := len(insertedSeq)
+
+	if cdsRight > 0 {
+		// Forward strand pattern: anchor is intronic, next position is exonic.
+		// The exonic boundary is v.Pos+1, mapping to cdsRight.
+		// Check if CDS bases starting at cdsRight match the inserted sequence.
+		startIdx := int(cdsRight - 1) // 0-based
+		endIdx := startIdx + seqLen
+		if endIdx <= len(t.CDSSequence) && t.CDSSequence[startIdx:endIdx] == insertedSeq {
+			return dupResult{
+				isDup:    true,
+				cdsStart: cdsRight,
+				cdsEnd:   cdsRight + int64(seqLen) - 1,
+			}
+		}
+	} else {
+		// Reverse strand pattern: anchor is exonic, next position is intronic.
+		// The exonic boundary is v.Pos, mapping to cdsLeft.
+		// Check if CDS bases ending at cdsLeft match the inserted sequence.
+		endIdx := int(cdsLeft) // exclusive, since cdsLeft is 1-based and we want [start, cdsLeft]
+		startIdx := endIdx - seqLen
+		if startIdx >= 0 && t.CDSSequence[startIdx:endIdx] == insertedSeq {
+			return dupResult{
+				isDup:    true,
+				cdsStart: int64(startIdx + 1),
+				cdsEnd:   cdsLeft,
+			}
+		}
+	}
+
+	return dupResult{}
 }
 
 // checkDuplication checks if an insertion duplicates adjacent reference bases.
