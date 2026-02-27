@@ -16,6 +16,7 @@ import (
 	"github.com/inodb/vibe-vep/internal/output"
 	"github.com/inodb/vibe-vep/internal/vcf"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // Exit codes
@@ -32,22 +33,56 @@ var (
 )
 
 func newRootCmd() *cobra.Command {
-	var verbose bool
+	var (
+		verbose    bool
+		configFile string
+	)
 
 	rootCmd := &cobra.Command{
 		Use:   "vibe-vep",
 		Short: "Variant Effect Predictor",
 		Long:  "vibe-vep - Variant Effect Predictor using GENCODE annotations",
 		Version: fmt.Sprintf("%s (%s) built %s", version, commit, date),
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return initConfig(configFile)
+		},
 	}
 
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable debug-level logging")
+	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "Config file (default: $HOME/.vibe-vep.yaml)")
 
 	rootCmd.AddCommand(newAnnotateCmd(&verbose))
 	rootCmd.AddCommand(newCompareCmd(&verbose))
 	rootCmd.AddCommand(newDownloadCmd(&verbose))
 
 	return rootCmd
+}
+
+// initConfig reads in config file and ENV variables if set.
+func initConfig(configFile string) error {
+	if configFile != "" {
+		viper.SetConfigFile(configFile)
+	} else {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			viper.AddConfigPath(home)
+		}
+		viper.AddConfigPath(".")
+		viper.SetConfigName(".vibe-vep")
+		viper.SetConfigType("yaml")
+	}
+
+	viper.SetEnvPrefix("VIBE_VEP")
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+
+	// Read config file if it exists (not an error if missing)
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return fmt.Errorf("reading config file: %w", err)
+		}
+	}
+	return nil
 }
 
 // newLogger creates a zap logger for the CLI. In verbose mode it logs at DEBUG
@@ -87,13 +122,23 @@ func newAnnotateCmd(verbose *bool) *cobra.Command {
   vibe-vep annotate -f vcf -o output.vcf input.vcf
   cat input.vcf | vibe-vep annotate -`,
 		Args: cobra.ExactArgs(1),
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return viper.BindPFlags(cmd.Flags())
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			logger, err := newLogger(*verbose)
 			if err != nil {
 				return fmt.Errorf("creating logger: %w", err)
 			}
 			defer logger.Sync()
-			return runAnnotate(logger, args[0], assembly, outputFormat, outputFile, canonicalOnly, inputFormat, canonicalSource)
+			return runAnnotate(logger, args[0],
+				viper.GetString("assembly"),
+				viper.GetString("output-format"),
+				viper.GetString("output"),
+				viper.GetBool("canonical"),
+				viper.GetString("input-format"),
+				viper.GetString("canonical-source"),
+			)
 		},
 	}
 
@@ -123,6 +168,9 @@ func newCompareCmd(verbose *bool) *cobra.Command {
   vibe-vep compare --columns consequence,hgvsp data_mutations.txt
   vibe-vep compare --all data_mutations.txt`,
 		Args: cobra.ExactArgs(1),
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return viper.BindPFlags(cmd.Flags())
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			logger, err := newLogger(*verbose)
 			if err != nil {
@@ -132,14 +180,19 @@ func newCompareCmd(verbose *bool) *cobra.Command {
 
 			// Parse columns
 			colMap := make(map[string]bool)
-			for _, c := range strings.Split(columns, ",") {
+			for _, c := range strings.Split(viper.GetString("columns"), ",") {
 				c = strings.TrimSpace(strings.ToLower(c))
 				if c != "" {
 					colMap[c] = true
 				}
 			}
 
-			return runCompare(logger, args[0], assembly, colMap, all, canonicalSource)
+			return runCompare(logger, args[0],
+				viper.GetString("assembly"),
+				colMap,
+				viper.GetBool("all"),
+				viper.GetString("canonical-source"),
+			)
 		},
 	}
 
