@@ -35,8 +35,8 @@ func TestCategorizeConsequence(t *testing.T) {
 		{"synonymous ↔ stop_retained", "synonymous_variant", "stop_retained_variant", CatMatch},
 		{"stop_retained ↔ synonymous", "stop_retained_variant", "synonymous_variant", CatMatch},
 		{"compound match - vep primary in maf", "frameshift_variant,start_lost", "start_lost", CatMatch},
-		{"coding → non_coding_exon biotype change", "missense_variant", "non_coding_transcript_exon_variant", CatNoCDS},
-		{"synonymous → non_coding_exon biotype change", "synonymous_variant", "non_coding_transcript_exon_variant", CatNoCDS},
+		{"coding → non_coding_exon biotype change", "missense_variant", "non_coding_transcript_exon_variant", CatTranscriptModelChange},
+		{"synonymous → non_coding_exon biotype change", "synonymous_variant", "non_coding_transcript_exon_variant", CatTranscriptModelChange},
 		{"5'UTR → intron boundary shift", "5_prime_UTR_variant", "intron_variant", CatUpstreamReclass},
 		// Phase 1a: normalize modifiers
 		{"drop start_retained with frameshift", "frameshift_variant,start_retained_variant", "start_lost", CatMatch},
@@ -53,6 +53,14 @@ func TestCategorizeConsequence(t *testing.T) {
 		{"start_lost ↔ missense", "start_lost", "missense_variant", CatMatch},
 		{"start_lost ↔ inframe", "start_lost", "inframe_deletion", CatMatch},
 		{"inframe ↔ start_lost", "In_Frame_Ins", "start_lost", CatMatch},
+		// Phase 2: transcript model change
+		{"coding → non_coding_exon transcript model", "stop_gained", "non_coding_transcript_exon_variant", CatTranscriptModelChange},
+		{"coding → intron non-coding", "missense_variant", "intron_variant,non_coding_transcript_exon_variant", CatTranscriptModelChange},
+		{"coding → intron transcript model", "frameshift_variant", "intron_variant", CatTranscriptModelChange},
+		// Phase 2: gene model change (coding ↔ intergenic)
+		{"missense → intergenic gene model", "missense_variant", "intergenic_variant", CatGeneModelChange},
+		{"synonymous → intergenic gene model", "synonymous_variant", "intergenic_variant", CatGeneModelChange},
+		{"intergenic → missense gene model", "intergenic_variant", "missense_variant", CatGeneModelChange},
 		{"mismatch", "missense_variant", "synonymous_variant", CatMismatch},
 	}
 	for _, tt := range tests {

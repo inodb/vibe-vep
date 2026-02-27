@@ -29,8 +29,10 @@ const (
 	CatNoCDS            Category = "no_cds_data"
 	CatDupVsIns         Category = "dup_vs_ins"
 	CatDelinsNorm       Category = "delins_normalized"
-	CatSpliceVsPredicted Category = "splice_vs_predicted"
-	CatMismatch         Category = "mismatch"
+	CatSpliceVsPredicted    Category = "splice_vs_predicted"
+	CatTranscriptModelChange Category = "transcript_model_change"
+	CatGeneModelChange      Category = "gene_model_change"
+	CatMismatch             Category = "mismatch"
 )
 
 // isShownByDefault returns whether rows with this category are shown without --all.
@@ -39,7 +41,8 @@ func isShownByDefault(col string, cat Category) bool {
 	case CatMatch, CatBothEmpty:
 		return false
 	case CatMafNonstandard, CatSpliceNoProtein, CatNoCDS, CatDupVsIns,
-		CatDelinsNorm, CatSpliceVsPredicted:
+		CatDelinsNorm, CatSpliceVsPredicted,
+		CatTranscriptModelChange, CatGeneModelChange:
 		return false
 	}
 	return true
@@ -273,11 +276,24 @@ func categorizeConsequence(mafConseq, vepConseq string) Category {
 	}
 
 	// Transcript biotype changed between GENCODE versions: a transcript that was
-	// protein_coding in the MAF's version may be non-coding in ours. When MAF has
-	// a coding consequence and VEP reports non_coding_transcript_exon_variant,
-	// this is a transcript model difference, not an algorithm issue.
-	if normVEP == "non_coding_transcript_exon_variant" && isCodingConsequence(mafConseq) {
-		return CatNoCDS
+	// protein_coding in the MAF's version may be non-coding in ours (or vice
+	// versa). When one side has a coding consequence and the other has a
+	// non-coding consequence, this is a transcript model difference.
+	if isCodingConsequence(mafConseq) && isNonCodingConsequence(normVEP) {
+		return CatTranscriptModelChange
+	}
+	if isNonCodingConsequence(normMAF) && isCodingConsequence(vepConseq) {
+		return CatTranscriptModelChange
+	}
+
+	// Gene model boundary change: one side has a coding consequence and the
+	// other is intergenic. The gene may exist in one GENCODE version but not
+	// the other.
+	if isCodingConsequence(mafConseq) && normVEP == "intergenic_variant" {
+		return CatGeneModelChange
+	}
+	if normMAF == "intergenic_variant" && isCodingConsequence(vepConseq) {
+		return CatGeneModelChange
 	}
 
 	// UTR ↔ intron: exon boundary shifts between GENCODE versions can move a
@@ -647,6 +663,18 @@ func isStopGainedHGVSp(hgvsp string) bool {
 func isUTRConsequence(conseq string) bool {
 	return strings.Contains(conseq, "5_prime_utr_variant") ||
 		strings.Contains(conseq, "3_prime_utr_variant")
+}
+
+// isNonCodingConsequence returns true if the (normalized) consequence
+// indicates a non-coding transcript region (intron, non-coding exon, etc.).
+func isNonCodingConsequence(conseq string) bool {
+	for _, term := range strings.Split(conseq, ",") {
+		switch strings.TrimSpace(term) {
+		case "non_coding_transcript_exon_variant", "intron_variant":
+			return true
+		}
+	}
+	return false
 }
 
 func isSpliceConsequence(conseq string) bool {
