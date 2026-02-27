@@ -648,9 +648,9 @@ func computeInframeProteinChange(v *vcf.Variant, t *cache.Transcript, cdsPos int
 }
 
 // stopCodonPreserved checks whether an insertion at/after the stop codon
-// preserves the original stop codon in the mutant CDS. It builds the local
-// mutant sequence around the stop codon and verifies the original stop codon
-// triplet is still present at its expected position.
+// preserves the stop codon in the mutant CDS. It builds the mutant sequence
+// and checks for a stop codon at both the original position and the shifted
+// position (insertion pushes the stop codon rightward).
 func stopCodonPreserved(v *vcf.Variant, t *cache.Transcript, cdsPos int64) bool {
 	if len(t.CDSSequence) < 3 || cdsPos < 1 {
 		return false
@@ -670,15 +670,26 @@ func stopCodonPreserved(v *vcf.Variant, t *cache.Transcript, cdsPos int64) bool 
 
 	mutCDS := t.CDSSequence[:cdsIdx] + alt + t.CDSSequence[endIdx:]
 
-	// The original stop codon starts at the same position in the mutant
-	stopStart := len(t.CDSSequence) - 3
-	if stopStart < 0 || stopStart+3 > len(mutCDS) {
+	origStop := len(t.CDSSequence) - 3
+	if origStop < 0 {
+		return false
+	}
+	if TranslateCodon(t.CDSSequence[origStop:origStop+3]) != '*' {
 		return false
 	}
 
-	origStop := t.CDSSequence[stopStart : stopStart+3]
-	mutStop := mutCDS[stopStart : stopStart+3]
-	return TranslateCodon(origStop) == '*' && TranslateCodon(mutStop) == '*'
+	// Check at original position
+	if origStop+3 <= len(mutCDS) && TranslateCodon(mutCDS[origStop:origStop+3]) == '*' {
+		return true
+	}
+
+	// Check at shifted position (insertion pushes stop codon right by diff bases)
+	shifted := origStop + len(alt) - len(ref)
+	if shifted >= 0 && shifted+3 <= len(mutCDS) && TranslateCodon(mutCDS[shifted:shifted+3]) == '*' {
+		return true
+	}
+
+	return false
 }
 
 // indelCreatesStop checks if an indel creates a stop codon near the variant site.
