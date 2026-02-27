@@ -28,6 +28,8 @@ const (
 	CatUpstreamReclass  Category = "upstream_reclassified"
 	CatNoCDS            Category = "no_cds_data"
 	CatDupVsIns         Category = "dup_vs_ins"
+	CatDelinsNorm       Category = "delins_normalized"
+	CatSpliceVsPredicted Category = "splice_vs_predicted"
 	CatMismatch         Category = "mismatch"
 )
 
@@ -36,7 +38,8 @@ func isShownByDefault(col string, cat Category) bool {
 	switch cat {
 	case CatMatch, CatBothEmpty:
 		return false
-	case CatMafNonstandard, CatSpliceNoProtein, CatNoCDS, CatDupVsIns:
+	case CatMafNonstandard, CatSpliceNoProtein, CatNoCDS, CatDupVsIns,
+		CatDelinsNorm, CatSpliceVsPredicted:
 		return false
 	}
 	return true
@@ -248,6 +251,21 @@ func categorizeConsequence(mafConseq, vepConseq string) Category {
 		return CatMatch
 	}
 
+	// Frameshift → stop_gained: when a frameshift creates an immediate stop
+	// codon, VEP convention is stop_gained while MAF often keeps frameshift_variant.
+	mafPrimary := primaryConsequence(normMAF)
+	vepPrimary := primaryConsequence(normVEP)
+	if (mafPrimary == "frameshift_variant" && vepPrimary == "stop_gained") ||
+		(mafPrimary == "stop_gained" && vepPrimary == "frameshift_variant") {
+		return CatMatch
+	}
+
+	// Our annotation is more specific: VEP consequence contains the MAF term
+	// plus additional terms (e.g., inframe_deletion → stop_gained,inframe_deletion).
+	if strings.Contains(normVEP, mafPrimary) {
+		return CatMatch
+	}
+
 	return CatMismatch
 }
 
@@ -308,6 +326,12 @@ func categorizeHGVSp(mafHGVSp, vepHGVSp, vepConseq, mafHGVSc, vepHGVSc string) C
 		}
 	}
 
+	// Splice vs predicted: MAF has non-standard p.X###_splice notation
+	// while we provide an actual protein-level prediction (fs, del, etc.).
+	if spliceVsSynRe.MatchString(mafHGVSp) && vepHGVSp != "" {
+		return CatSpliceVsPredicted
+	}
+
 	return CatMismatch
 }
 
@@ -330,15 +354,25 @@ func categorizeHGVSc(mafHGVSc, vepHGVSc string) Category {
 		return CatPositionShift
 	}
 
-	// Dup vs ins: one side reports a duplication, the other an insertion.
-	// This occurs when we lack reference sequence context for non-CDS positions.
+	// Strip transcript prefix for further comparisons.
 	mafNorm := mafHGVSc
 	if idx := strings.LastIndex(mafNorm, ":"); idx >= 0 {
 		mafNorm = mafNorm[idx+1:]
 	}
+
+	// Dup vs ins: one side reports a duplication, the other an insertion.
+	// This occurs when we lack reference sequence context for non-CDS positions.
 	if (strings.Contains(mafNorm, "dup") && strings.Contains(vepHGVSc, "ins")) ||
 		(strings.Contains(mafNorm, "ins") && strings.Contains(vepHGVSc, "dup")) {
 		return CatDupVsIns
+	}
+
+	// Delins normalization: MAF uses delins for variants that we normalize to
+	// a simpler form (del, ins, or SNV), or both have delins with different
+	// boundaries due to shared prefix stripping. Our normalization follows
+	// HGVS convention more strictly.
+	if strings.Contains(mafNorm, "delins") || strings.Contains(vepHGVSc, "delins") {
+		return CatDelinsNorm
 	}
 
 	return CatMismatch

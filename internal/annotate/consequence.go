@@ -319,6 +319,10 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 			}
 		} else {
 			result.Consequence = ConsequenceInframeDeletion
+			// Check if in-frame deletion creates a stop codon at the junction
+			if indelCreatesStop(v, t, result.CDSPosition) {
+				result.Consequence = ConsequenceStopGained + "," + ConsequenceInframeDeletion
+			}
 		}
 	} else {
 		// Frameshift
@@ -341,6 +345,11 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 				result.AltAA = altAA
 			}
 			result.FrameshiftStopDist = stopDist
+			// If the frameshift immediately creates a stop codon at the
+			// variant position, reclassify as stop_gained per VEP convention.
+			if stopDist == 1 && altAA == '*' {
+				result.Consequence = ConsequenceStopGained
+			}
 		}
 	}
 
@@ -462,15 +471,23 @@ func indelCreatesStop(v *vcf.Variant, t *cache.Transcript, cdsPos int64) bool {
 	// Find the codon-aligned start position for the variant
 	codonStart := (cdsIdx / 3) * 3
 
-	// Check only the codon containing the variant for a new stop codon.
-	// This catches cases like in-frame insertions that create a stop codon
-	// at the exact variant position (e.g., TAC → TAG|TAC).
-	if codonStart+3 <= len(mutCDS) {
-		codon := mutCDS[codonStart : codonStart+3]
+	// Check codons at and after the variant position for new stop codons.
+	// For insertions, the stop is typically at the variant codon.
+	// For deletions, the junction codon may be further downstream.
+	nCodons := (len(ref) + 2) / 3 // check enough codons to cover the indel span
+	if nCodons < 2 {
+		nCodons = 2
+	}
+	for i := 0; i < nCodons; i++ {
+		pos := codonStart + i*3
+		if pos+3 > len(mutCDS) {
+			break
+		}
+		codon := mutCDS[pos : pos+3]
 		if TranslateCodon(codon) == '*' {
 			// Only report if this is a NEW stop (not present in original)
-			if codonStart+3 <= len(t.CDSSequence) {
-				origCodon := t.CDSSequence[codonStart : codonStart+3]
+			if pos+3 <= len(t.CDSSequence) {
+				origCodon := t.CDSSequence[pos : pos+3]
 				if TranslateCodon(origCodon) == '*' {
 					return false
 				}

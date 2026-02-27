@@ -126,7 +126,7 @@ func TestCategorizeHGVSc(t *testing.T) {
 		{"position shift SNV", "ENST00000333418.4:c.3434A>G", "c.1145A>G", CatPositionShift},
 		{"position shift del", "ENST00000295754.10:c.94+16291_94+16307del", "c.94+16290_94+16306del", CatPositionShift},
 		{"position shift dup", "ENST00000357077.9:c.4426dup", "c.4427dup", CatPositionShift},
-		{"mismatch delins vs del", "ENST00000324385.9:c.1382_1407delinsG", "c.1383_1407del", CatMismatch},
+		{"delins normalized", "ENST00000324385.9:c.1382_1407delinsG", "c.1383_1407del", CatDelinsNorm},
 		{"dup vs ins", "ENST00000397901.8:c.*46_*49dup", "c.*49_*50insAAGG", CatDupVsIns},
 		{"mismatch different SNV", "ENST00000361923.2:c.1428C>G", "c.999A>T", CatMismatch},
 	}
