@@ -14,6 +14,19 @@ func aaThree(aa byte) string {
 	return "Xaa"
 }
 
+// formatAASequence converts a string of single-letter amino acid codes to
+// concatenated three-letter codes (e.g., "AL" → "AlaLeu").
+func formatAASequence(aas string) string {
+	if len(aas) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i := 0; i < len(aas); i++ {
+		b.WriteString(aaThree(aas[i]))
+	}
+	return b.String()
+}
+
 // FormatHGVSp formats the HGVS protein notation for a consequence result.
 // Returns an empty string for non-coding consequences.
 func FormatHGVSp(result *ConsequenceResult) string {
@@ -67,24 +80,36 @@ func FormatHGVSp(result *ConsequenceResult) string {
 		return "p." + posStr + "fs"
 
 	case ConsequenceInframeDeletion:
+		suffix := "del"
+		if len(result.InsertedAAs) > 0 {
+			suffix = "delins" + formatAASequence(result.InsertedAAs)
+		}
 		if result.ProteinEndPosition > result.ProteinPosition && result.EndAA != 0 {
 			endPosStr := strconv.FormatInt(result.ProteinEndPosition, 10)
 			if result.RefAA != 0 {
-				return "p." + aaThree(result.RefAA) + posStr + "_" + aaThree(result.EndAA) + endPosStr + "del"
+				return "p." + aaThree(result.RefAA) + posStr + "_" + aaThree(result.EndAA) + endPosStr + suffix
 			}
-			return "p." + posStr + "_" + endPosStr + "del"
+			return "p." + posStr + "_" + endPosStr + suffix
 		}
 		if result.RefAA != 0 {
-			return "p." + aaThree(result.RefAA) + posStr + "del"
+			return "p." + aaThree(result.RefAA) + posStr + suffix
 		}
-		return "p." + posStr + "del"
+		return "p." + posStr + suffix
 
 	case ConsequenceInframeInsertion:
-		pos1Str := strconv.FormatInt(pos+1, 10)
-		if result.RefAA != 0 {
-			return "p." + aaThree(result.RefAA) + posStr + "_" + pos1Str + "ins"
+		if result.IsDup {
+			if result.ProteinEndPosition > result.ProteinPosition && result.EndAA != 0 {
+				endPosStr := strconv.FormatInt(result.ProteinEndPosition, 10)
+				return "p." + aaThree(result.RefAA) + posStr + "_" + aaThree(result.EndAA) + endPosStr + "dup"
+			}
+			return "p." + aaThree(result.RefAA) + posStr + "dup"
 		}
-		return "p." + posStr + "_" + pos1Str + "ins"
+		pos1Str := strconv.FormatInt(pos+1, 10)
+		insAAs := formatAASequence(result.InsertedAAs)
+		if result.RefAA != 0 {
+			return "p." + aaThree(result.RefAA) + posStr + "_" + pos1Str + "ins" + insAAs
+		}
+		return "p." + posStr + "_" + pos1Str + "ins" + insAAs
 
 	case ConsequenceSpliceDonor, ConsequenceSpliceAcceptor:
 		return "p.X" + posStr + "_splice"

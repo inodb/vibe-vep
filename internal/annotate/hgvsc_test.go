@@ -585,6 +585,73 @@ func TestFormatHGVSc_DelinsForwardStrand(t *testing.T) {
 	assert.Equal(t, "c.5_7delinsG", hgvsc)
 }
 
+func TestFormatHGVSc_SuffixClipping(t *testing.T) {
+	// Test: REF=ATGCA, ALT=ACA → shared prefix 'A', shared suffix 'CA' → pure deletion of 'TG'
+	// CDS = "ATGATGCAAGATGATGATG..." → positions 1-3=ATG, 4-6=ATG, 7-9=CAA...
+	// Variant at pos 1000 (CDS 1): ref=ATGCA, alt=ACA
+	// After prefix clip (A): remaining ref=TGCA, extra alt=CA
+	// After suffix clip (CA): remaining ref=TG, extra alt="" → pure deletion of CDS positions 2-3
+	cds := "ATGATGCAAGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGA"
+	transcript := &cache.Transcript{
+		ID: "ENST_SUFCLIP", GeneName: "SUFCLIP", Chrom: "1",
+		Start: 990, End: 1210, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1101,
+		Exons:       []cache.Exon{{Number: 1, Start: 990, End: 1210, CDSStart: 1000, CDSEnd: 1101, Frame: 0}},
+		CDSSequence: cds,
+	}
+
+	v := &vcf.Variant{Chrom: "1", Pos: 1000, Ref: "ATGCA", Alt: "ACA"}
+	result := PredictConsequence(v, transcript)
+	hgvsc := FormatHGVSc(v, transcript, result)
+
+	// After suffix clipping, TG at CDS 2-3 is deleted. 3' shift: T at 2 matches T at 4? No (4='A').
+	// So c.2_3del
+	assert.Equal(t, "c.2_3del", hgvsc)
+}
+
+func TestFormatHGVSc_SuffixClipReducesDelins(t *testing.T) {
+	// Test: suffix clipping reduces delins to pure deletion
+	// REF=TGCAG, ALT=TAG → prefix 'T', remaining ref=GCAG, extra alt=AG
+	// Suffix clip: G matches, A matches → remaining ref=GC, extra alt="" → pure deletion
+	cds := "ATGTGCAGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATG"
+	transcript := &cache.Transcript{
+		ID: "ENST_SUFCLIP2", GeneName: "SUFCLIP2", Chrom: "1",
+		Start: 990, End: 1210, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1101,
+		Exons:       []cache.Exon{{Number: 1, Start: 990, End: 1210, CDSStart: 1000, CDSEnd: 1101, Frame: 0}},
+		CDSSequence: cds,
+	}
+
+	// CDS pos 4-7 = TGCA. Variant at genomic 1003 (CDS 4).
+	v := &vcf.Variant{Chrom: "1", Pos: 1003, Ref: "TGCAG", Alt: "TAG"}
+	result := PredictConsequence(v, transcript)
+	hgvsc := FormatHGVSc(v, transcript, result)
+
+	// After prefix clip T: remaining ref=GCAG, extra alt=AG
+	// After suffix clip AG: remaining ref=GC, extra alt="" → c.5_6del
+	assert.Equal(t, "c.5_6del", hgvsc)
+}
+
+func TestFormatHGVSc_SuffixClipPartialDelins(t *testing.T) {
+	// Test: suffix clipping reduces delins but still leaves some extra alt
+	// REF=TGCAG, ALT=TCG → prefix 'T', remaining ref=GCAG, extra alt=CG
+	// Suffix clip: G matches, A!=C → remaining ref=GCA, extra alt=C → c.5_7delinsC
+	cds := "ATGTGCAGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATGATG"
+	transcript := &cache.Transcript{
+		ID: "ENST_SUFCLIP3", GeneName: "SUFCLIP3", Chrom: "1",
+		Start: 990, End: 1210, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1101,
+		Exons:       []cache.Exon{{Number: 1, Start: 990, End: 1210, CDSStart: 1000, CDSEnd: 1101, Frame: 0}},
+		CDSSequence: cds,
+	}
+
+	v := &vcf.Variant{Chrom: "1", Pos: 1003, Ref: "TGCAG", Alt: "TCG"}
+	result := PredictConsequence(v, transcript)
+	hgvsc := FormatHGVSc(v, transcript, result)
+
+	assert.Equal(t, "c.5_7delinsC", hgvsc)
+}
+
 func TestFormatHGVSc_DelinsReverseStrand(t *testing.T) {
 	// Fix 4: Delins on reverse strand.
 	// Genomic ref=GCCC, alt=GA at some position on reverse strand gene.

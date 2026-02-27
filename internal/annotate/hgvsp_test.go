@@ -120,8 +120,42 @@ func TestFormatHGVSp(t *testing.T) {
 				Consequence:     ConsequenceInframeInsertion,
 				ProteinPosition: 12,
 				RefAA:           'G',
+				InsertedAAs:     "AL",
+			},
+			want: "p.Gly12_13insAlaLeu",
+		},
+		{
+			name: "inframe_insertion_no_inserted_aas",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceInframeInsertion,
+				ProteinPosition: 12,
+				RefAA:           'G',
 			},
 			want: "p.Gly12_13ins",
+		},
+		{
+			name: "inframe_insertion_dup_single",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceInframeInsertion,
+				ProteinPosition: 12,
+				RefAA:           'G',
+				InsertedAAs:     "G",
+				IsDup:           true,
+			},
+			want: "p.Gly12dup",
+		},
+		{
+			name: "inframe_insertion_dup_multi",
+			result: &ConsequenceResult{
+				Consequence:        ConsequenceInframeInsertion,
+				ProteinPosition:    12,
+				ProteinEndPosition: 14,
+				RefAA:              'G',
+				EndAA:              'Q',
+				InsertedAAs:        "GAQ",
+				IsDup:              true,
+			},
+			want: "p.Gly12_Gln14dup",
 		},
 		{
 			name: "intronic_empty",
@@ -186,6 +220,18 @@ func TestFormatHGVSp(t *testing.T) {
 				EndAA:              'G',
 			},
 			want: "p.Gly12del",
+		},
+		{
+			name: "inframe_deletion_delins",
+			result: &ConsequenceResult{
+				Consequence:        ConsequenceInframeDeletion,
+				ProteinPosition:    2,
+				ProteinEndPosition: 4,
+				RefAA:              'G',
+				EndAA:              'Q',
+				InsertedAAs:        "E",
+			},
+			want: "p.Gly2_Gln4delinsGlu",
 		},
 	}
 

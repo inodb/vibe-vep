@@ -145,6 +145,22 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 			extraAlt = v.Alt[sharedLen:]
 		}
 
+		// Also clip shared suffix between remaining ref and extra alt.
+		// This normalizes delins to pure del when trailing bases match.
+		// Example: REF=ATGCA ALT=ACA → prefix A, suffix CA → pure del of TG
+		if len(extraAlt) > 0 {
+			remainRef := v.Ref[sharedLen:]
+			sharedSuffix := 0
+			for sharedSuffix < len(remainRef) && sharedSuffix < len(extraAlt) &&
+				remainRef[len(remainRef)-1-sharedSuffix] == extraAlt[len(extraAlt)-1-sharedSuffix] {
+				sharedSuffix++
+			}
+			if sharedSuffix > 0 {
+				delEndGenomic -= int64(sharedSuffix)
+				extraAlt = extraAlt[:len(extraAlt)-sharedSuffix]
+			}
+		}
+
 		if t.IsReverseStrand() {
 			delStartGenomic, delEndGenomic = delEndGenomic, delStartGenomic
 		}

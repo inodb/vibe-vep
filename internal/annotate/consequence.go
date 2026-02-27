@@ -27,8 +27,10 @@ type ConsequenceResult struct {
 	CDNAPosition       int64
 	HGVSp              string
 	HGVSc              string
-	FrameshiftStopDist int // Distance to new stop codon in frameshift (1=at variant pos, 0=unknown)
-	StopLostExtDist    int // Distance to next stop codon in stop-lost (0=unknown)
+	FrameshiftStopDist int    // Distance to new stop codon in frameshift (1=at variant pos, 0=unknown)
+	StopLostExtDist    int    // Distance to next stop codon in stop-lost (0=unknown)
+	InsertedAAs        string // Inserted amino acids for inframe indels (single-letter codes)
+	IsDup              bool   // True if inframe insertion is a protein-level duplication
 }
 
 // PredictConsequence determines the effect of a variant on a transcript.
@@ -317,11 +319,75 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 			if indelCreatesStop(v, t, result.CDSPosition) {
 				result.Consequence = ConsequenceStopGained
 			}
+			// Compute inserted amino acids via protein comparison
+			if result.CDSPosition > 0 && result.Consequence == ConsequenceInframeInsertion {
+				startPos, _, _, insAAs := computeInframeProteinChange(v, t, result.CDSPosition)
+				if len(insAAs) > 0 {
+					result.InsertedAAs = insAAs
+					// startPos is position of first new AA; flanking AA is at startPos-1
+					if startPos > 1 {
+						result.ProteinPosition = startPos - 1
+						refCodon := GetCodon(t.CDSSequence, result.ProteinPosition)
+						if len(refCodon) == 3 {
+							result.RefAA = TranslateCodon(refCodon)
+						}
+					}
+					// Check for protein-level duplication
+					insLen := int64(len(insAAs))
+					dupStart := result.ProteinPosition - insLen + 1
+					if dupStart >= 1 {
+						isDup := true
+						for i := int64(0); i < insLen; i++ {
+							codon := GetCodon(t.CDSSequence, dupStart+i)
+							if len(codon) != 3 || TranslateCodon(codon) != insAAs[i] {
+								isDup = false
+								break
+							}
+						}
+						if isDup {
+							result.IsDup = true
+							result.ProteinPosition = dupStart
+							result.ProteinEndPosition = dupStart + insLen - 1
+							refCodon := GetCodon(t.CDSSequence, result.ProteinPosition)
+							if len(refCodon) == 3 {
+								result.RefAA = TranslateCodon(refCodon)
+							}
+							if result.ProteinEndPosition > result.ProteinPosition {
+								endCodon := GetCodon(t.CDSSequence, result.ProteinEndPosition)
+								if len(endCodon) == 3 {
+									result.EndAA = TranslateCodon(endCodon)
+								}
+							}
+						}
+					}
+				}
+			}
 		} else {
 			result.Consequence = ConsequenceInframeDeletion
 			// Check if in-frame deletion creates a stop codon at the junction
 			if indelCreatesStop(v, t, result.CDSPosition) {
 				result.Consequence = ConsequenceStopGained + "," + ConsequenceInframeDeletion
+			}
+			// Compute protein-level change (may reveal delins if junction creates new AA)
+			if result.CDSPosition > 0 {
+				startPos, endPos, _, insAAs := computeInframeProteinChange(v, t, result.CDSPosition)
+				if startPos > 0 {
+					result.ProteinPosition = startPos
+					result.ProteinEndPosition = endPos
+					refCodon := GetCodon(t.CDSSequence, startPos)
+					if len(refCodon) == 3 {
+						result.RefAA = TranslateCodon(refCodon)
+					}
+					if endPos > startPos {
+						endCodon := GetCodon(t.CDSSequence, endPos)
+						if len(endCodon) == 3 {
+							result.EndAA = TranslateCodon(endCodon)
+						}
+					}
+					if len(insAAs) > 0 {
+						result.InsertedAAs = insAAs
+					}
+				}
 			}
 		}
 	} else {
@@ -438,6 +504,115 @@ func computeStopLostExtension(t *cache.Transcript, altCodon string) int {
 	}
 
 	return 0
+}
+
+// computeInframeProteinChange compares original and mutant protein sequences
+// for an in-frame indel and returns the protein-level change.
+// Returns start/end positions (1-based) of the affected protein range,
+// the deleted AAs and inserted AAs (single-letter codes).
+func computeInframeProteinChange(v *vcf.Variant, t *cache.Transcript, cdsPos int64) (startPos, endPos int64, deletedAAs, insertedAAs string) {
+	if len(t.CDSSequence) == 0 || cdsPos < 1 {
+		return
+	}
+
+	ref, alt := v.Ref, v.Alt
+	if t.IsReverseStrand() {
+		ref = ReverseComplement(ref)
+		alt = ReverseComplement(alt)
+	}
+
+	cdsIdx := int(cdsPos - 1)
+	refEndIdx := cdsIdx + len(ref)
+	if refEndIdx > len(t.CDSSequence) {
+		refEndIdx = len(t.CDSSequence)
+	}
+
+	codonStart := (cdsIdx / 3) * 3
+
+	// Limit translation to a window around the variant for performance.
+	// For in-frame indels, the protein change is local — we only need enough
+	// codons to find the first/last differences plus suffix matching.
+	indelCodons := (len(ref) + len(alt) + 5) / 3
+	windowCodons := indelCodons + 10
+	if windowCodons < 20 {
+		windowCodons = 20
+	}
+
+	// Translate original window
+	origN := (len(t.CDSSequence) - codonStart) / 3
+	if origN > windowCodons {
+		origN = windowCodons
+	}
+	if origN <= 0 {
+		return
+	}
+
+	// Build mutant CDS in the window only
+	mutEnd := codonStart + windowCodons*3 + len(alt) - len(ref) + 3
+	if refEndIdx > len(t.CDSSequence) {
+		refEndIdx = len(t.CDSSequence)
+	}
+	var mutWindow string
+	origEnd := codonStart + windowCodons*3
+	if origEnd > len(t.CDSSequence) {
+		origEnd = len(t.CDSSequence)
+	}
+	_ = mutEnd
+	// Build local mutant: [codonStart..cdsIdx] + alt + [refEndIdx..origEnd]
+	if refEndIdx <= origEnd {
+		mutWindow = t.CDSSequence[codonStart:cdsIdx] + alt + t.CDSSequence[refEndIdx:origEnd]
+	} else {
+		mutWindow = t.CDSSequence[codonStart:cdsIdx] + alt
+	}
+	mutN := len(mutWindow) / 3
+	if mutN <= 0 {
+		return
+	}
+
+	origAAs := make([]byte, origN)
+	mutAAs := make([]byte, mutN)
+	for i := range origAAs {
+		p := codonStart + i*3
+		origAAs[i] = TranslateCodon(t.CDSSequence[p : p+3])
+	}
+	for i := range mutAAs {
+		p := i * 3
+		mutAAs[i] = TranslateCodon(mutWindow[p : p+3])
+	}
+
+	// Find first position that differs
+	first := 0
+	minLen := origN
+	if mutN < minLen {
+		minLen = mutN
+	}
+	for first < minLen && origAAs[first] == mutAAs[first] {
+		first++
+	}
+
+	// Find matching suffix from end
+	oi := origN - 1
+	mi := mutN - 1
+	for oi >= first && mi >= first && origAAs[oi] == mutAAs[mi] {
+		oi--
+		mi--
+	}
+
+	// No change found at protein level
+	if first > oi && first > mi {
+		return
+	}
+
+	basePos := int64(codonStart/3) + 1
+	startPos = basePos + int64(first)
+	if oi >= first {
+		endPos = basePos + int64(oi)
+		deletedAAs = string(origAAs[first : oi+1])
+	}
+	if mi >= first {
+		insertedAAs = string(mutAAs[first : mi+1])
+	}
+	return
 }
 
 // indelCreatesStop checks if an indel creates a stop codon near the variant site.
