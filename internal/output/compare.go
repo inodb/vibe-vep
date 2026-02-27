@@ -132,13 +132,26 @@ func (c *CompareWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAFAnn
 		c.counts["hgvsc"][cat]++
 	}
 
-	// Cross-column correction: when HGVSc shows a position shift, a consequence
-	// mismatch is expected (different CDS positions → different codons → different
-	// amino acids). Reclassify as position_shift.
-	if categories["consequence"] == CatMismatch && categories["hgvsc"] == CatPositionShift {
-		c.counts["consequence"][CatMismatch]--
-		categories["consequence"] = CatPositionShift
-		c.counts["consequence"][CatPositionShift]++
+	// Cross-column correction: when HGVSc shows a position shift, consequence
+	// and HGVSp mismatches are expected (different CDS positions → different
+	// codons → different amino acids). Reclassify as position_shift.
+	if categories["hgvsc"] == CatPositionShift {
+		for _, col := range []string{"consequence", "hgvsp"} {
+			if categories[col] == CatMismatch {
+				c.counts[col][CatMismatch]--
+				categories[col] = CatPositionShift
+				c.counts[col][CatPositionShift]++
+			}
+		}
+	}
+
+	// Cross-column correction: when HGVSc is delins_normalized, an HGVSp
+	// mismatch is expected (different indel representation → different protein
+	// change). Reclassify as delins_normalized.
+	if categories["hgvsc"] == CatDelinsNorm && categories["hgvsp"] == CatMismatch {
+		c.counts["hgvsp"][CatMismatch]--
+		categories["hgvsp"] = CatDelinsNorm
+		c.counts["hgvsp"][CatDelinsNorm]++
 	}
 
 	// Decide whether to show row
@@ -354,6 +367,14 @@ func categorizeHGVSp(mafHGVSp, vepHGVSp, vepConseq, mafHGVSc, vepHGVSc string) C
 		return CatFuzzyFS
 	}
 
+	// Frameshift ↔ stop_gained: a frameshift that immediately creates a stop
+	// codon can be reported as either frameshift or stop_gained. Both are HIGH
+	// impact and functionally equivalent.
+	if (isFrameshiftHGVSp(mafHGVSp) && isStopGainedHGVSp(vepHGVSp)) ||
+		(isStopGainedHGVSp(mafHGVSp) && isFrameshiftHGVSp(vepHGVSp)) {
+		return CatFuzzyFS
+	}
+
 	if spliceVsSynRe.MatchString(mafHGVSp) && synNotationRe.MatchString(vepHGVSp) {
 		return CatSpliceVsSyn
 	}
@@ -385,7 +406,7 @@ func categorizeHGVSp(mafHGVSp, vepHGVSp, vepConseq, mafHGVSc, vepHGVSc string) C
 			return CatPositionShift
 		}
 		// Also catch indel position shifts where HGVSc matches but HGVSp positions differ
-		if hgvscValuesMatch(mafHGVSc, vepHGVSc) {
+		if mafHGVSc != "" && vepHGVSc != "" && hgvscValuesMatch(mafHGVSc, vepHGVSc) {
 			return CatPositionShift
 		}
 	}
@@ -575,6 +596,12 @@ func isNonStandardIntronicHGVSp(hgvsp string) bool {
 // isFrameshiftHGVSp checks if an HGVSp value represents a frameshift.
 func isFrameshiftHGVSp(hgvsp string) bool {
 	return strings.Contains(hgvsp, "fs")
+}
+
+// isStopGainedHGVSp detects stop_gained notation like p.K453* (ends with *,
+// no frameshift). Matches patterns like p.Xxx###* but not p.Xxx###fs*.
+func isStopGainedHGVSp(hgvsp string) bool {
+	return strings.HasSuffix(hgvsp, "*") && !strings.Contains(hgvsp, "fs")
 }
 
 // isSpliceConsequence checks if a consequence string contains a splice site term.

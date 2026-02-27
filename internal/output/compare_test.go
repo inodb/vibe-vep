@@ -112,6 +112,16 @@ func TestCategorizeHGVSp(t *testing.T) {
 			want: CatPositionShift,
 		},
 		{
+			name: "frameshift vs stop_gained",
+			mafHGVSp: "p.E454Sfs*117", vepHGVSp: "p.K453*",
+			want: CatFuzzyFS,
+		},
+		{
+			name: "stop_gained vs frameshift",
+			mafHGVSp: "p.K453*", vepHGVSp: "p.E454Sfs*117",
+			want: CatFuzzyFS,
+		},
+		{
 			name: "mismatch",
 			mafHGVSp: "p.G12C", vepHGVSp: "p.A15T",
 			mafHGVSc: "ENST00000256078.4:c.34G>T", vepHGVSc: "c.99A>C",
@@ -259,4 +269,63 @@ func TestCompareWriter_CrossColumnPositionShift(t *testing.T) {
 		"consequence mismatch with HGVSc position_shift should be reclassified")
 	assert.Equal(t, 0, counts["consequence"][CatMismatch],
 		"should have no consequence mismatches")
+}
+
+func TestCompareWriter_CrossColumnHGVSpPositionShift(t *testing.T) {
+	// When HGVSc shows a position shift, an HGVSp mismatch should be
+	// reclassified as position_shift since different CDS positions explain
+	// the amino acid difference.
+	var buf bytes.Buffer
+	cols := map[string]bool{"hgvsp": true, "hgvsc": true}
+	w := NewCompareWriter(&buf, cols, true)
+
+	variant := &vcf.Variant{Chrom: "22", Pos: 38026136, Ref: "T", Alt: "G"}
+
+	mafAnn := &maf.MAFAnnotation{
+		HGVSpShort:   "p.P130=",
+		HGVSc:        "ENST00000333418.4:c.390T>G",
+		TranscriptID: "ENST00000333418",
+	}
+	vepAnns := []*annotate.Annotation{{
+		TranscriptID: "ENST00000333418",
+		HGVSp:        "p.F130V",
+		HGVSc:        "c.388T>G",
+	}}
+
+	w.WriteComparison(variant, mafAnn, vepAnns)
+
+	counts := w.Counts()
+	assert.Equal(t, 1, counts["hgvsp"][CatPositionShift],
+		"hgvsp mismatch with HGVSc position_shift should be reclassified")
+	assert.Equal(t, 0, counts["hgvsp"][CatMismatch],
+		"should have no hgvsp mismatches")
+}
+
+func TestCompareWriter_CrossColumnHGVSpDelinsNorm(t *testing.T) {
+	// When HGVSc is delins_normalized, an HGVSp mismatch should be
+	// reclassified as delins_normalized.
+	var buf bytes.Buffer
+	cols := map[string]bool{"hgvsp": true, "hgvsc": true}
+	w := NewCompareWriter(&buf, cols, true)
+
+	variant := &vcf.Variant{Chrom: "5", Pos: 140558745, Ref: "CGCAGGCGG", Alt: "GCC"}
+
+	mafAnn := &maf.MAFAnnotation{
+		HGVSpShort:   "p.R432_R434delinsA",
+		HGVSc:        "ENST00000357560.9:c.1293_1301delinsGGC",
+		TranscriptID: "ENST00000357560",
+	}
+	vepAnns := []*annotate.Annotation{{
+		TranscriptID: "ENST00000357560",
+		HGVSp:        "p.L435_K436del",
+		HGVSc:        "c.1293_1300delinsGG",
+	}}
+
+	w.WriteComparison(variant, mafAnn, vepAnns)
+
+	counts := w.Counts()
+	assert.Equal(t, 1, counts["hgvsp"][CatDelinsNorm],
+		"hgvsp mismatch with HGVSc delins_normalized should be reclassified")
+	assert.Equal(t, 0, counts["hgvsp"][CatMismatch],
+		"should have no hgvsp mismatches")
 }
