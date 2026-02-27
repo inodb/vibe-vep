@@ -246,6 +246,21 @@ func categorizeConsequence(mafConseq, vepConseq string) Category {
 		return CatNoCDS
 	}
 
+	// Transcript biotype changed between GENCODE versions: a transcript that was
+	// protein_coding in the MAF's version may be non-coding in ours. When MAF has
+	// a coding consequence and VEP reports non_coding_transcript_exon_variant,
+	// this is a transcript model difference, not an algorithm issue.
+	if normVEP == "non_coding_transcript_exon_variant" && isCodingConsequence(mafConseq) {
+		return CatNoCDS
+	}
+
+	// UTR ↔ intron: exon boundary shifts between GENCODE versions can move a
+	// position from UTR to intron or vice versa. Reclassify similarly to
+	// upstream/downstream reclassification.
+	if isUTRConsequence(normMAF) && (normVEP == "intron_variant" || isUTRConsequence(normVEP)) {
+		return CatUpstreamReclass
+	}
+
 	// Primary term match covers sub-annotation differences.
 	if primaryConsequence(normMAF) == primaryConsequence(normVEP) {
 		return CatMatch
@@ -554,6 +569,12 @@ func isFrameshiftHGVSp(hgvsp string) bool {
 }
 
 // isSpliceConsequence checks if a consequence string contains a splice site term.
+// isUTRConsequence checks if a consequence is a UTR variant.
+func isUTRConsequence(conseq string) bool {
+	return strings.Contains(conseq, "5_prime_utr_variant") ||
+		strings.Contains(conseq, "3_prime_utr_variant")
+}
+
 func isSpliceConsequence(conseq string) bool {
 	return strings.Contains(conseq, "splice_donor_variant") ||
 		strings.Contains(conseq, "splice_acceptor_variant")

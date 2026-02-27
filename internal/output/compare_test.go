@@ -35,6 +35,9 @@ func TestCategorizeConsequence(t *testing.T) {
 		{"synonymous ↔ stop_retained", "synonymous_variant", "stop_retained_variant", CatMatch},
 		{"stop_retained ↔ synonymous", "stop_retained_variant", "synonymous_variant", CatMatch},
 		{"compound match - vep primary in maf", "frameshift_variant,start_lost", "start_lost", CatMatch},
+		{"coding → non_coding_exon biotype change", "missense_variant", "non_coding_transcript_exon_variant", CatNoCDS},
+		{"synonymous → non_coding_exon biotype change", "synonymous_variant", "non_coding_transcript_exon_variant", CatNoCDS},
+		{"5'UTR → intron boundary shift", "5_prime_UTR_variant", "intron_variant", CatUpstreamReclass},
 		{"mismatch", "missense_variant", "synonymous_variant", CatMismatch},
 	}
 	for _, tt := range tests {
