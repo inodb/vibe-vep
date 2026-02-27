@@ -200,7 +200,7 @@ When comparing against a MAF entry, the tool selects the best VEP annotation usi
 MAF files may use different consequence terms than SO standard. The validation normalizes both sides before comparison:
 
 - **MAF to SO mapping**: `Missense_Mutation` → `missense_variant`, `Silent` → `synonymous_variant`, etc.
-- **Modifier stripping**: Drops terms like `non_coding_transcript_variant`, `NMD_transcript_variant`, `coding_sequence_variant` that are secondary modifiers
+- **Modifier stripping**: Drops terms like `non_coding_transcript_variant`, `NMD_transcript_variant`, `coding_sequence_variant`, `start_retained_variant`, `stop_retained_variant` that are secondary modifiers when a higher-impact term is present
 - **Splice normalization**: Maps `splice_donor_region_variant` and `splice_donor_5th_base_variant` to `splice_region_variant`; drops `splice_region_variant` when a primary consequence is present
 - **Impact-based stripping**: Drops `intron_variant` when splice donor/acceptor is present; drops UTR terms when a HIGH-impact term is present; drops `stop_gained`/`stop_lost` when co-occurring with `frameshift_variant`
 - **Inframe grouping**: Normalizes `protein_altering_variant`, `inframe_deletion`, and `inframe_insertion` to a common term
@@ -209,7 +209,22 @@ MAF files may use different consequence terms than SO standard. The validation n
 
 ### Validation Results
 
-Tested against 7 TCGA GDC studies from [cBioPortal/datahub](https://github.com/cBioPortal/datahub) (1M+ total variants). See the full [validation report](testdata/tcga/validation_report.md) for per-study consequence match rates, HGVSp match rates, and performance numbers.
+Tested against 7 TCGA GDC studies from [cBioPortal/datahub](https://github.com/cBioPortal/datahub) (1,052,366 total variants):
+
+| Column | Match | Mismatch | Rate |
+|--------|-------|----------|------|
+| Consequence | 1,050,079 | 46 | 99.8% |
+| HGVSp | 997,292 | 282 | 94.8% |
+| HGVSc | 1,037,748 | 278 | 98.6% |
+
+Mismatches that are due to GENCODE version differences (not algorithm bugs) are reclassified into separate categories:
+- **transcript_model_change** (501): transcript biotype changed between versions (e.g. protein_coding → retained_intron)
+- **gene_model_change** (4): gene boundary differences (coding ↔ intergenic)
+- **position_shift** (695 consequence, 4,733 HGVSp, 5,753 HGVSc): CDS coordinate changes between GENCODE versions
+
+The validation also tracks mismatches in [OncoKB cancer genes](https://www.oncokb.org/cancerGenes) — only 9 cancer genes have any mismatches (1 each) across 1M+ variants.
+
+See the full [validation report](testdata/tcga/validation_report.md) for per-study breakdowns and category details.
 
 To download the TCGA test data and regenerate the report:
 
@@ -218,7 +233,7 @@ make download-testdata
 go test ./internal/output/ -run TestValidationBenchmark -v -count=1
 ```
 
-Remaining mismatches are primarily:
+Remaining 46 consequence mismatches are primarily:
 - CDS sequence differences between GENCODE versions (synonymous vs missense)
 - Transcript structure differences (exon/intron boundary changes)
 - Complex multi-region indels with ambiguous consequence priority
@@ -239,15 +254,30 @@ Canonical transcripts are flagged with `CANONICAL=YES`.
 
 When the input is a MAF file, vibe-vep outputs MAF format by default. All original columns are preserved and annotation columns (`Hugo_Symbol`, `Consequence`, `Variant_Classification`, `HGVSp`, `HGVSp_Short`, `HGVSc`, `Transcript_ID`) are updated with fresh VEP predictions. Original values are kept when VEP has no prediction (e.g., intergenic variants).
 
+When an [OncoKB cancer gene list](https://www.oncokb.org/cancerGenes) is configured, a `Gene_Type` column is appended with oncogene/TSG classification (see [Configuration](#configuration)).
+
 ## Performance
 
 - **Annotation speed**: ~720,000 variants/sec (after cache is loaded)
 - **Cache loading**: ~25 seconds to load 254k GENCODE v46 transcripts
 - **Memory**: Proportional to transcript count (~254k for GENCODE v46)
 
+## Configuration
+
+vibe-vep reads configuration from `~/.vibe-vep.yaml` (or `--config` flag). Environment variables with `VIBE_VEP_` prefix also work (e.g. `VIBE_VEP_ONCOKB_CANCER_GENE_LIST`).
+
+```yaml
+# OncoKB cancer gene list — adds Gene_Type column to MAF output
+oncokb:
+  cancer-gene-list: /path/to/cancerGeneList.tsv
+```
+
+The `cancerGeneList.tsv` file can be downloaded from [OncoKB](https://www.oncokb.org/cancerGenes) or is included in this repository.
+
 ## Data Sources
 
 - **GENCODE**: Gene annotations from [GENCODE](https://www.gencodegenes.org/)
+- **OncoKB**: Cancer gene classification from [OncoKB](https://www.oncokb.org/) (optional, for gene-level ONCOGENE/TSG annotations)
 
 ## Development
 
@@ -271,9 +301,10 @@ vibe-vep annotate --validate testdata/tcga/chol_tcga_gdc_data_mutations.txt
 ## Roadmap
 
 - [ ] **Feature parity for MAF annotation** — Match the annotation capabilities of the [genome-nexus-annotation-pipeline](https://github.com/genome-nexus/genome-nexus-annotation-pipeline), which currently relies on Genome Nexus Server + VEP
-  - [x] Consequence prediction (~99.8% concordance with GDC/VEP across 1M+ TCGA variants, see [Validation Results](#validation-results))
-  - [x] HGVSp/HGVSc notation
+  - [x] Consequence prediction (99.8% concordance with GDC/VEP across 1M+ TCGA variants, see [Validation Results](#validation-results))
+  - [x] HGVSp/HGVSc notation (94.8%/98.6% match rates)
   - [x] Full MAF output format (all required columns)
+  - [x] Cancer gene annotations (OncoKB oncogene/TSG classification)
 - [ ] **Re-annotate datahub GDC studies** — Validate by re-annotating [cBioPortal/datahub](https://github.com/cBioPortal/datahub) GDC studies with vibe-vep
 - [ ] **Replace genome-nexus-annotation-pipeline for datahub** — Use vibe-vep as the annotation tool for datahub processing
 
