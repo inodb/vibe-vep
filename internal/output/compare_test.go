@@ -229,3 +229,34 @@ func TestCompareWriter_Summary(t *testing.T) {
 	assert.Contains(t, out, "match")
 	assert.Contains(t, out, "mismatch")
 }
+
+func TestCompareWriter_CrossColumnPositionShift(t *testing.T) {
+	// When HGVSc shows a position shift, a consequence mismatch should be
+	// reclassified as position_shift since different CDS positions explain
+	// the consequence difference (GENCODE version change).
+	var buf bytes.Buffer
+	cols := map[string]bool{"consequence": true, "hgvsc": true}
+	w := NewCompareWriter(&buf, cols, true)
+
+	variant := &vcf.Variant{Chrom: "22", Pos: 38026136, Ref: "T", Alt: "G"}
+
+	// MAF says synonymous at c.390, VEP says missense at c.388 (position shift)
+	mafAnn := &maf.MAFAnnotation{
+		Consequence:  "synonymous_variant",
+		HGVSc:        "ENST00000333418.4:c.390T>G",
+		TranscriptID: "ENST00000333418",
+	}
+	vepAnns := []*annotate.Annotation{{
+		TranscriptID: "ENST00000333418",
+		Consequence:  "missense_variant",
+		HGVSc:        "c.388T>G",
+	}}
+
+	w.WriteComparison(variant, mafAnn, vepAnns)
+
+	counts := w.Counts()
+	assert.Equal(t, 1, counts["consequence"][CatPositionShift],
+		"consequence mismatch with HGVSc position_shift should be reclassified")
+	assert.Equal(t, 0, counts["consequence"][CatMismatch],
+		"should have no consequence mismatches")
+}

@@ -132,6 +132,15 @@ func (c *CompareWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAFAnn
 		c.counts["hgvsc"][cat]++
 	}
 
+	// Cross-column correction: when HGVSc shows a position shift, a consequence
+	// mismatch is expected (different CDS positions → different codons → different
+	// amino acids). Reclassify as position_shift.
+	if categories["consequence"] == CatMismatch && categories["hgvsc"] == CatPositionShift {
+		c.counts["consequence"][CatMismatch]--
+		categories["consequence"] = CatPositionShift
+		c.counts["consequence"][CatPositionShift]++
+	}
+
 	// Decide whether to show row
 	showRow := c.showAll
 	if !showRow {
