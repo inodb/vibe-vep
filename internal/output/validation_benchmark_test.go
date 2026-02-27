@@ -340,9 +340,15 @@ func writeReport(t *testing.T, path string, results []studyResult, transcriptCou
 			}
 		}
 
-		if len(aggGeneMismatches) == 0 {
-			sb.WriteString("No mismatches in cancer genes.\n\n")
+		genesWithMismatches := len(aggGeneMismatches)
+		totalCancerGenes := len(aggGeneTotal)
+		perfectGenes := totalCancerGenes - genesWithMismatches
+
+		if genesWithMismatches == 0 {
+			sb.WriteString(fmt.Sprintf("No mismatches across all %d cancer genes tested.\n\n", totalCancerGenes))
 		} else {
+			sb.WriteString(fmt.Sprintf("%d/%d cancer genes have 100%% match across all columns. Mismatches in %d gene(s):\n\n",
+				perfectGenes, totalCancerGenes, genesWithMismatches))
 			sb.WriteString("| Gene | Variants | Conseq Mismatches | HGVSp Mismatches | HGVSc Mismatches |\n")
 			sb.WriteString("|------|----------|-------------------|------------------|------------------|\n")
 
