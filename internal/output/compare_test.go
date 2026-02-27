@@ -25,6 +25,16 @@ func TestCategorizeConsequence(t *testing.T) {
 		{"upstream reclassified", "5'Flank", "5_prime_utr_variant", CatUpstreamReclass},
 		{"downstream reclassified", "3'Flank", "intron_variant", CatUpstreamReclass},
 		{"no cds data", "synonymous_variant", "coding_sequence_variant", CatNoCDS},
+		{"frameshift+splice_region → splice_acceptor", "frameshift_variant,splice_region_variant", "splice_acceptor_variant", CatMatch},
+		{"frameshift+splice_region → splice_donor", "frameshift_variant,splice_region_variant", "splice_donor_variant", CatMatch},
+		{"splice_region+intron → splice_acceptor", "splice_region_variant,intron_variant", "splice_acceptor_variant", CatMatch},
+		{"splice_region+intron → splice_donor", "splice_region_variant,intron_variant", "splice_donor_variant", CatMatch},
+		{"splice_region+polypyrimidine → splice_acceptor", "splice_region_variant,splice_polypyrimidine_tract_variant,intron_variant", "splice_acceptor_variant", CatMatch},
+		{"inframe_deletion ↔ stop_gained", "stop_gained,inframe_deletion", "inframe_deletion", CatMatch},
+		{"inframe_insertion ↔ stop_gained", "inframe_insertion", "stop_gained", CatMatch},
+		{"synonymous ↔ stop_retained", "synonymous_variant", "stop_retained_variant", CatMatch},
+		{"stop_retained ↔ synonymous", "stop_retained_variant", "synonymous_variant", CatMatch},
+		{"compound match - vep primary in maf", "frameshift_variant,start_lost", "start_lost", CatMatch},
 		{"mismatch", "missense_variant", "synonymous_variant", CatMismatch},
 	}
 	for _, tt := range tests {

@@ -145,6 +145,20 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 				result.Impact = GetImpact(result.Consequence)
 				return result
 			}
+			// Check if deletion from 3'UTR spans into the stop codon
+			if utrConsequence == Consequence3PrimeUTR {
+				var stopCodonStart, stopCodonEnd int64
+				if t.IsForwardStrand() {
+					stopCodonStart, stopCodonEnd = t.CDSEnd-2, t.CDSEnd
+				} else {
+					stopCodonStart, stopCodonEnd = t.CDSStart, t.CDSStart+2
+				}
+				if indelEnd >= stopCodonStart && v.Pos <= stopCodonEnd {
+					result.Consequence = ConsequenceStopLost + "," + Consequence3PrimeUTR
+					result.Impact = GetImpact(ConsequenceStopLost)
+					return result
+				}
+			}
 		}
 		result.Consequence = utrConsequence
 		result.Impact = GetImpact(result.Consequence)
@@ -367,6 +381,13 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 			// Check if in-frame deletion creates a stop codon at the junction
 			if indelCreatesStop(v, t, result.CDSPosition) {
 				result.Consequence = ConsequenceStopGained + "," + ConsequenceInframeDeletion
+			}
+			// Check if in-frame deletion spans the stop codon (stop_lost)
+			if stopCodonCDSPos > 0 && result.CDSPosition > 0 {
+				indelEndCDS := result.CDSPosition + int64(refLen) - 1
+				if indelEndCDS >= stopCodonCDSPos {
+					result.Consequence = ConsequenceStopLost + "," + Consequence3PrimeUTR
+				}
 			}
 			// Compute protein-level change (may reveal delins if junction creates new AA)
 			if result.CDSPosition > 0 {

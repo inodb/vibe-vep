@@ -904,3 +904,55 @@ func TestPredictConsequence_MultiCodonDeletion(t *testing.T) {
 	assert.Equal(t, byte('E'), result.EndAA, "last deleted AA")
 	assert.Equal(t, "p.Lys3_Glu4del", result.HGVSp)
 }
+
+func TestPredictConsequence_InframeDeletionSpansStopCodon(t *testing.T) {
+	// Forward strand: CDS = ATG GCT AAA GAA GGG TAA (18bp: M A K E G *)
+	// 3'UTR follows after the stop codon.
+	// Delete 9 bases spanning last CDS codon + stop codon + 3'UTR:
+	// ref starts at pos 1012 (CDS 13), covers GGG TAA CCC (3 CDS + 3 stop + 3 UTR)
+	// Expected: stop_lost because the stop codon TAA is deleted
+	cds := "ATGGCTAAAGAAGGGTAA" // 18bp, stop=TAA at 16-18
+	utr3 := "CCCAAATTT"
+	transcript := &cache.Transcript{
+		ID: "ENST_STOPLOST", GeneName: "STOPLOST", Chrom: "1",
+		Start: 990, End: 1030, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1017,
+		Exons:        []cache.Exon{{Number: 1, Start: 990, End: 1030, CDSStart: 1000, CDSEnd: 1017, Frame: 0}},
+		CDSSequence:  cds,
+		UTR3Sequence: utr3,
+	}
+
+	// Delete 9 bases: 3 from CDS (GGG at 13-15) + 3 stop codon (TAA at 16-18) + 3 UTR
+	// Genomic pos 1012 = CDS start (1000) + 12 = CDS position 13
+	v := &vcf.Variant{Chrom: "1", Pos: 1012, Ref: "GGGCCCAAA", Alt: ""}
+	result := PredictConsequence(v, transcript)
+
+	assert.Contains(t, result.Consequence, ConsequenceStopLost,
+		"in-frame deletion spanning stop codon should include stop_lost")
+}
+
+func TestPredictConsequence_DeletionFrom3UTRSpansStopCodon(t *testing.T) {
+	// Reverse strand: the stop codon is at the lowest genomic coordinates of CDS.
+	// A deletion starting in 3'UTR (below CDSStart) that extends into the stop codon
+	// should be classified as stop_lost.
+	//
+	// Reverse strand layout (genomic):
+	//   ... [3'UTR: 990-999] [CDS: 1000-1017] [5'UTR: 1018+] ...
+	// The stop codon is at genomic 1000-1002 (CDSStart to CDSStart+2)
+	cds := "ATGGCTAAAGAAGGGTAA" // 18bp on coding strand
+	transcript := &cache.Transcript{
+		ID: "ENST_STOPLOST_REV", GeneName: "STOPLOST_REV", Chrom: "1",
+		Start: 985, End: 1025, Strand: -1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1017,
+		Exons:        []cache.Exon{{Number: 1, Start: 985, End: 1025, CDSStart: 1000, CDSEnd: 1017, Frame: 0}},
+		CDSSequence:  cds,
+		UTR3Sequence: "CCCAAATTT",
+	}
+
+	// Delete 6 bases starting in 3'UTR at pos 997, spanning into stop codon (1000-1002)
+	v := &vcf.Variant{Chrom: "1", Pos: 997, Ref: "AAATAA", Alt: ""}
+	result := PredictConsequence(v, transcript)
+
+	assert.Contains(t, result.Consequence, ConsequenceStopLost,
+		"deletion from 3'UTR spanning into stop codon should include stop_lost")
+}

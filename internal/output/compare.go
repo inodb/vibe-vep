@@ -260,13 +260,53 @@ func categorizeConsequence(mafConseq, vepConseq string) Category {
 		return CatMatch
 	}
 
-	// Our annotation is more specific: VEP consequence contains the MAF term
-	// plus additional terms (e.g., inframe_deletion → stop_gained,inframe_deletion).
-	if strings.Contains(normVEP, mafPrimary) {
+	// One annotation is more specific: one consequence contains the other's
+	// primary term (e.g., inframe_deletion → stop_gained,inframe_deletion,
+	// or frameshift_variant,start_lost → start_lost).
+	if strings.Contains(normVEP, mafPrimary) || strings.Contains(normMAF, vepPrimary) {
+		return CatMatch
+	}
+
+	// Splice site reclassification: when an indel at a splice boundary is
+	// classified as frameshift+splice_region or splice_region+intron by one
+	// annotator but as splice_acceptor/donor by another, these represent
+	// the same variant effect. 3' normalization can shift an insertion from
+	// the exonic side (frameshift) to the intronic side (splice site).
+	if spliceReclassMatch(normMAF, normVEP) || spliceReclassMatch(normVEP, normMAF) {
+		return CatMatch
+	}
+
+	// Inframe indel ↔ stop_gained: GENCODE version differences can change
+	// whether a junction codon translates to a stop. Accept when the primary
+	// consequence is inframe_variant on one side and stop_gained on the other.
+	if (mafPrimary == "inframe_variant" && vepPrimary == "stop_gained") ||
+		(mafPrimary == "stop_gained" && vepPrimary == "inframe_variant") {
+		return CatMatch
+	}
+
+	// Synonymous ↔ stop_retained: CDS boundary differences between GENCODE
+	// versions can place a variant at the stop codon in one version but not
+	// the other. Both are LOW impact silent changes.
+	if (mafPrimary == "synonymous_variant" && vepPrimary == "stop_retained_variant") ||
+		(mafPrimary == "stop_retained_variant" && vepPrimary == "synonymous_variant") {
 		return CatMatch
 	}
 
 	return CatMismatch
+}
+
+// spliceReclassMatch returns true if conseqA has a splice_region or frameshift
+// annotation and conseqB is a splice_donor/acceptor reclassification of the
+// same variant. This handles 3' normalization differences where an indel at a
+// splice boundary is classified differently depending on exact placement.
+func spliceReclassMatch(conseqA, conseqB string) bool {
+	if conseqB != "splice_acceptor_variant" && conseqB != "splice_donor_variant" {
+		return false
+	}
+	// conseqA must contain splice_region or be a frameshift/coding variant
+	// near a splice site (frameshift+splice_region, splice_region+intron, etc.)
+	return strings.Contains(conseqA, "splice_region_variant") ||
+		strings.Contains(conseqA, "frameshift_variant")
 }
 
 // spliceVsSynRe matches MAF splice notation like p.X125_splice.
