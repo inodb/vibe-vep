@@ -42,7 +42,7 @@ func TestValidationBenchmark(t *testing.T) {
 	c := cache.New()
 	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
 	if canonicalPath != "" {
-		overrides, err := cache.LoadCanonicalOverridesWithSource(canonicalPath, "mskcc")
+		overrides, err := cache.LoadCanonicalOverrides(canonicalPath)
 		if err != nil {
 			t.Logf("warning: could not load canonical overrides: %v", err)
 		} else {

@@ -34,51 +34,26 @@ func CanonicalFileName() string {
 	return canonicalFileName
 }
 
-// CanonicalSourceColumn returns the TSV column index for a canonical transcript source
-// in the Genome Nexus biomart file.
-// Sources: genome_nexus (col 4), mskcc (col 8), oncokb (col 10).
-func CanonicalSourceColumn(source string) int {
-	switch strings.ToLower(source) {
-	case "mskcc":
-		return 8
-	case "oncokb":
-		return 10
-	default: // "genome_nexus" or empty
-		return 4
-	}
-}
-
 // LoadCanonicalOverrides loads canonical transcript overrides from a Genome Nexus TSV file.
-// Uses the genome_nexus source column (col 4) by default.
+// Uses the MSKCC canonical transcript column (col 8).
 func LoadCanonicalOverrides(path string) (CanonicalOverrides, error) {
-	return LoadCanonicalOverridesWithSource(path, "genome_nexus")
-}
-
-// LoadCanonicalOverridesWithSource loads canonical overrides using the specified source column.
-func LoadCanonicalOverridesWithSource(path, source string) (CanonicalOverrides, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open canonical overrides file: %w", err)
 	}
 	defer f.Close()
 
-	return ParseCanonicalOverridesWithSource(f, source)
+	return parseCanonicalOverrides(f)
 }
 
-// ParseCanonicalOverridesWithSource parses the biomart TSV using the specified source column.
-func ParseCanonicalOverridesWithSource(reader io.Reader, source string) (CanonicalOverrides, error) {
-	col := CanonicalSourceColumn(source)
-	return parseCanonicalOverridesCol(reader, col)
-}
+// mskccTranscriptCol is the column index for MSKCC canonical transcripts
+// in the Genome Nexus biomart TSV file.
+const mskccTranscriptCol = 8
 
-// parseCanonicalOverrides parses the TSV content using the default genome_nexus column.
+// parseCanonicalOverrides parses a Genome Nexus biomart TSV, extracting
+// the gene symbol from col 0 and the MSKCC canonical transcript from col 8.
 func parseCanonicalOverrides(reader io.Reader) (CanonicalOverrides, error) {
-	return parseCanonicalOverridesCol(reader, 4)
-}
-
-// parseCanonicalOverridesCol parses a Genome Nexus biomart TSV, extracting
-// the gene symbol from col 0 and the canonical transcript from the given column.
-func parseCanonicalOverridesCol(reader io.Reader, transcriptCol int) (CanonicalOverrides, error) {
+	transcriptCol := mskccTranscriptCol
 	overrides := make(CanonicalOverrides)
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024) // 1MB line buffer for wide biomart files
