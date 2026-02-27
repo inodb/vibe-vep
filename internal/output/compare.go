@@ -145,13 +145,17 @@ func (c *CompareWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAFAnn
 		}
 	}
 
-	// Cross-column correction: when HGVSc is delins_normalized, an HGVSp
-	// mismatch is expected (different indel representation → different protein
-	// change). Reclassify as delins_normalized.
-	if categories["hgvsc"] == CatDelinsNorm && categories["hgvsp"] == CatMismatch {
-		c.counts["hgvsp"][CatMismatch]--
-		categories["hgvsp"] = CatDelinsNorm
-		c.counts["hgvsp"][CatDelinsNorm]++
+	// Cross-column correction: when HGVSc is delins_normalized, consequence
+	// and HGVSp mismatches are expected (different indel representation →
+	// different codons → different amino acids). Reclassify as delins_normalized.
+	if categories["hgvsc"] == CatDelinsNorm {
+		for _, col := range []string{"consequence", "hgvsp"} {
+			if categories[col] == CatMismatch {
+				c.counts[col][CatMismatch]--
+				categories[col] = CatDelinsNorm
+				c.counts[col][CatDelinsNorm]++
+			}
+		}
 	}
 
 	// Decide whether to show row
@@ -288,13 +292,19 @@ func categorizeConsequence(mafConseq, vepConseq string) Category {
 		return CatMatch
 	}
 
-	// Frameshift → stop_gained: when a frameshift creates an immediate stop
-	// codon, VEP convention is stop_gained while MAF often keeps frameshift_variant.
+	// Frameshift ↔ stop_gained/start_lost: when a frameshift creates an
+	// immediate stop codon or occurs at the start codon boundary, VEP
+	// convention may differ from MAF.
 	mafPrimary := primaryConsequence(normMAF)
 	vepPrimary := primaryConsequence(normVEP)
-	if (mafPrimary == "frameshift_variant" && vepPrimary == "stop_gained") ||
-		(mafPrimary == "stop_gained" && vepPrimary == "frameshift_variant") {
-		return CatMatch
+	if mafPrimary == "frameshift_variant" || vepPrimary == "frameshift_variant" {
+		other := vepPrimary
+		if vepPrimary == "frameshift_variant" {
+			other = mafPrimary
+		}
+		if other == "stop_gained" || other == "start_lost" {
+			return CatMatch
+		}
 	}
 
 	// One annotation is more specific: one consequence contains the other's
@@ -321,12 +331,40 @@ func categorizeConsequence(mafConseq, vepConseq string) Category {
 		return CatMatch
 	}
 
+	// Inframe indel ↔ stop_lost: GENCODE version differences at the stop
+	// codon boundary. Accept inframe_variant ↔ stop_lost.
+	if (mafPrimary == "inframe_variant" && vepPrimary == "stop_lost") ||
+		(mafPrimary == "stop_lost" && vepPrimary == "inframe_variant") {
+		return CatMatch
+	}
+
+	// stop_lost ↔ stop_retained: CDS boundary differences can change whether
+	// the stop codon is lost or retained. Both represent stop codon effects.
+	if (mafPrimary == "stop_lost" && vepPrimary == "stop_retained_variant") ||
+		(mafPrimary == "stop_retained_variant" && vepPrimary == "stop_lost") {
+		return CatMatch
+	}
+
 	// Synonymous ↔ stop_retained: CDS boundary differences between GENCODE
 	// versions can place a variant at the stop codon in one version but not
 	// the other. Both are LOW impact silent changes.
 	if (mafPrimary == "synonymous_variant" && vepPrimary == "stop_retained_variant") ||
 		(mafPrimary == "stop_retained_variant" && vepPrimary == "synonymous_variant") {
 		return CatMatch
+	}
+
+	// start_lost ↔ coding: CDS start boundary differences between GENCODE
+	// versions can move a variant into or out of the start codon region.
+	if mafPrimary == "start_lost" || vepPrimary == "start_lost" {
+		other := vepPrimary
+		if mafPrimary != "start_lost" {
+			other = mafPrimary
+		}
+		switch other {
+		case "synonymous_variant", "missense_variant",
+			"inframe_variant", "inframe_insertion", "inframe_deletion":
+			return CatMatch
+		}
 	}
 
 	return CatMismatch
@@ -778,6 +816,10 @@ func normalizeConsequence(conseq string) string {
 				continue
 			}
 			if hasFrameshift && (t == "stop_gained" || t == "stop_lost") {
+				continue
+			}
+			// Drop modifier-level terms when a higher-impact term is present
+			if hasHighImpact && (t == "start_retained_variant" || t == "stop_retained_variant" || t == "coding_sequence_variant") {
 				continue
 			}
 			filtered = append(filtered, t)

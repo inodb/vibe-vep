@@ -38,6 +38,21 @@ func TestCategorizeConsequence(t *testing.T) {
 		{"coding → non_coding_exon biotype change", "missense_variant", "non_coding_transcript_exon_variant", CatNoCDS},
 		{"synonymous → non_coding_exon biotype change", "synonymous_variant", "non_coding_transcript_exon_variant", CatNoCDS},
 		{"5'UTR → intron boundary shift", "5_prime_UTR_variant", "intron_variant", CatUpstreamReclass},
+		// Phase 1a: normalize modifiers
+		{"drop start_retained with frameshift", "frameshift_variant,start_retained_variant", "start_lost", CatMatch},
+		{"drop stop_retained with stop_gained", "stop_gained,stop_retained_variant", "stop_gained", CatMatch},
+		{"drop coding_sequence_variant with splice HIGH", "splice_acceptor_variant,coding_sequence_variant,intron_variant", "splice_acceptor_variant", CatMatch},
+		{"drop coding_sequence_variant with splice donor", "splice_donor_variant,coding_sequence_variant,intron_variant", "splice_donor_variant", CatMatch},
+		// Phase 1b: consequence equivalences
+		{"inframe ↔ stop_lost", "inframe_deletion", "stop_lost", CatMatch},
+		{"stop_lost ↔ inframe", "stop_lost", "inframe_insertion", CatMatch},
+		{"stop_lost ↔ stop_retained", "stop_lost", "stop_retained_variant", CatMatch},
+		{"stop_retained ↔ stop_lost", "stop_retained_variant", "stop_lost", CatMatch},
+		{"start_lost ↔ synonymous", "start_lost", "synonymous_variant", CatMatch},
+		{"synonymous ↔ start_lost", "synonymous_variant", "start_lost", CatMatch},
+		{"start_lost ↔ missense", "start_lost", "missense_variant", CatMatch},
+		{"start_lost ↔ inframe", "start_lost", "inframe_deletion", CatMatch},
+		{"inframe ↔ start_lost", "In_Frame_Ins", "start_lost", CatMatch},
 		{"mismatch", "missense_variant", "synonymous_variant", CatMismatch},
 	}
 	for _, tt := range tests {
@@ -299,6 +314,35 @@ func TestCompareWriter_CrossColumnHGVSpPositionShift(t *testing.T) {
 		"hgvsp mismatch with HGVSc position_shift should be reclassified")
 	assert.Equal(t, 0, counts["hgvsp"][CatMismatch],
 		"should have no hgvsp mismatches")
+}
+
+func TestCompareWriter_CrossColumnConseqDelinsNorm(t *testing.T) {
+	// When HGVSc is delins_normalized, a consequence mismatch should be
+	// reclassified as delins_normalized (MNV missense→synonymous).
+	var buf bytes.Buffer
+	cols := map[string]bool{"consequence": true, "hgvsc": true}
+	w := NewCompareWriter(&buf, cols, true)
+
+	variant := &vcf.Variant{Chrom: "1", Pos: 100, Ref: "ACG", Alt: "GTA"}
+
+	mafAnn := &maf.MAFAnnotation{
+		Consequence:  "Missense_Mutation",
+		HGVSc:        "ENST00000123456.1:c.100_102delinsGTA",
+		TranscriptID: "ENST00000123456",
+	}
+	vepAnns := []*annotate.Annotation{{
+		TranscriptID: "ENST00000123456",
+		Consequence:  "synonymous_variant",
+		HGVSc:        "c.102G>A",
+	}}
+
+	w.WriteComparison(variant, mafAnn, vepAnns)
+
+	counts := w.Counts()
+	assert.Equal(t, 1, counts["consequence"][CatDelinsNorm],
+		"consequence mismatch with HGVSc delins_normalized should be reclassified")
+	assert.Equal(t, 0, counts["consequence"][CatMismatch],
+		"should have no consequence mismatches")
 }
 
 func TestCompareWriter_CrossColumnHGVSpDelinsNorm(t *testing.T) {
