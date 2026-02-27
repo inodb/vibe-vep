@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -38,7 +39,8 @@ func TestValidationBenchmark(t *testing.T) {
 	}
 	sort.Strings(mafFiles)
 
-	// Load GENCODE cache once
+	// Load GENCODE cache once, timing it separately.
+	cacheStart := time.Now()
 	gtfPath, fastaPath, canonicalPath := findGENCODEFiles(t)
 	c := cache.New()
 	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
@@ -53,7 +55,8 @@ func TestValidationBenchmark(t *testing.T) {
 	if err := loader.Load(c); err != nil {
 		t.Fatalf("load GENCODE cache: %v", err)
 	}
-	t.Logf("loaded %d transcripts", c.TranscriptCount())
+	cacheDuration := time.Since(cacheStart)
+	t.Logf("loaded %d transcripts in %s", c.TranscriptCount(), cacheDuration.Round(time.Millisecond))
 
 	// Load cancer gene list
 	cgl := loadCancerGeneList(t)
@@ -64,6 +67,7 @@ func TestValidationBenchmark(t *testing.T) {
 	for _, mafFile := range mafFiles {
 		name := studyName(mafFile)
 		t.Run(name, func(t *testing.T) {
+			// --- Sequential pass (validation + accuracy) ---
 			parser, err := maf.NewParser(mafFile)
 			if err != nil {
 				t.Fatalf("open MAF: %v", err)
@@ -109,7 +113,7 @@ func TestValidationBenchmark(t *testing.T) {
 					}
 				}
 			}
-			elapsed := time.Since(start)
+			seqDuration := time.Since(start)
 
 			counts := cmpWriter.Counts()
 			total := cmpWriter.Total()
@@ -118,14 +122,24 @@ func TestValidationBenchmark(t *testing.T) {
 			conseqMatch := counts["consequence"][output.CatMatch] + counts["consequence"][output.CatUpstreamReclass]
 			conseqMismatch := counts["consequence"][output.CatMismatch]
 
-			t.Logf("%s: %d variants, %.1f%% consequence match, %s",
-				name, total, float64(conseqMatch)/float64(total)*100, elapsed)
+			// --- Parallel pass (throughput measurement) ---
+			parDuration := benchmarkParallel(t, mafFile, ann, runtime.NumCPU())
+
+			seqVPS := float64(total) / seqDuration.Seconds()
+			parVPS := float64(total) / parDuration.Seconds()
+			speedup := seqDuration.Seconds() / parDuration.Seconds()
+
+			t.Logf("%s: %d variants, %.1f%% consequence match", name, total, float64(conseqMatch)/float64(total)*100)
+			t.Logf("  sequential: %s (%.0f variants/sec)", seqDuration.Round(time.Millisecond), seqVPS)
+			t.Logf("  parallel (%d workers): %s (%.0f variants/sec, %.2fx speedup)",
+				runtime.NumCPU(), parDuration.Round(time.Millisecond), parVPS, speedup)
 
 			results = append(results, studyResult{
 				name:           name,
 				variants:       total,
 				categoryCounts: counts,
-				duration:       elapsed,
+				seqDuration:    seqDuration,
+				parDuration:    parDuration,
 				conseqMatch:    conseqMatch,
 				conseqMismatch: conseqMismatch,
 				geneMismatches: geneMismatches,
@@ -136,7 +150,7 @@ func TestValidationBenchmark(t *testing.T) {
 
 	// Write markdown report
 	reportPath := filepath.Join(tcgaDir, "validation_report.md")
-	writeReport(t, reportPath, results, c.TranscriptCount(), cgl)
+	writeReport(t, reportPath, results, c.TranscriptCount(), cacheDuration, cgl)
 }
 
 // studyName extracts the study name from a MAF file path.
@@ -149,21 +163,69 @@ type studyResult struct {
 	name           string
 	variants       int
 	categoryCounts map[string]map[output.Category]int
-	duration       time.Duration
+	seqDuration    time.Duration
+	parDuration    time.Duration
 	conseqMatch    int
 	conseqMismatch int
 	geneMismatches map[string]map[string]int // gene → column → count
 	geneTotal      map[string]int            // gene → total variants
 }
 
+// benchmarkParallel runs the parallel annotation pipeline for a MAF file
+// and returns the wall-clock duration of the annotation phase only.
+func benchmarkParallel(t *testing.T, mafFile string, ann *annotate.Annotator, workers int) time.Duration {
+	t.Helper()
+
+	parser, err := maf.NewParser(mafFile)
+	if err != nil {
+		t.Fatalf("open MAF for parallel benchmark: %v", err)
+	}
+	defer parser.Close()
+
+	items := make(chan annotate.WorkItem, 2*workers)
+
+	start := time.Now()
+
+	go func() {
+		defer close(items)
+		seq := 0
+		for {
+			v, mafAnn, err := parser.NextWithAnnotation()
+			if err != nil {
+				t.Errorf("parallel parse error: %v", err)
+				return
+			}
+			if v == nil {
+				return
+			}
+			items <- annotate.WorkItem{Seq: seq, Variant: v, Extra: mafAnn}
+			seq++
+		}
+	}()
+
+	results := ann.ParallelAnnotate(items, workers)
+
+	if err := annotate.OrderedCollect(results, func(r annotate.WorkResult) error {
+		// Consume results (simulates writer work) but discard output.
+		_ = r.Anns
+		return r.Err
+	}); err != nil {
+		t.Fatalf("parallel annotation: %v", err)
+	}
+
+	return time.Since(start)
+}
+
 // writeReport generates a markdown validation report.
-func writeReport(t *testing.T, path string, results []studyResult, transcriptCount int, cgl oncokb.CancerGeneList) {
+func writeReport(t *testing.T, path string, results []studyResult, transcriptCount int, cacheDuration time.Duration, cgl oncokb.CancerGeneList) {
 	t.Helper()
 
 	var sb strings.Builder
 	sb.WriteString("# TCGA Validation Report\n\n")
 	sb.WriteString(fmt.Sprintf("Generated: %s  \n", time.Now().UTC().Format("2006-01-02 15:04 UTC")))
-	sb.WriteString(fmt.Sprintf("GENCODE transcripts loaded: %d\n\n", transcriptCount))
+	sb.WriteString(fmt.Sprintf("GENCODE transcripts loaded: %d  \n", transcriptCount))
+	sb.WriteString(fmt.Sprintf("Cache load time: %s  \n", cacheDuration.Round(time.Millisecond)))
+	sb.WriteString(fmt.Sprintf("Workers: %d (GOMAXPROCS)\n\n", runtime.NumCPU()))
 
 	// Match rates table (consequence + HGVSp + HGVSc)
 	sb.WriteString("## Match Rates\n\n")
@@ -313,19 +375,29 @@ func writeReport(t *testing.T, path string, results []studyResult, transcriptCou
 
 	// Performance table
 	sb.WriteString("## Performance\n\n")
-	sb.WriteString("| Study | Variants | Time | Variants/sec |\n")
-	sb.WriteString("|-------|----------|------|-------------|\n")
+	sb.WriteString(fmt.Sprintf("Cache load time: %s\n\n", cacheDuration.Round(time.Millisecond)))
+	sb.WriteString("| Study | Variants | Sequential | Seq v/s | Parallel | Par v/s | Speedup |\n")
+	sb.WriteString("|-------|----------|-----------|---------|----------|---------|--------|\n")
 
-	var totDuration time.Duration
+	var totSeqDuration, totParDuration time.Duration
 	for _, r := range results {
-		vps := float64(r.variants) / r.duration.Seconds()
-		sb.WriteString(fmt.Sprintf("| %s | %d | %s | %.0f |\n",
-			r.name, r.variants, r.duration.Round(time.Millisecond), vps))
-		totDuration += r.duration
+		seqVPS := float64(r.variants) / r.seqDuration.Seconds()
+		parVPS := float64(r.variants) / r.parDuration.Seconds()
+		speedup := r.seqDuration.Seconds() / r.parDuration.Seconds()
+		sb.WriteString(fmt.Sprintf("| %s | %d | %s | %.0f | %s | %.0f | %.2fx |\n",
+			r.name, r.variants,
+			r.seqDuration.Round(time.Millisecond), seqVPS,
+			r.parDuration.Round(time.Millisecond), parVPS, speedup))
+		totSeqDuration += r.seqDuration
+		totParDuration += r.parDuration
 	}
-	totVPS := float64(totVariants) / totDuration.Seconds()
-	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%s** | **%.0f** |\n",
-		totVariants, totDuration.Round(time.Millisecond), totVPS))
+	totSeqVPS := float64(totVariants) / totSeqDuration.Seconds()
+	totParVPS := float64(totVariants) / totParDuration.Seconds()
+	totSpeedup := totSeqDuration.Seconds() / totParDuration.Seconds()
+	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%s** | **%.0f** | **%s** | **%.0f** | **%.2fx** |\n",
+		totVariants,
+		totSeqDuration.Round(time.Millisecond), totSeqVPS,
+		totParDuration.Round(time.Millisecond), totParVPS, totSpeedup))
 
 	if err := os.WriteFile(path, []byte(sb.String()), 0644); err != nil {
 		t.Fatalf("write report: %v", err)

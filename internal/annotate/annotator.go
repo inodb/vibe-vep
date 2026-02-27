@@ -3,6 +3,7 @@ package annotate
 
 import (
 	"fmt"
+	"runtime"
 
 	"go.uber.org/zap"
 
@@ -117,38 +118,55 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 // AnnotateAll annotates all variants from a parser.
 // The parser can be any type that implements vcf.VariantParser (VCF, MAF, etc.).
 func (a *Annotator) AnnotateAll(parser vcf.VariantParser, writer AnnotationWriter) error {
+	items := make(chan WorkItem, 2*runtime.NumCPU())
+	var parseErr error
 	variantCount := 0
 
-	for {
-		v, err := parser.Next()
-		if err != nil {
-			return fmt.Errorf("read variant: %w", err)
-		}
-		if v == nil {
-			break
-		}
-
-		// Split multi-allelic variants
-		variants := vcf.SplitMultiAllelic(v)
-
-		for _, variant := range variants {
-			annotations, err := a.Annotate(variant)
+	go func() {
+		defer close(items)
+		seq := 0
+		for {
+			v, err := parser.Next()
 			if err != nil {
-				a.logger.Warn("failed to annotate variant",
-					zap.String("chrom", variant.Chrom),
-					zap.Int64("pos", variant.Pos),
-					zap.Error(err))
-				continue
+				parseErr = fmt.Errorf("read variant: %w", err)
+				return
 			}
+			if v == nil {
+				return
+			}
+			variantCount++
 
-			for _, ann := range annotations {
-				if err := writer.Write(variant, ann); err != nil {
-					return fmt.Errorf("write annotation: %w", err)
-				}
+			// Split multi-allelic variants, each gets its own sequence number.
+			variants := vcf.SplitMultiAllelic(v)
+			for _, variant := range variants {
+				items <- WorkItem{Seq: seq, Variant: variant}
+				seq++
 			}
 		}
+	}()
 
-		variantCount++
+	results := a.ParallelAnnotate(items, 0)
+
+	if err := OrderedCollect(results, func(r WorkResult) error {
+		if r.Err != nil {
+			a.logger.Warn("failed to annotate variant",
+				zap.String("chrom", r.Variant.Chrom),
+				zap.Int64("pos", r.Variant.Pos),
+				zap.Error(r.Err))
+			return nil
+		}
+		for _, ann := range r.Anns {
+			if err := writer.Write(r.Variant, ann); err != nil {
+				return fmt.Errorf("write annotation: %w", err)
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if parseErr != nil {
+		return parseErr
 	}
 
 	if variantCount == 0 {

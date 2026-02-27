@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"go.uber.org/zap"
@@ -376,27 +377,44 @@ func runCompare(logger *zap.Logger, inputPath, assembly string, columns map[stri
 		return fmt.Errorf("writing header: %w", err)
 	}
 
-	for {
-		v, mafAnn, err := parser.NextWithAnnotation()
-		if err != nil {
-			return fmt.Errorf("reading variant: %w", err)
+	// Parse variants in a goroutine, send to worker pool.
+	items := make(chan annotate.WorkItem, 2*runtime.NumCPU())
+	var parseErr error
+	go func() {
+		defer close(items)
+		seq := 0
+		for {
+			v, mafAnn, err := parser.NextWithAnnotation()
+			if err != nil {
+				parseErr = fmt.Errorf("reading variant: %w", err)
+				return
+			}
+			if v == nil {
+				return
+			}
+			items <- annotate.WorkItem{Seq: seq, Variant: v, Extra: mafAnn}
+			seq++
 		}
-		if v == nil {
-			break
-		}
+	}()
 
-		vepAnns, err := ann.Annotate(v)
-		if err != nil {
+	results := ann.ParallelAnnotate(items, 0)
+
+	if err := annotate.OrderedCollect(results, func(r annotate.WorkResult) error {
+		mafAnn := r.Extra.(*maf.MAFAnnotation)
+		if r.Err != nil {
 			logger.Warn("failed to annotate variant",
-				zap.String("chrom", v.Chrom),
-				zap.Int64("pos", v.Pos),
-				zap.Error(err))
-			continue
+				zap.String("chrom", r.Variant.Chrom),
+				zap.Int64("pos", r.Variant.Pos),
+				zap.Error(r.Err))
+			return nil
 		}
+		return cmpWriter.WriteComparison(r.Variant, mafAnn, r.Anns)
+	}); err != nil {
+		return err
+	}
 
-		if err := cmpWriter.WriteComparison(v, mafAnn, vepAnns); err != nil {
-			return fmt.Errorf("writing comparison: %w", err)
-		}
+	if parseErr != nil {
+		return parseErr
 	}
 
 	if err := cmpWriter.Flush(); err != nil {
@@ -420,37 +438,51 @@ func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotato
 		return fmt.Errorf("writing header: %w", err)
 	}
 
-	for {
-		v, mafAnn, err := parser.NextWithAnnotation()
-		if err != nil {
-			return fmt.Errorf("reading variant: %w", err)
-		}
-		if v == nil {
-			break
-		}
-
-		vepAnns, err := ann.Annotate(v)
-		if err != nil {
-			logger.Warn("failed to annotate variant",
-				zap.String("chrom", v.Chrom),
-				zap.Int64("pos", v.Pos),
-				zap.Error(err))
-			if writeErr := mafWriter.WriteRow(mafAnn.RawFields, nil, v); writeErr != nil {
-				return fmt.Errorf("writing row: %w", writeErr)
+	// Parse variants in a goroutine, send to worker pool.
+	items := make(chan annotate.WorkItem, 2*runtime.NumCPU())
+	var parseErr error
+	go func() {
+		defer close(items)
+		seq := 0
+		for {
+			v, mafAnn, err := parser.NextWithAnnotation()
+			if err != nil {
+				parseErr = fmt.Errorf("reading variant: %w", err)
+				return
 			}
-			continue
+			if v == nil {
+				return
+			}
+			items <- annotate.WorkItem{Seq: seq, Variant: v, Extra: mafAnn}
+			seq++
+		}
+	}()
+
+	results := ann.ParallelAnnotate(items, 0)
+
+	if err := annotate.OrderedCollect(results, func(r annotate.WorkResult) error {
+		mafAnn := r.Extra.(*maf.MAFAnnotation)
+		if r.Err != nil {
+			logger.Warn("failed to annotate variant",
+				zap.String("chrom", r.Variant.Chrom),
+				zap.Int64("pos", r.Variant.Pos),
+				zap.Error(r.Err))
+			return mafWriter.WriteRow(mafAnn.RawFields, nil, r.Variant)
 		}
 
-		best := output.SelectBestAnnotation(mafAnn, vepAnns)
-		// Enrich annotation with gene type from cancer gene list
+		best := output.SelectBestAnnotation(mafAnn, r.Anns)
 		if best != nil && cgl != nil {
 			if ga, ok := cgl[best.GeneName]; ok {
 				best.GeneType = ga.GeneType
 			}
 		}
-		if err := mafWriter.WriteRow(mafAnn.RawFields, best, v); err != nil {
-			return fmt.Errorf("writing row: %w", err)
-		}
+		return mafWriter.WriteRow(mafAnn.RawFields, best, r.Variant)
+	}); err != nil {
+		return err
+	}
+
+	if parseErr != nil {
+		return parseErr
 	}
 
 	return mafWriter.Flush()
