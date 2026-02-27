@@ -260,3 +260,32 @@ func TestAllocRegression_Complement(t *testing.T) {
 		t.Errorf("Complement allocates: got %.0f, want 0", allocs)
 	}
 }
+
+// TestAllocRegression_ReverseComplement verifies minimal allocations for small sequences.
+func TestAllocRegression_ReverseComplement(t *testing.T) {
+	// Typical codon (3 bases) - should be 1 alloc (string return)
+	allocs := testing.AllocsPerRun(100, func() {
+		ReverseComplement("ATG")
+	})
+	if allocs > 1 {
+		t.Errorf("ReverseComplement(3bp) allocs: %.0f, want <= 1", allocs)
+	}
+
+	// Short variant ref/alt (10 bases)
+	allocs = testing.AllocsPerRun(100, func() {
+		ReverseComplement("ATGCATGCAT")
+	})
+	if allocs > 1 {
+		t.Errorf("ReverseComplement(10bp) allocs: %.0f, want <= 1", allocs)
+	}
+}
+
+// TestAllocRegression_MutateCodon verifies minimal allocations.
+func TestAllocRegression_MutateCodon(t *testing.T) {
+	allocs := testing.AllocsPerRun(100, func() {
+		MutateCodon("GGT", 2, 'A')
+	})
+	if allocs > 1 {
+		t.Errorf("MutateCodon allocs: %.0f, want <= 1", allocs)
+	}
+}

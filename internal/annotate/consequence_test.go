@@ -743,7 +743,7 @@ func TestAllocRegression_PredictConsequence(t *testing.T) {
 	// Current budget: 42 allocs for the full variant set.
 	// Allow a small margin so minor refactors don't break this,
 	// but catch significant regressions.
-	const maxAllocs = 42
+	const maxAllocs = 39
 	if int(allocs) > maxAllocs {
 		t.Errorf("allocation regression: got %.0f allocs/iter, want <= %d", allocs, maxAllocs)
 	}

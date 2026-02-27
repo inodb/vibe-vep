@@ -54,7 +54,14 @@ func IsStartCodon(codon string) bool {
 // reverse complemented to get the template strand.
 func ReverseComplement(seq string) string {
 	n := len(seq)
-	result := make([]byte, n)
+	// Stack-allocate for typical variant ref/alt lengths (≤64 bases).
+	var buf [64]byte
+	var result []byte
+	if n <= len(buf) {
+		result = buf[:n]
+	} else {
+		result = make([]byte, n)
+	}
 	for i := 0; i < n; i++ {
 		result[i] = Complement(seq[n-1-i])
 	}
@@ -126,9 +133,10 @@ func MutateCodon(codon string, positionInCodon int, newBase byte) string {
 	if len(codon) != 3 || positionInCodon < 0 || positionInCodon > 2 {
 		return codon
 	}
-	codonBytes := []byte(codon)
-	codonBytes[positionInCodon] = newBase
-	return string(codonBytes)
+	var buf [3]byte
+	copy(buf[:], codon)
+	buf[positionInCodon] = newBase
+	return string(buf[:])
 }
 
 // AminoAcidSingleToThree converts single letter amino acid to three letter code.
