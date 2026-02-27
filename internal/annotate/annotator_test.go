@@ -179,6 +179,108 @@ func (w *mockWriter) Flush() error {
 	return nil
 }
 
+// TestAnnotator_VEP_MRPL39 validates consequence predictions against the
+// ensembl-vep test suite expectations for the MRPL39 gene on chr21.
+// VEP test variant rs142513484 (chr21:25585733 C>T) expects:
+//   - ENST00000352957: missense_variant (A/T, codons Gca/Aca, CDS pos 991)
+//   - ENST00000307301: 3_prime_UTR_variant
+func TestAnnotator_VEP_MRPL39(t *testing.T) {
+	testCacheDir := findTestCacheDir(t)
+	c := cache.New()
+	loader := cache.NewLoader(testCacheDir, "homo_sapiens", "GRCh38")
+
+	require.NoError(t, loader.Load(c, "21"), "loading chr21 cache")
+	require.NotZero(t, c.TranscriptCount(), "no transcripts loaded")
+
+	ann := NewAnnotator(c)
+
+	tests := []struct {
+		name         string
+		variant      *vcf.Variant
+		transcriptID string
+		wantConseq   string
+		wantImpact   string
+		wantAA       string // amino acid change (empty = don't check)
+	}{
+		{
+			name:         "rs142513484 canonical missense",
+			variant:      &vcf.Variant{Chrom: "21", Pos: 25585733, Ref: "C", Alt: "T"},
+			transcriptID: "ENST00000352957",
+			wantConseq:   ConsequenceMissenseVariant,
+			wantImpact:   ImpactModerate,
+			wantAA:       "A331T",
+		},
+		{
+			name:         "rs142513484 3'UTR on ENST00000307301",
+			variant:      &vcf.Variant{Chrom: "21", Pos: 25585733, Ref: "C", Alt: "T"},
+			transcriptID: "ENST00000307301",
+			wantConseq:   Consequence3PrimeUTR,
+			wantImpact:   ImpactModifier,
+		},
+		{
+			name:         "rs199510789 synonymous shared",
+			variant:      &vcf.Variant{Chrom: "21", Pos: 25588859, Ref: "C", Alt: "T"},
+			transcriptID: "ENST00000352957",
+			wantConseq:   ConsequenceSynonymousVariant,
+			wantImpact:   ImpactLow,
+		},
+		{
+			name:         "rs115023280 missense ENST00000352957",
+			variant:      &vcf.Variant{Chrom: "21", Pos: 25592826, Ref: "G", Alt: "A"},
+			transcriptID: "ENST00000352957",
+			wantConseq:   ConsequenceMissenseVariant,
+			wantImpact:   ImpactModerate,
+		},
+		{
+			name:         "rs1135638 synonymous",
+			variant:      &vcf.Variant{Chrom: "21", Pos: 25592836, Ref: "G", Alt: "A"},
+			transcriptID: "ENST00000352957",
+			wantConseq:   ConsequenceSynonymousVariant,
+			wantImpact:   ImpactLow,
+		},
+		{
+			name:         "rs187353664 intron in canonical",
+			variant:      &vcf.Variant{Chrom: "21", Pos: 25587701, Ref: "T", Alt: "C"},
+			transcriptID: "ENST00000352957",
+			wantConseq:   ConsequenceIntronVariant,
+			wantImpact:   ImpactModifier,
+		},
+		{
+			name:         "rs7278168 synonymous",
+			variant:      &vcf.Variant{Chrom: "21", Pos: 25603910, Ref: "C", Alt: "T"},
+			transcriptID: "ENST00000352957",
+			wantConseq:   ConsequenceSynonymousVariant,
+			wantImpact:   ImpactLow,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			annotations, err := ann.Annotate(tt.variant)
+			require.NoError(t, err, "annotation failed")
+			require.NotEmpty(t, annotations, "no annotations returned")
+
+			// Find annotation for expected transcript
+			var found *Annotation
+			for _, a := range annotations {
+				if strings.HasPrefix(a.TranscriptID, tt.transcriptID) {
+					found = a
+					break
+				}
+			}
+			require.NotNilf(t, found, "no annotation for transcript %s", tt.transcriptID)
+
+			assert.Equal(t, tt.wantConseq, strings.Split(found.Consequence, ",")[0],
+				"consequence mismatch")
+			assert.Equal(t, tt.wantImpact, found.Impact, "impact mismatch")
+
+			if tt.wantAA != "" {
+				assert.Equal(t, tt.wantAA, found.AminoAcidChange, "amino acid change")
+			}
+		})
+	}
+}
+
 // findTestCacheDir locates the test cache directory.
 func findTestCacheDir(t *testing.T) string {
 	t.Helper()
