@@ -11,6 +11,7 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
 	"github.com/inodb/vibe-vep/internal/maf"
 	"github.com/inodb/vibe-vep/internal/output"
 )
@@ -54,6 +55,9 @@ func TestValidationBenchmark(t *testing.T) {
 	}
 	t.Logf("loaded %d transcripts", c.TranscriptCount())
 
+	// Load cancer gene list
+	cgl := loadCancerGeneList(t)
+
 	allCols := map[string]bool{"consequence": true, "hgvsp": true, "hgvsc": true}
 	var results []studyResult
 
@@ -68,6 +72,10 @@ func TestValidationBenchmark(t *testing.T) {
 
 			ann := annotate.NewAnnotator(c)
 			cmpWriter := output.NewCompareWriter(os.Stderr, allCols, false)
+
+			// Track per-gene mismatches for cancer genes
+			geneMismatches := make(map[string]map[string]int) // gene → column → mismatch count
+			geneTotal := make(map[string]int)                 // gene → total count
 
 			start := time.Now()
 			for {
@@ -84,6 +92,21 @@ func TestValidationBenchmark(t *testing.T) {
 				}
 				if err := cmpWriter.WriteComparison(v, mafAnn, vepAnns); err != nil {
 					t.Fatalf("write comparison: %v", err)
+				}
+
+				// Track cancer gene mismatches
+				if cgl != nil && cgl.IsCancerGene(mafAnn.HugoSymbol) {
+					gene := mafAnn.HugoSymbol
+					geneTotal[gene]++
+					counts := cmpWriter.LastCategories()
+					for col, cat := range counts {
+						if cat == output.CatMismatch {
+							if geneMismatches[gene] == nil {
+								geneMismatches[gene] = make(map[string]int)
+							}
+							geneMismatches[gene][col]++
+						}
+					}
 				}
 			}
 			elapsed := time.Since(start)
@@ -105,13 +128,15 @@ func TestValidationBenchmark(t *testing.T) {
 				duration:       elapsed,
 				conseqMatch:    conseqMatch,
 				conseqMismatch: conseqMismatch,
+				geneMismatches: geneMismatches,
+				geneTotal:      geneTotal,
 			})
 		})
 	}
 
 	// Write markdown report
 	reportPath := filepath.Join(tcgaDir, "validation_report.md")
-	writeReport(t, reportPath, results, c.TranscriptCount())
+	writeReport(t, reportPath, results, c.TranscriptCount(), cgl)
 }
 
 // studyName extracts the study name from a MAF file path.
@@ -127,10 +152,12 @@ type studyResult struct {
 	duration       time.Duration
 	conseqMatch    int
 	conseqMismatch int
+	geneMismatches map[string]map[string]int // gene → column → count
+	geneTotal      map[string]int            // gene → total variants
 }
 
 // writeReport generates a markdown validation report.
-func writeReport(t *testing.T, path string, results []studyResult, transcriptCount int) {
+func writeReport(t *testing.T, path string, results []studyResult, transcriptCount int, cgl oncokb.CancerGeneList) {
 	t.Helper()
 
 	var sb strings.Builder
@@ -138,23 +165,42 @@ func writeReport(t *testing.T, path string, results []studyResult, transcriptCou
 	sb.WriteString(fmt.Sprintf("Generated: %s  \n", time.Now().UTC().Format("2006-01-02 15:04 UTC")))
 	sb.WriteString(fmt.Sprintf("GENCODE transcripts loaded: %d\n\n", transcriptCount))
 
-	// Consequence match table
-	sb.WriteString("## Consequence Match\n\n")
-	sb.WriteString("| Study | Variants | Match | Mismatch | Match Rate |\n")
-	sb.WriteString("|-------|----------|-------|----------|------------|\n")
+	// Match rates table (consequence + HGVSp + HGVSc)
+	sb.WriteString("## Match Rates\n\n")
+	sb.WriteString("| Study | Variants | Conseq Match | Conseq Mismatch | Conseq Rate | HGVSp Match | HGVSp Mismatch | HGVSp Rate | HGVSc Match | HGVSc Mismatch | HGVSc Rate |\n")
+	sb.WriteString("|-------|----------|-------------|-----------------|-------------|-------------|----------------|------------|-------------|----------------|------------|\n")
 
-	var totVariants, totMatch, totMismatch int
+	var totVariants, totConseqMatch, totConseqMismatch int
+	var totHGVSpMatch, totHGVSpMismatch, totHGVScMatch, totHGVScMismatch int
 	for _, r := range results {
-		rate := float64(r.conseqMatch) / float64(r.variants) * 100
-		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %d | %.1f%% |\n",
-			r.name, r.variants, r.conseqMatch, r.conseqMismatch, rate))
+		conseqRate := float64(r.conseqMatch) / float64(r.variants) * 100
+		hgvspMatch := r.categoryCounts["hgvsp"][output.CatMatch]
+		hgvspMismatch := r.categoryCounts["hgvsp"][output.CatMismatch]
+		hgvspRate := float64(hgvspMatch) / float64(r.variants) * 100
+		hgvscMatch := r.categoryCounts["hgvsc"][output.CatMatch]
+		hgvscMismatch := r.categoryCounts["hgvsc"][output.CatMismatch]
+		hgvscRate := float64(hgvscMatch) / float64(r.variants) * 100
+		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %d | %.1f%% | %d | %d | %.1f%% | %d | %d | %.1f%% |\n",
+			r.name, r.variants,
+			r.conseqMatch, r.conseqMismatch, conseqRate,
+			hgvspMatch, hgvspMismatch, hgvspRate,
+			hgvscMatch, hgvscMismatch, hgvscRate))
 		totVariants += r.variants
-		totMatch += r.conseqMatch
-		totMismatch += r.conseqMismatch
+		totConseqMatch += r.conseqMatch
+		totConseqMismatch += r.conseqMismatch
+		totHGVSpMatch += hgvspMatch
+		totHGVSpMismatch += hgvspMismatch
+		totHGVScMatch += hgvscMatch
+		totHGVScMismatch += hgvscMismatch
 	}
-	totRate := float64(totMatch) / float64(totVariants) * 100
-	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%d** | **%.1f%%** |\n\n",
-		totVariants, totMatch, totMismatch, totRate))
+	totConseqRate := float64(totConseqMatch) / float64(totVariants) * 100
+	totHGVSpRate := float64(totHGVSpMatch) / float64(totVariants) * 100
+	totHGVScRate := float64(totHGVScMatch) / float64(totVariants) * 100
+	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%d** | **%.1f%%** | **%d** | **%d** | **%.1f%%** | **%d** | **%d** | **%.1f%%** |\n\n",
+		totVariants,
+		totConseqMatch, totConseqMismatch, totConseqRate,
+		totHGVSpMatch, totHGVSpMismatch, totHGVSpRate,
+		totHGVScMatch, totHGVScMismatch, totHGVScRate))
 
 	// Per-column category breakdown
 	colOrder := []string{"consequence", "hgvsp", "hgvsc"}
@@ -211,6 +257,60 @@ func writeReport(t *testing.T, path string, results []studyResult, transcriptCou
 		sb.WriteString("\n\n")
 	}
 
+	// Cancer gene mismatches
+	if cgl != nil {
+		sb.WriteString("## Cancer Gene Mismatches\n\n")
+
+		// Aggregate across studies
+		aggGeneMismatches := make(map[string]map[string]int)
+		aggGeneTotal := make(map[string]int)
+		for _, r := range results {
+			for gene, counts := range r.geneMismatches {
+				if aggGeneMismatches[gene] == nil {
+					aggGeneMismatches[gene] = make(map[string]int)
+				}
+				for col, n := range counts {
+					aggGeneMismatches[gene][col] += n
+				}
+			}
+			for gene, n := range r.geneTotal {
+				aggGeneTotal[gene] += n
+			}
+		}
+
+		if len(aggGeneMismatches) == 0 {
+			sb.WriteString("No mismatches in cancer genes.\n\n")
+		} else {
+			sb.WriteString("| Gene | Variants | Conseq Mismatches | HGVSp Mismatches | HGVSc Mismatches |\n")
+			sb.WriteString("|------|----------|-------------------|------------------|------------------|\n")
+
+			// Sort genes by total mismatches descending
+			type geneEntry struct {
+				gene  string
+				total int
+			}
+			var genes []geneEntry
+			for gene, counts := range aggGeneMismatches {
+				total := counts["consequence"] + counts["hgvsp"] + counts["hgvsc"]
+				genes = append(genes, geneEntry{gene, total})
+			}
+			sort.Slice(genes, func(i, j int) bool {
+				if genes[i].total != genes[j].total {
+					return genes[i].total > genes[j].total
+				}
+				return genes[i].gene < genes[j].gene
+			})
+
+			for _, ge := range genes {
+				counts := aggGeneMismatches[ge.gene]
+				sb.WriteString(fmt.Sprintf("| %s | %d | %d | %d | %d |\n",
+					ge.gene, aggGeneTotal[ge.gene],
+					counts["consequence"], counts["hgvsp"], counts["hgvsc"]))
+			}
+			sb.WriteString("\n")
+		}
+	}
+
 	// Performance table
 	sb.WriteString("## Performance\n\n")
 	sb.WriteString("| Study | Variants | Time | Variants/sec |\n")
@@ -231,6 +331,27 @@ func writeReport(t *testing.T, path string, results []studyResult, transcriptCou
 		t.Fatalf("write report: %v", err)
 	}
 	t.Logf("report written to %s", path)
+}
+
+// loadCancerGeneList attempts to load the OncoKB cancer gene list from the repo root.
+func loadCancerGeneList(t *testing.T) oncokb.CancerGeneList {
+	t.Helper()
+	for _, rel := range []string{
+		filepath.Join("cancerGeneList.tsv"),
+		filepath.Join("..", "..", "cancerGeneList.tsv"),
+	} {
+		if _, err := os.Stat(rel); err == nil {
+			cgl, err := oncokb.LoadCancerGeneList(rel)
+			if err != nil {
+				t.Logf("warning: could not load cancer gene list: %v", err)
+				return nil
+			}
+			t.Logf("loaded %d cancer genes", len(cgl))
+			return cgl
+		}
+	}
+	t.Log("cancerGeneList.tsv not found, skipping cancer gene tracking")
+	return nil
 }
 
 // findTCGADir locates the testdata/tcga directory.

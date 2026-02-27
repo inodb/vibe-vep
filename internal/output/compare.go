@@ -51,11 +51,12 @@ func isShownByDefault(col string, cat Category) bool {
 // CompareWriter writes tab-delimited comparison output between MAF annotations
 // and VEP predictions, with category-based classification.
 type CompareWriter struct {
-	w       io.Writer
-	columns map[string]bool             // enabled columns
-	counts  map[string]map[Category]int // column → category → count
-	total   int
-	showAll bool
+	w              io.Writer
+	columns        map[string]bool             // enabled columns
+	counts         map[string]map[Category]int // column → category → count
+	lastCategories map[string]Category         // categories from the last WriteComparison call
+	total          int
+	showAll        bool
 }
 
 // NewCompareWriter creates a new comparison output writer.
@@ -161,6 +162,8 @@ func (c *CompareWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAFAnn
 		}
 	}
 
+	c.lastCategories = categories
+
 	// Decide whether to show row
 	showRow := c.showAll
 	if !showRow {
@@ -212,6 +215,11 @@ func (c *CompareWriter) Total() int {
 // Counts returns the category counts for all columns.
 func (c *CompareWriter) Counts() map[string]map[Category]int {
 	return c.counts
+}
+
+// LastCategories returns the categories from the most recent WriteComparison call.
+func (c *CompareWriter) LastCategories() map[string]Category {
+	return c.lastCategories
 }
 
 // WriteSummary writes category counts per column to the given writer.
