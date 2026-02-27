@@ -72,9 +72,16 @@ type Annotation struct {
 // For comma-separated consequences, returns the highest impact among all terms.
 func GetImpact(consequence string) string {
 	best := ImpactModifier
-	for _, term := range strings.Split(consequence, ",") {
+	for rest := consequence; rest != ""; {
+		term := rest
+		if i := strings.IndexByte(rest, ','); i >= 0 {
+			term = rest[:i]
+			rest = rest[i+1:]
+		} else {
+			rest = ""
+		}
 		var impact string
-		switch strings.TrimSpace(term) {
+		switch term {
 		case ConsequenceStopGained, ConsequenceFrameshiftVariant,
 			ConsequenceStopLost, ConsequenceStartLost,
 			ConsequenceSpliceAcceptor, ConsequenceSpliceDonor:
