@@ -12,9 +12,10 @@ import (
 
 // MAFWriter writes annotated variants in MAF format, preserving all original columns.
 type MAFWriter struct {
-	w          *bufio.Writer
-	headerLine string
-	columns    maf.ColumnIndices
+	w            *bufio.Writer
+	headerLine   string
+	columns      maf.ColumnIndices
+	extraColumns []string // additional column names appended after original columns
 }
 
 // NewMAFWriter creates a new MAF writer that preserves all original columns.
@@ -26,9 +27,18 @@ func NewMAFWriter(w io.Writer, headerLine string, columns maf.ColumnIndices) *MA
 	}
 }
 
-// WriteHeader writes the original MAF header line.
+// AddExtraColumn registers an additional column to append after the original MAF columns.
+func (m *MAFWriter) AddExtraColumn(name string) {
+	m.extraColumns = append(m.extraColumns, name)
+}
+
+// WriteHeader writes the original MAF header line plus any extra columns.
 func (m *MAFWriter) WriteHeader() error {
-	_, err := m.w.WriteString(m.headerLine + "\n")
+	header := m.headerLine
+	for _, col := range m.extraColumns {
+		header += "\t" + col
+	}
+	_, err := m.w.WriteString(header + "\n")
 	return err
 }
 
@@ -46,6 +56,18 @@ func (m *MAFWriter) WriteRow(rawFields []string, ann *annotate.Annotation, v *vc
 		m.updateField(row, m.columns.HGVSp, ann.HGVSp)
 		m.updateField(row, m.columns.HGVSpShort, hgvspToShort(ann.HGVSp))
 		m.updateField(row, m.columns.VariantClassification, SOToMAFClassification(ann.Consequence, v))
+	}
+
+	// Append extra column values
+	for _, col := range m.extraColumns {
+		val := ""
+		if ann != nil {
+			switch col {
+			case "Gene_Type":
+				val = ann.GeneType
+			}
+		}
+		row = append(row, val)
 	}
 
 	_, err := m.w.WriteString(strings.Join(row, "\t") + "\n")

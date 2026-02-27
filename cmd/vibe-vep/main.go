@@ -12,6 +12,7 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
 	"github.com/inodb/vibe-vep/internal/maf"
 	"github.com/inodb/vibe-vep/internal/output"
 	"github.com/inodb/vibe-vep/internal/vcf"
@@ -281,6 +282,18 @@ func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFi
 		}
 	}
 
+	// Load cancer gene list from config if available
+	var cgl oncokb.CancerGeneList
+	if cglPath := viper.GetString("oncokb.cancer-gene-list"); cglPath != "" {
+		var err error
+		cgl, err = oncokb.LoadCancerGeneList(cglPath)
+		if err != nil {
+			logger.Warn("could not load cancer gene list", zap.String("path", cglPath), zap.Error(err))
+		} else {
+			logger.Info("loaded cancer gene list", zap.Int("genes", len(cgl)))
+		}
+	}
+
 	// MAF output
 	if outputFormat == "maf" {
 		if detectedFormat != "maf" {
@@ -290,7 +303,7 @@ func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFi
 		if !ok {
 			return fmt.Errorf("MAF output requires MAF parser")
 		}
-		return runMAFOutput(logger, mafParser, ann, out)
+		return runMAFOutput(logger, mafParser, ann, out, cgl)
 	}
 
 	// VCF output
@@ -396,8 +409,12 @@ func runCompare(logger *zap.Logger, inputPath, assembly string, columns map[stri
 }
 
 // runMAFOutput runs MAF annotation mode, preserving all original columns.
-func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotator, out *os.File) error {
+func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotator, out *os.File, cgl oncokb.CancerGeneList) error {
 	mafWriter := output.NewMAFWriter(out, parser.Header(), parser.Columns())
+
+	if cgl != nil {
+		mafWriter.AddExtraColumn("Gene_Type")
+	}
 
 	if err := mafWriter.WriteHeader(); err != nil {
 		return fmt.Errorf("writing header: %w", err)
@@ -425,6 +442,12 @@ func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotato
 		}
 
 		best := output.SelectBestAnnotation(mafAnn, vepAnns)
+		// Enrich annotation with gene type from cancer gene list
+		if best != nil && cgl != nil {
+			if ga, ok := cgl[best.GeneName]; ok {
+				best.GeneType = ga.GeneType
+			}
+		}
 		if err := mafWriter.WriteRow(mafAnn.RawFields, best, v); err != nil {
 			return fmt.Errorf("writing row: %w", err)
 		}

@@ -211,6 +211,78 @@ func TestMAFWriter_PreservesOriginalWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestMAFWriter_ExtraGeneTypeColumn(t *testing.T) {
+	cols := maf.ColumnIndices{
+		Chromosome:            -1,
+		StartPosition:         -1,
+		EndPosition:           -1,
+		ReferenceAllele:       -1,
+		TumorSeqAllele2:       -1,
+		HugoSymbol:            0,
+		Consequence:           1,
+		HGVSpShort:            -1,
+		TranscriptID:          -1,
+		VariantType:           -1,
+		NCBIBuild:             -1,
+		HGVSc:                 -1,
+		VariantClassification: -1,
+		HGVSp:                 -1,
+	}
+
+	var buf bytes.Buffer
+	w := NewMAFWriter(&buf, "Hugo_Symbol\tConsequence", cols)
+	w.AddExtraColumn("Gene_Type")
+
+	if err := w.WriteHeader(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Row with GeneType
+	ann := &annotate.Annotation{
+		GeneName:    "KRAS",
+		Consequence: "missense_variant",
+		GeneType:    "ONCOGENE",
+	}
+	if err := w.WriteRow([]string{"KRAS", "old"}, ann, &vcf.Variant{Ref: "C", Alt: "T"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Row without GeneType
+	ann2 := &annotate.Annotation{
+		GeneName:    "UNKNOWN",
+		Consequence: "intron_variant",
+	}
+	if err := w.WriteRow([]string{"UNKNOWN", "old"}, ann2, &vcf.Variant{Ref: "C", Alt: "T"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines (header + 2 rows), got %d", len(lines))
+	}
+
+	// Header should have extra column
+	if !strings.HasSuffix(lines[0], "\tGene_Type") {
+		t.Errorf("header missing Gene_Type column: %s", lines[0])
+	}
+
+	// First row should have ONCOGENE
+	parts := strings.Split(lines[1], "\t")
+	if parts[len(parts)-1] != "ONCOGENE" {
+		t.Errorf("Gene_Type = %q, want ONCOGENE", parts[len(parts)-1])
+	}
+
+	// Second row should have empty Gene_Type
+	parts2 := strings.Split(lines[2], "\t")
+	if parts2[len(parts2)-1] != "" {
+		t.Errorf("Gene_Type = %q, want empty", parts2[len(parts2)-1])
+	}
+}
+
 func TestSOToMAFClassification(t *testing.T) {
 	tests := []struct {
 		consequence string
