@@ -58,6 +58,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newAnnotateCmd(&verbose))
 	rootCmd.AddCommand(newCompareCmd(&verbose))
 	rootCmd.AddCommand(newDownloadCmd(&verbose))
+	rootCmd.AddCommand(newPrepareCmd(&verbose))
 
 	return rootCmd
 }
@@ -331,6 +332,43 @@ func loadFromGTFFASTA(logger *zap.Logger, c *cache.Cache, gtfPath, fastaPath, ca
 		zap.Int("count", c.TranscriptCount()),
 		zap.Duration("elapsed", time.Since(start)))
 	return nil
+}
+
+func newPrepareCmd(verbose *bool) *cobra.Command {
+	var assembly string
+
+	cmd := &cobra.Command{
+		Use:   "prepare",
+		Short: "Build transcript cache for fast startup",
+		Long:  "Load GENCODE GTF/FASTA and build the transcript cache so subsequent annotate/compare runs start instantly.",
+		Example: `  vibe-vep prepare
+  vibe-vep prepare --assembly GRCh37`,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return viper.BindPFlags(cmd.Flags())
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			logger, err := newLogger(*verbose)
+			if err != nil {
+				return fmt.Errorf("creating logger: %w", err)
+			}
+			defer logger.Sync()
+
+			cr, err := loadCache(logger, viper.GetString("assembly"), false, true)
+			if err != nil {
+				return err
+			}
+			if cr.store != nil {
+				cr.store.Close()
+			}
+			logger.Info("transcript cache ready",
+				zap.Int("transcripts", cr.cache.TranscriptCount()))
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
+
+	return cmd
 }
 
 func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFile string, canonicalOnly bool, inputFormat string, noCache, clearCache, noVariantCache bool) error {
