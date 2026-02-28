@@ -9,6 +9,8 @@ import (
 type Cache struct {
 	// transcripts stores transcripts indexed by chromosome
 	transcripts map[string][]*Transcript
+	// geneIndex maps gene name to transcripts (built lazily)
+	geneIndex map[string][]*Transcript
 }
 
 // New creates a new empty cache.
@@ -22,6 +24,8 @@ func New() *Cache {
 func (c *Cache) AddTranscript(t *Transcript) {
 	chrom := t.Chrom
 	c.transcripts[chrom] = append(c.transcripts[chrom], t)
+	// Invalidate gene index so it gets rebuilt on next use
+	c.geneIndex = nil
 }
 
 // FindTranscripts returns all transcripts that overlap a given genomic position.
@@ -74,5 +78,25 @@ func (c *Cache) Chromosomes() []string {
 // FindTranscriptsByChrom returns all transcripts for a chromosome.
 func (c *Cache) FindTranscriptsByChrom(chrom string) []*Transcript {
 	return c.transcripts[chrom]
+}
+
+// FindTranscriptsByGene returns all transcripts for a given gene name.
+func (c *Cache) FindTranscriptsByGene(geneName string) []*Transcript {
+	if c.geneIndex == nil {
+		c.buildGeneIndex()
+	}
+	return c.geneIndex[geneName]
+}
+
+// buildGeneIndex constructs the gene name → transcripts index.
+func (c *Cache) buildGeneIndex() {
+	c.geneIndex = make(map[string][]*Transcript)
+	for _, transcripts := range c.transcripts {
+		for _, t := range transcripts {
+			if t.GeneName != "" {
+				c.geneIndex[t.GeneName] = append(c.geneIndex[t.GeneName], t)
+			}
+		}
+	}
 }
 

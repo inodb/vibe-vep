@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"go.uber.org/zap"
@@ -111,26 +112,37 @@ func main() {
 func addCacheFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("no-cache", false, "Skip transcript cache, always load from GTF/FASTA")
 	cmd.Flags().Bool("clear-cache", false, "Clear and rebuild transcript and variant caches")
-	cmd.Flags().Bool("no-variant-cache", false, "Disable variant result caching")
 }
 
 func newAnnotateCmd(verbose *bool) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "annotate",
+		Short: "Annotate variants",
+		Long:  "Annotate variants in a MAF file, VCF file, or by variant specification.",
+	}
+
+	cmd.AddCommand(newAnnotateMAFCmd(verbose))
+	cmd.AddCommand(newAnnotateVCFCmd(verbose))
+	cmd.AddCommand(newAnnotateVariantCmd(verbose))
+
+	return cmd
+}
+
+func newAnnotateMAFCmd(verbose *bool) *cobra.Command {
 	var (
 		assembly      string
-		outputFormat  string
 		outputFile    string
 		canonicalOnly bool
-		inputFormat   string
+		saveResults   bool
 	)
 
 	cmd := &cobra.Command{
-		Use:   "annotate <input-file>",
-		Short: "Annotate variants in a VCF or MAF file",
-		Long:  "Annotate variants in a VCF or MAF file with consequence predictions.",
-		Example: `  vibe-vep annotate input.vcf
-  vibe-vep annotate input.maf
-  vibe-vep annotate -f vcf -o output.vcf input.vcf
-  cat input.vcf | vibe-vep annotate -`,
+		Use:   "maf <file>",
+		Short: "Annotate variants in a MAF file",
+		Long:  "Annotate variants in a MAF file with consequence predictions.",
+		Example: `  vibe-vep annotate maf input.maf
+  vibe-vep annotate maf -o output.maf input.maf
+  vibe-vep annotate maf --save-results data_mutations.txt`,
 		Args: cobra.ExactArgs(1),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			return viper.BindPFlags(cmd.Flags())
@@ -141,24 +153,111 @@ func newAnnotateCmd(verbose *bool) *cobra.Command {
 				return fmt.Errorf("creating logger: %w", err)
 			}
 			defer logger.Sync()
-			return runAnnotate(logger, args[0],
+			return runAnnotateMAF(logger, args[0],
 				viper.GetString("assembly"),
-				viper.GetString("output-format"),
 				viper.GetString("output"),
 				viper.GetBool("canonical"),
-				viper.GetString("input-format"),
+				viper.GetBool("save-results"),
 				viper.GetBool("no-cache"),
 				viper.GetBool("clear-cache"),
-				viper.GetBool("no-variant-cache"),
 			)
 		},
 	}
 
 	cmd.Flags().StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
-	cmd.Flags().StringVarP(&outputFormat, "output-format", "f", "", "Output format: vcf, maf (default: auto-detect from input)")
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file (default: stdout)")
 	cmd.Flags().BoolVar(&canonicalOnly, "canonical", false, "Only report canonical transcript annotations")
-	cmd.Flags().StringVar(&inputFormat, "input-format", "", "Input format: vcf, maf (auto-detected if not specified)")
+	cmd.Flags().BoolVar(&saveResults, "save-results", false, "Save annotation results to DuckDB for later lookup")
+	addCacheFlags(cmd)
+
+	return cmd
+}
+
+func newAnnotateVCFCmd(verbose *bool) *cobra.Command {
+	var (
+		assembly      string
+		outputFile    string
+		canonicalOnly bool
+		saveResults   bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "vcf <file>",
+		Short: "Annotate variants in a VCF file",
+		Long:  "Annotate variants in a VCF file with consequence predictions.",
+		Example: `  vibe-vep annotate vcf input.vcf
+  vibe-vep annotate vcf -o output.vcf input.vcf
+  cat input.vcf | vibe-vep annotate vcf -`,
+		Args: cobra.ExactArgs(1),
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return viper.BindPFlags(cmd.Flags())
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			logger, err := newLogger(*verbose)
+			if err != nil {
+				return fmt.Errorf("creating logger: %w", err)
+			}
+			defer logger.Sync()
+			return runAnnotateVCF(logger, args[0],
+				viper.GetString("assembly"),
+				viper.GetString("output"),
+				viper.GetBool("canonical"),
+				viper.GetBool("save-results"),
+				viper.GetBool("no-cache"),
+				viper.GetBool("clear-cache"),
+			)
+		},
+	}
+
+	cmd.Flags().StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
+	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file (default: stdout)")
+	cmd.Flags().BoolVar(&canonicalOnly, "canonical", false, "Only report canonical transcript annotations")
+	cmd.Flags().BoolVar(&saveResults, "save-results", false, "Save annotation results to DuckDB for later lookup")
+	addCacheFlags(cmd)
+
+	return cmd
+}
+
+func newAnnotateVariantCmd(verbose *bool) *cobra.Command {
+	var (
+		assembly string
+		specType string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "variant <spec>",
+		Short: "Annotate a single variant",
+		Long: `Annotate a single variant by genomic coordinates, protein change, or HGVSc notation.
+
+Supported formats:
+  Genomic:  12:25245350:C:A  or  chr12:25245350:C>A  or  12-25245350-C-A
+  Protein:  KRAS G12C  or  KRAS p.G12C  or  KRAS p.Gly12Cys
+  HGVSc:    KRAS c.35G>T  or  ENST00000311936:c.35G>T`,
+		Example: `  vibe-vep annotate variant "12:25245350:C:A"
+  vibe-vep annotate variant "KRAS G12C"
+  vibe-vep annotate variant "KRAS c.35G>T"
+  vibe-vep annotate variant --type protein "KRAS G12C"`,
+		Args: cobra.ExactArgs(1),
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return viper.BindPFlags(cmd.Flags())
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			logger, err := newLogger(*verbose)
+			if err != nil {
+				return fmt.Errorf("creating logger: %w", err)
+			}
+			defer logger.Sync()
+			return runAnnotateVariant(logger, args[0],
+				viper.GetString("assembly"),
+				viper.GetString("type"),
+				viper.GetBool("no-cache"),
+				viper.GetBool("clear-cache"),
+			)
+		},
+	}
+
+	cmd.Flags().StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
+	cmd.Flags().StringVar(&specType, "type", "", "Force variant type: genomic, protein, or hgvsc (auto-detected if not specified)")
 	addCacheFlags(cmd)
 
 	return cmd
@@ -371,26 +470,8 @@ func newPrepareCmd(verbose *bool) *cobra.Command {
 	return cmd
 }
 
-func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFile string, canonicalOnly bool, inputFormat string, noCache, clearCache, noVariantCache bool) error {
-	// Detect input format if not specified
-	detectedFormat := inputFormat
-	if detectedFormat == "" {
-		detectedFormat = detectInputFormat(inputPath)
-	}
-
-	// Create appropriate parser
-	var parser vcf.VariantParser
-	var err error
-
-	switch detectedFormat {
-	case "maf":
-		parser, err = maf.NewParser(inputPath)
-	case "vcf":
-		parser, err = vcf.NewParser(inputPath)
-	default:
-		return fmt.Errorf("unknown input format %q (use --input-format to specify vcf or maf)", detectedFormat)
-	}
-
+func runAnnotateMAF(logger *zap.Logger, inputPath, assembly, outputFile string, canonicalOnly, saveResults, noCache, clearCache bool) error {
+	parser, err := maf.NewParser(inputPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("%w (check that the file path is correct)", err)
@@ -399,7 +480,6 @@ func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFi
 	}
 	defer parser.Close()
 
-	// Load transcript cache
 	cr, err := loadCache(logger, assembly, noCache, clearCache)
 	if err != nil {
 		return err
@@ -412,20 +492,73 @@ func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFi
 	ann.SetCanonicalOnly(canonicalOnly)
 	ann.SetLogger(logger)
 
-	// Load variant cache
-	var variantResults []duckdb.VariantResult
-	if cr.store != nil && !noVariantCache {
-		start := time.Now()
-		vc, err := cr.store.LoadVariantCache()
+	var out *os.File
+	if outputFile == "" {
+		out = os.Stdout
+	} else {
+		out, err = os.Create(outputFile)
 		if err != nil {
-			logger.Warn("could not load variant cache", zap.Error(err))
-		} else if vc.Len() > 0 {
-			ann.SetVariantCache(vc)
-			logger.Info("loaded variant cache",
-				zap.Int("variants", vc.Len()),
+			return fmt.Errorf("creating output file: %w", err)
+		}
+		defer out.Close()
+	}
+
+	// Load cancer gene list from config if available
+	var cgl oncokb.CancerGeneList
+	if cglPath := viper.GetString("oncokb.cancer-gene-list"); cglPath != "" {
+		cgl, err = oncokb.LoadCancerGeneList(cglPath)
+		if err != nil {
+			logger.Warn("could not load cancer gene list", zap.String("path", cglPath), zap.Error(err))
+		} else {
+			logger.Info("loaded cancer gene list", zap.Int("genes", len(cgl)))
+		}
+	}
+
+	var variantResults []duckdb.VariantResult
+	var collectResults *[]duckdb.VariantResult
+	if saveResults && cr.store != nil {
+		collectResults = &variantResults
+	}
+
+	if err := runMAFOutput(logger, parser, ann, out, cgl, collectResults); err != nil {
+		return err
+	}
+
+	// Write new variant results to DuckDB
+	if len(variantResults) > 0 {
+		start := time.Now()
+		if err := cr.store.WriteVariantResults(variantResults); err != nil {
+			logger.Warn("could not write variant results to cache", zap.Error(err))
+		} else {
+			logger.Info("wrote variant results to cache",
+				zap.Int("results", len(variantResults)),
 				zap.Duration("elapsed", time.Since(start)))
 		}
 	}
+	return nil
+}
+
+func runAnnotateVCF(logger *zap.Logger, inputPath, assembly, outputFile string, canonicalOnly, saveResults, noCache, clearCache bool) error {
+	parser, err := vcf.NewParser(inputPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("%w (check that the file path is correct)", err)
+		}
+		return err
+	}
+	defer parser.Close()
+
+	cr, err := loadCache(logger, assembly, noCache, clearCache)
+	if err != nil {
+		return err
+	}
+	if cr.store != nil {
+		defer cr.store.Close()
+	}
+
+	ann := annotate.NewAnnotator(cr.cache)
+	ann.SetCanonicalOnly(canonicalOnly)
+	ann.SetLogger(logger)
 
 	var out *os.File
 	if outputFile == "" {
@@ -438,69 +571,135 @@ func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFi
 		defer out.Close()
 	}
 
-	// Auto-detect output format
-	if outputFormat == "" {
-		if detectedFormat == "maf" {
-			outputFormat = "maf"
-		} else {
-			outputFormat = "vcf"
+	writer := output.NewVCFWriter(out, parser.Header())
+	if err := writer.WriteHeader(); err != nil {
+		return fmt.Errorf("writing header: %w", err)
+	}
+	return ann.AnnotateAll(parser, writer)
+}
+
+func runAnnotateVariant(logger *zap.Logger, specInput, assembly, specType string, noCache, clearCache bool) error {
+	// Parse variant specification
+	spec, err := annotate.ParseVariantSpec(specInput)
+	if err != nil {
+		return err
+	}
+
+	// Override type if --type flag is set
+	if specType != "" {
+		switch strings.ToLower(specType) {
+		case "genomic":
+			spec.Type = annotate.SpecGenomic
+		case "protein":
+			spec.Type = annotate.SpecProtein
+		case "hgvsc":
+			spec.Type = annotate.SpecHGVSc
+		default:
+			return fmt.Errorf("unknown variant type %q (use genomic, protein, or hgvsc)", specType)
 		}
 	}
 
-	// Load cancer gene list from config if available
-	var cgl oncokb.CancerGeneList
-	if cglPath := viper.GetString("oncokb.cancer-gene-list"); cglPath != "" {
-		var err error
-		cgl, err = oncokb.LoadCancerGeneList(cglPath)
+	// Load transcript cache
+	cr, err := loadCache(logger, assembly, noCache, clearCache)
+	if err != nil {
+		return err
+	}
+	if cr.store != nil {
+		defer cr.store.Close()
+	}
+
+	ann := annotate.NewAnnotator(cr.cache)
+	ann.SetLogger(logger)
+
+	// Convert spec to genomic variant(s)
+	var variants []*vcf.Variant
+	switch spec.Type {
+	case annotate.SpecGenomic:
+		variants = []*vcf.Variant{{
+			Chrom: spec.Chrom,
+			Pos:   spec.Pos,
+			Ref:   spec.Ref,
+			Alt:   spec.Alt,
+		}}
+
+	case annotate.SpecProtein:
+		variants, err = annotate.ReverseMapProteinChange(cr.cache, spec.GeneName, spec.RefAA, spec.Position, spec.AltAA)
 		if err != nil {
-			logger.Warn("could not load cancer gene list", zap.String("path", cglPath), zap.Error(err))
-		} else {
-			logger.Info("loaded cancer gene list", zap.Int("genes", len(cgl)))
-		}
-	}
-
-	// MAF output
-	if outputFormat == "maf" {
-		if detectedFormat != "maf" {
-			return fmt.Errorf("MAF output format requires MAF input")
-		}
-		mafParser, ok := parser.(*maf.Parser)
-		if !ok {
-			return fmt.Errorf("MAF output requires MAF parser")
-		}
-		if err := runMAFOutput(logger, mafParser, ann, out, cgl); err != nil {
 			return err
 		}
+		fmt.Fprintf(os.Stderr, "Query: %s %c%d%c\n\n", spec.GeneName, spec.RefAA, spec.Position, spec.AltAA)
+		fmt.Fprintf(os.Stderr, "Found %d genomic variant(s):\n", len(variants))
+		for _, v := range variants {
+			fmt.Fprintf(os.Stderr, "  %s:%d %s>%s\n", v.Chrom, v.Pos, v.Ref, v.Alt)
+		}
+		fmt.Fprintln(os.Stderr)
 
-		// Write new variant results to DuckDB
-		if cr.store != nil && !noVariantCache && len(variantResults) > 0 {
-			if err := cr.store.WriteVariantResults(variantResults); err != nil {
-				logger.Warn("could not write variant results to cache", zap.Error(err))
+	case annotate.SpecHGVSc:
+		variants, err = annotate.ReverseMapHGVSc(cr.cache, spec.TranscriptID, spec.CDSChange)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "Query: %s c.%s\n\n", spec.TranscriptID, spec.CDSChange)
+		fmt.Fprintf(os.Stderr, "Found %d genomic variant(s):\n", len(variants))
+		for _, v := range variants {
+			fmt.Fprintf(os.Stderr, "  %s:%d %s>%s\n", v.Chrom, v.Pos, v.Ref, v.Alt)
+		}
+		fmt.Fprintln(os.Stderr)
+	}
+
+	// Annotate each variant and display
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+
+	for _, v := range variants {
+		fmt.Fprintf(os.Stdout, "Variant: %s:%d %s>%s\n\n", v.Chrom, v.Pos, v.Ref, v.Alt)
+
+		anns, err := ann.Annotate(v)
+		if err != nil {
+			logger.Warn("annotation failed", zap.Error(err))
+			continue
+		}
+
+		fmt.Fprintln(w, "Gene\tTranscript\tCanon\tConsequence\tImpact\tHGVSc\tHGVSp")
+		for _, a := range anns {
+			canon := "no"
+			if a.IsCanonical {
+				canon = "YES"
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				a.GeneName, a.TranscriptID, canon,
+				a.Consequence, a.Impact, a.HGVSc, a.HGVSp)
+		}
+		w.Flush()
+	}
+
+	// DuckDB lookup for previously seen results
+	if cr.store != nil && len(variants) > 0 {
+		for _, v := range variants {
+			chrom := v.NormalizeChrom()
+			prev, err := cr.store.LookupVariant(chrom, v.Pos, v.Ref, v.Alt)
+			if err != nil {
+				logger.Debug("DuckDB lookup failed", zap.Error(err))
+				continue
+			}
+			if len(prev) > 0 {
+				fmt.Fprintf(os.Stdout, "\nPreviously seen (%d cached annotations):\n", len(prev))
+				pw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+				fmt.Fprintln(pw, "Gene\tTranscript\tCanon\tConsequence\tImpact\tHGVSc\tHGVSp")
+				for _, a := range prev {
+					canon := "no"
+					if a.IsCanonical {
+						canon = "YES"
+					}
+					fmt.Fprintf(pw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+						a.GeneName, a.TranscriptID, canon,
+						a.Consequence, a.Impact, a.HGVSc, a.HGVSp)
+				}
+				pw.Flush()
 			}
 		}
-		return nil
 	}
 
-	// VCF output
-	if outputFormat == "vcf" {
-		if detectedFormat != "vcf" {
-			return fmt.Errorf("VCF output format requires VCF input (no VCF headers to preserve)")
-		}
-		vcfParser, ok := parser.(*vcf.Parser)
-		if !ok {
-			return fmt.Errorf("VCF output requires VCF parser")
-		}
-		writer := output.NewVCFWriter(out, vcfParser.Header())
-		if err := writer.WriteHeader(); err != nil {
-			return fmt.Errorf("writing header: %w", err)
-		}
-		if err := ann.AnnotateAll(parser, writer); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	return fmt.Errorf("unknown output format %q", outputFormat)
+	return nil
 }
 
 func runCompare(logger *zap.Logger, inputPath, assembly string, columns map[string]bool, showAll bool, noCache, clearCache bool) error {
@@ -580,7 +779,7 @@ func runCompare(logger *zap.Logger, inputPath, assembly string, columns map[stri
 }
 
 // runMAFOutput runs MAF annotation mode, preserving all original columns.
-func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotator, out *os.File, cgl oncokb.CancerGeneList) error {
+func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotator, out *os.File, cgl oncokb.CancerGeneList, newResults *[]duckdb.VariantResult) error {
 	mafWriter := output.NewMAFWriter(out, parser.Header(), parser.Columns())
 
 	if cgl != nil {
@@ -623,6 +822,16 @@ func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotato
 			return mafWriter.WriteRow(mafAnn.RawFields, nil, r.Variant)
 		}
 
+		// Collect all results for DuckDB persistence
+		if newResults != nil && len(r.Anns) > 0 {
+			chrom := r.Variant.NormalizeChrom()
+			for _, a := range r.Anns {
+				*newResults = append(*newResults, duckdb.VariantResult{
+					Chrom: chrom, Pos: r.Variant.Pos, Ref: r.Variant.Ref, Alt: r.Variant.Alt, Ann: a,
+				})
+			}
+		}
+
 		best := output.SelectBestAnnotation(mafAnn, r.Anns)
 		if best != nil && cgl != nil {
 			if ga, ok := cgl[best.GeneName]; ok {
@@ -639,53 +848,4 @@ func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotato
 	}
 
 	return mafWriter.Flush()
-}
-
-// detectInputFormat detects the input file format based on extension or content.
-func detectInputFormat(path string) string {
-	lowerPath := strings.ToLower(path)
-
-	if strings.HasSuffix(lowerPath, ".gz") {
-		lowerPath = lowerPath[:len(lowerPath)-3]
-	}
-
-	if strings.HasSuffix(lowerPath, ".vcf") {
-		return "vcf"
-	}
-	if strings.HasSuffix(lowerPath, ".maf") {
-		return "maf"
-	}
-
-	baseName := filepath.Base(lowerPath)
-	if baseName == "data_mutations.txt" || baseName == "data_mutations_extended.txt" {
-		return "maf"
-	}
-
-	if path == "-" {
-		return "vcf"
-	}
-
-	file, err := os.Open(path)
-	if err != nil {
-		return "vcf"
-	}
-	defer file.Close()
-
-	buf := make([]byte, 512)
-	n, err := file.Read(buf)
-	if err != nil || n == 0 {
-		return "vcf"
-	}
-
-	content := string(buf[:n])
-
-	if strings.HasPrefix(content, "##fileformat=VCF") || strings.HasPrefix(content, "#CHROM") {
-		return "vcf"
-	}
-
-	if strings.Contains(content, "Hugo_Symbol") && strings.Contains(content, "Chromosome") {
-		return "maf"
-	}
-
-	return "vcf"
 }

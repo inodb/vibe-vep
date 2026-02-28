@@ -812,6 +812,49 @@ func GenomicToCDS(genomicPos int64, t *cache.Transcript) int64 {
 	return 0
 }
 
+// CDSToGenomic converts a CDS position (1-based) to a genomic position within a transcript.
+// Returns 0 if the CDS position is out of range.
+// This is the reverse of GenomicToCDS.
+func CDSToGenomic(cdsPos int64, t *cache.Transcript) int64 {
+	if !t.IsProteinCoding() || cdsPos < 1 {
+		return 0
+	}
+
+	var cumulative int64
+
+	if t.IsForwardStrand() {
+		for _, exon := range t.Exons {
+			if !exon.IsCoding() {
+				continue
+			}
+			exonLen := exon.CDSEnd - exon.CDSStart + 1
+			if cumulative+exonLen >= cdsPos {
+				// CDS position falls in this exon
+				offset := cdsPos - cumulative - 1
+				return exon.CDSStart + offset
+			}
+			cumulative += exonLen
+		}
+	} else {
+		// Reverse strand: iterate exons in reverse
+		for i := len(t.Exons) - 1; i >= 0; i-- {
+			exon := t.Exons[i]
+			if !exon.IsCoding() {
+				continue
+			}
+			exonLen := exon.CDSEnd - exon.CDSStart + 1
+			if cumulative+exonLen >= cdsPos {
+				// CDS position falls in this exon (count from end for reverse strand)
+				offset := cdsPos - cumulative - 1
+				return exon.CDSEnd - offset
+			}
+			cumulative += exonLen
+		}
+	}
+
+	return 0
+}
+
 // GenomicToTranscriptPos converts a genomic position to a transcript-relative
 // exonic position (1-based). This is used for non-coding transcripts where
 // positions are counted from the transcript 5' end. Returns 0 if the position

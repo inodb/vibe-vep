@@ -57,30 +57,24 @@ func TestWriteAndLookupVariants(t *testing.T) {
 	err := s.WriteVariantResults(results)
 	require.NoError(t, err)
 
-	vc, err := s.LoadVariantCache()
+	anns, err := s.LookupVariant("12", 25245350, "C", "A")
 	require.NoError(t, err)
-	assert.Equal(t, 1, vc.Len())
-
-	anns, ok := vc.Get("12", 25245350, "C", "A")
-	assert.True(t, ok)
 	require.Len(t, anns, 2)
 	assert.Equal(t, "ENST00000311936.8", anns[0].TranscriptID)
 	assert.Equal(t, "p.Gly12Val", anns[0].HGVSp)
 	assert.Equal(t, "ENST00000256078.10", anns[1].TranscriptID)
 
-	_, ok = vc.Get("12", 99999, "C", "A")
-	assert.False(t, ok)
+	anns, err = s.LookupVariant("12", 99999, "C", "A")
+	require.NoError(t, err)
+	assert.Empty(t, anns)
 }
 
-func TestVariantCacheEmpty(t *testing.T) {
+func TestLookupVariantEmpty(t *testing.T) {
 	s := openInMemory(t)
 
-	vc, err := s.LoadVariantCache()
+	anns, err := s.LookupVariant("1", 100, "A", "T")
 	require.NoError(t, err)
-	assert.Equal(t, 0, vc.Len())
-
-	_, ok := vc.Get("1", 100, "A", "T")
-	assert.False(t, ok)
+	assert.Empty(t, anns)
 }
 
 func TestClearVariantResults(t *testing.T) {
@@ -91,6 +85,7 @@ func TestClearVariantResults(t *testing.T) {
 			Chrom: "1", Pos: 100, Ref: "A", Alt: "T",
 			Ann: &annotate.Annotation{
 				TranscriptID: "ENST00000001.1",
+				GeneName:     "TEST",
 				Consequence:  "missense_variant", Impact: "MODERATE",
 				Allele: "T", Biotype: "protein_coding",
 			},
@@ -98,15 +93,90 @@ func TestClearVariantResults(t *testing.T) {
 	}
 	require.NoError(t, s.WriteVariantResults(results))
 
-	vc, err := s.LoadVariantCache()
+	anns, err := s.LookupVariant("1", 100, "A", "T")
 	require.NoError(t, err)
-	assert.Equal(t, 1, vc.Len())
+	require.Len(t, anns, 1)
 
 	require.NoError(t, s.ClearVariantResults())
 
-	vc, err = s.LoadVariantCache()
+	anns, err = s.LookupVariant("1", 100, "A", "T")
 	require.NoError(t, err)
-	assert.Equal(t, 0, vc.Len())
+	assert.Empty(t, anns)
+}
+
+func TestSearchByGene(t *testing.T) {
+	s := openInMemory(t)
+
+	results := []VariantResult{
+		{
+			Chrom: "12", Pos: 25245350, Ref: "C", Alt: "A",
+			Ann: &annotate.Annotation{
+				TranscriptID: "ENST00000311936.8",
+				GeneName: "KRAS", Consequence: "missense_variant", Impact: "MODERATE",
+				AminoAcidChange: "G/V", Allele: "A", Biotype: "protein_coding",
+			},
+		},
+		{
+			Chrom: "7", Pos: 140753336, Ref: "A", Alt: "T",
+			Ann: &annotate.Annotation{
+				TranscriptID: "ENST00000288602.11",
+				GeneName: "BRAF", Consequence: "missense_variant", Impact: "MODERATE",
+				Allele: "T", Biotype: "protein_coding",
+			},
+		},
+	}
+	require.NoError(t, s.WriteVariantResults(results))
+
+	krasResults, err := s.SearchByGene("KRAS")
+	require.NoError(t, err)
+	require.Len(t, krasResults, 1)
+	assert.Equal(t, "KRAS", krasResults[0].Ann.GeneName)
+
+	brafResults, err := s.SearchByGene("BRAF")
+	require.NoError(t, err)
+	require.Len(t, brafResults, 1)
+
+	noneResults, err := s.SearchByGene("NOTEXIST")
+	require.NoError(t, err)
+	assert.Empty(t, noneResults)
+}
+
+func TestSearchByProteinChange(t *testing.T) {
+	s := openInMemory(t)
+
+	results := []VariantResult{
+		{
+			Chrom: "12", Pos: 25245350, Ref: "C", Alt: "A",
+			Ann: &annotate.Annotation{
+				TranscriptID: "ENST00000311936.8",
+				GeneName: "KRAS", Consequence: "missense_variant", Impact: "MODERATE",
+				AminoAcidChange: "G/V", Allele: "A", Biotype: "protein_coding",
+			},
+		},
+		{
+			Chrom: "12", Pos: 25245351, Ref: "G", Alt: "T",
+			Ann: &annotate.Annotation{
+				TranscriptID: "ENST00000311936.8",
+				GeneName: "KRAS", Consequence: "missense_variant", Impact: "MODERATE",
+				AminoAcidChange: "G/C", Allele: "T", Biotype: "protein_coding",
+			},
+		},
+	}
+	require.NoError(t, s.WriteVariantResults(results))
+
+	found, err := s.SearchByProteinChange("KRAS", "G/V")
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	assert.Equal(t, int64(25245350), found[0].Pos)
+
+	found, err = s.SearchByProteinChange("KRAS", "G/C")
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	assert.Equal(t, int64(25245351), found[0].Pos)
+
+	found, err = s.SearchByProteinChange("KRAS", "X/Y")
+	require.NoError(t, err)
+	assert.Empty(t, found)
 }
 
 // --- Transcript cache tests (gob) ---
