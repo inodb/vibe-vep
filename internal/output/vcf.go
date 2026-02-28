@@ -37,6 +37,7 @@ var csqFields = []string{
 type VCFWriter struct {
 	w           *bufio.Writer
 	headerLines []string // original VCF header lines (## and #CHROM)
+	extraCSQ    []string // additional CSQ subfield names (e.g. AlphaMissense_score)
 
 	// Buffered state for the current variant.
 	currentKey  string                 // "chrom:pos" key for grouping
@@ -53,11 +54,17 @@ func NewVCFWriter(w io.Writer, headerLines []string) *VCFWriter {
 	}
 }
 
+// AddCSQField registers an additional subfield to include in the CSQ annotation.
+func (vw *VCFWriter) AddCSQField(name string) {
+	vw.extraCSQ = append(vw.extraCSQ, name)
+}
+
 // WriteHeader writes the original VCF header lines with an inserted CSQ INFO line.
 func (vw *VCFWriter) WriteHeader() error {
+	allFields := append(csqFields, vw.extraCSQ...)
 	csqLine := fmt.Sprintf(
 		"##INFO=<ID=CSQ,Number=.,Type=String,Description=\"Consequence annotations from vibe-vep. Format: %s\">",
-		strings.Join(csqFields, "|"),
+		strings.Join(allFields, "|"),
 	)
 
 	for _, line := range vw.headerLines {
@@ -144,7 +151,7 @@ func (vw *VCFWriter) flushVariant() error {
 	// Build CSQ value
 	var csqEntries []string
 	for _, ann := range vw.annotations {
-		csqEntries = append(csqEntries, formatCSQEntry(ann))
+		csqEntries = append(csqEntries, vw.formatCSQEntry(ann))
 	}
 	csqValue := strings.Join(csqEntries, ",")
 
@@ -198,7 +205,7 @@ func (vw *VCFWriter) formatInfo(info map[string]interface{}) string {
 }
 
 // formatCSQEntry formats a single annotation as a pipe-delimited CSQ entry.
-func formatCSQEntry(ann *annotate.Annotation) string {
+func (vw *VCFWriter) formatCSQEntry(ann *annotate.Annotation) string {
 	canonical := ""
 	if ann.IsCanonical {
 		canonical = "YES"
@@ -243,6 +250,22 @@ func formatCSQEntry(ann *annotate.Annotation) string {
 		ann.AminoAcidChange,
 		ann.CodonChange,
 		canonical,
+	}
+
+	// Append extra CSQ subfields
+	for _, name := range vw.extraCSQ {
+		switch name {
+		case "AlphaMissense_score":
+			if ann.AlphaMissenseScore > 0 {
+				fields = append(fields, fmt.Sprintf("%.4f", ann.AlphaMissenseScore))
+			} else {
+				fields = append(fields, "")
+			}
+		case "AlphaMissense_class":
+			fields = append(fields, ann.AlphaMissenseClass)
+		default:
+			fields = append(fields, "")
+		}
 	}
 
 	return strings.Join(fields, "|")

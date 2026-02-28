@@ -2,6 +2,7 @@ package output
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"strings"
 
@@ -65,6 +66,12 @@ func (m *MAFWriter) WriteRow(rawFields []string, ann *annotate.Annotation, v *vc
 			switch col {
 			case "Gene_Type":
 				val = ann.GeneType
+			case "AlphaMissense_Score":
+				if ann.AlphaMissenseScore > 0 {
+					val = fmt.Sprintf("%.4f", ann.AlphaMissenseScore)
+				}
+			case "AlphaMissense_Class":
+				val = ann.AlphaMissenseClass
 			}
 		}
 		row = append(row, val)

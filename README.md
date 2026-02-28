@@ -68,6 +68,7 @@ vibe-vep - Variant Effect Predictor
 
 Commands:
   annotate    Annotate variants in a VCF or MAF file
+  config      Manage configuration (show/set/get)
   download    Download GENCODE annotation files
   help        Show help message
 
@@ -271,14 +272,21 @@ vibe-vep reads configuration from `~/.vibe-vep.yaml` (or `--config` flag). Envir
 # OncoKB cancer gene list — adds Gene_Type column to MAF output
 oncokb:
   cancer-gene-list: /path/to/cancerGeneList.tsv
+
+# Optional annotation sources
+annotations:
+  alphamissense: true  # AlphaMissense pathogenicity scores (CC BY 4.0)
 ```
 
 The `cancerGeneList.tsv` file can be downloaded from [OncoKB](https://www.oncokb.org/cancerGenes) or is included in this repository.
+
+Use `vibe-vep config set annotations.alphamissense true` to enable AlphaMissense. Then run `vibe-vep download` to fetch the data (~643MB) and `vibe-vep prepare` to load it into the annotation database.
 
 ## Data Sources
 
 - **GENCODE**: Gene annotations from [GENCODE](https://www.gencodegenes.org/)
 - **OncoKB**: Cancer gene classification from [OncoKB](https://www.oncokb.org/) (optional, for gene-level ONCOGENE/TSG annotations)
+- **AlphaMissense**: Pathogenicity predictions from [AlphaMissense](https://github.com/google-deepmind/alphamissense) (Cheng et al., Science 2023). Data licensed under CC BY 4.0.
 
 ## Development
 
@@ -306,6 +314,12 @@ vibe-vep annotate --validate testdata/tcga/chol_tcga_gdc_data_mutations.txt
   - [x] HGVSp/HGVSc notation (94.8%/98.6% match rates)
   - [x] Full MAF output format (all required columns)
   - [x] Cancer gene annotations (OncoKB oncogene/TSG classification)
+- [ ] **Additional annotation sources** — Pathogenicity predictions and external databases
+  - [x] AlphaMissense pathogenicity scores (CC BY 4.0, Google DeepMind)
+  - [ ] SIFT predictions (tolerated/deleterious)
+  - [ ] PolyPhen-2 predictions (benign/possibly_damaging/probably_damaging)
+  - [ ] gnomAD allele frequencies
+  - [ ] ClinVar clinical significance
 - [ ] **Re-annotate datahub GDC studies** — Validate by re-annotating [cBioPortal/datahub](https://github.com/cBioPortal/datahub) GDC studies with vibe-vep
 - [ ] **Replace genome-nexus-annotation-pipeline for datahub** — Use vibe-vep as the annotation tool for datahub processing
 

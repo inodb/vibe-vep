@@ -13,6 +13,7 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // GENCODE FTP URLs
@@ -118,6 +119,17 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 	if err := downloadFile(canonicalURL, canonicalFile); err != nil {
 		logger.Warn("could not download canonical transcript overrides", zap.Error(err))
 		// Non-fatal: tool still works without overrides
+	}
+
+	// Download AlphaMissense data if enabled in config
+	if viper.GetBool("annotations.alphamissense") {
+		amURL := getAlphaMissenseURL(assembly)
+		amFile := filepath.Join(destDir, filepath.Base(amURL))
+		fmt.Printf("\nAlphaMissense annotation enabled in config, downloading...\n")
+		if err := downloadFile(amURL, amFile); err != nil {
+			logger.Warn("could not download AlphaMissense data", zap.Error(err))
+			// Non-fatal: tool still works without AlphaMissense
+		}
 	}
 
 	fmt.Printf("\nDownload complete!\n")
@@ -226,6 +238,21 @@ func formatSize(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// getAlphaMissenseURL returns the download URL for AlphaMissense data.
+func getAlphaMissenseURL(assembly string) string {
+	switch strings.ToUpper(assembly) {
+	case "GRCH37":
+		return "https://storage.googleapis.com/dm_alphamissense/AlphaMissense_hg19.tsv.gz"
+	default:
+		return "https://storage.googleapis.com/dm_alphamissense/AlphaMissense_hg38.tsv.gz"
+	}
+}
+
+// AlphaMissenseFileName returns the expected filename for the assembly.
+func AlphaMissenseFileName(assembly string) string {
+	return filepath.Base(getAlphaMissenseURL(assembly))
 }
 
 // DefaultGENCODEPath returns the default path for GENCODE cache files.

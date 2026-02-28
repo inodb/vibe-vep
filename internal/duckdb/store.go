@@ -77,7 +77,17 @@ func (s *Store) ensureSchema() error {
 		hgvsp VARCHAR,
 		hgvsc VARCHAR,
 		gene_type VARCHAR,
+		am_score FLOAT DEFAULT 0,
+		am_class VARCHAR DEFAULT '',
 		PRIMARY KEY (chrom, pos, ref, alt, transcript_id)
 	)`)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Add AM columns to existing databases (backward compat)
+	s.db.Exec("ALTER TABLE variant_results ADD COLUMN IF NOT EXISTS am_score FLOAT DEFAULT 0")
+	s.db.Exec("ALTER TABLE variant_results ADD COLUMN IF NOT EXISTS am_class VARCHAR DEFAULT ''")
+
+	return nil
 }

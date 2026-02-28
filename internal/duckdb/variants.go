@@ -67,6 +67,7 @@ func (s *Store) WriteVariantResults(results []VariantResult) error {
 			a.CDSPosition, a.ProteinPosition, a.AminoAcidChange, a.CodonChange,
 			a.IsCanonical, a.Allele, a.Biotype, a.ExonNumber, a.IntronNumber,
 			a.CDNAPosition, a.HGVSp, a.HGVSc, a.GeneType,
+			float32(a.AlphaMissenseScore), a.AlphaMissenseClass,
 		); err != nil {
 			return fmt.Errorf("append variant result: %w", err)
 		}
@@ -87,7 +88,8 @@ func (s *Store) LookupVariant(chrom string, pos int64, ref, alt string) ([]*anno
 		transcript_id, gene_name, gene_id, consequence, impact,
 		cds_position, protein_position, amino_acid_change, codon_change,
 		is_canonical, allele, biotype, exon_number, intron_number,
-		cdna_position, hgvsp, hgvsc, gene_type
+		cdna_position, hgvsp, hgvsc, gene_type,
+		am_score, am_class
 		FROM variant_results
 		WHERE chrom=? AND pos=? AND ref=? AND alt=?`,
 		chrom, pos, ref, alt)
@@ -104,6 +106,7 @@ func (s *Store) LookupVariant(chrom string, pos int64, ref, alt string) ([]*anno
 			&ann.CDSPosition, &ann.ProteinPosition, &ann.AminoAcidChange, &ann.CodonChange,
 			&ann.IsCanonical, &ann.Allele, &ann.Biotype, &ann.ExonNumber, &ann.IntronNumber,
 			&ann.CDNAPosition, &ann.HGVSp, &ann.HGVSc, &ann.GeneType,
+			&ann.AlphaMissenseScore, &ann.AlphaMissenseClass,
 		); err != nil {
 			return nil, fmt.Errorf("scan variant: %w", err)
 		}
@@ -123,7 +126,8 @@ func (s *Store) SearchByGene(geneName string) ([]VariantResult, error) {
 		gene_name, gene_id, consequence, impact,
 		cds_position, protein_position, amino_acid_change, codon_change,
 		is_canonical, allele, biotype, exon_number, intron_number,
-		cdna_position, hgvsp, hgvsc, gene_type
+		cdna_position, hgvsp, hgvsc, gene_type,
+		am_score, am_class
 		FROM variant_results
 		WHERE gene_name=?`, geneName)
 	if err != nil {
@@ -142,7 +146,8 @@ func (s *Store) SearchByProteinChange(geneName, aaChange string) ([]VariantResul
 		gene_name, gene_id, consequence, impact,
 		cds_position, protein_position, amino_acid_change, codon_change,
 		is_canonical, allele, biotype, exon_number, intron_number,
-		cdna_position, hgvsp, hgvsc, gene_type
+		cdna_position, hgvsp, hgvsc, gene_type,
+		am_score, am_class
 		FROM variant_results
 		WHERE gene_name=? AND amino_acid_change=?`, geneName, aaChange)
 	if err != nil {
@@ -171,6 +176,7 @@ func scanVariantResults(rows interface {
 			&ann.CDSPosition, &ann.ProteinPosition, &ann.AminoAcidChange, &ann.CodonChange,
 			&ann.IsCanonical, &ann.Allele, &ann.Biotype, &ann.ExonNumber, &ann.IntronNumber,
 			&ann.CDNAPosition, &ann.HGVSp, &ann.HGVSc, &ann.GeneType,
+			&ann.AlphaMissenseScore, &ann.AlphaMissenseClass,
 		); err != nil {
 			return nil, fmt.Errorf("scan variant result: %w", err)
 		}

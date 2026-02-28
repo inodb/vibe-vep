@@ -15,6 +15,7 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/datasource/alphamissense"
 	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
 	"github.com/inodb/vibe-vep/internal/duckdb"
 	"github.com/inodb/vibe-vep/internal/maf"
@@ -58,6 +59,7 @@ func newRootCmd() *cobra.Command {
 
 	rootCmd.AddCommand(newAnnotateCmd(&verbose))
 	rootCmd.AddCommand(newCompareCmd(&verbose))
+	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newDownloadCmd(&verbose))
 	rootCmd.AddCommand(newPrepareCmd(&verbose))
 
@@ -317,8 +319,9 @@ func newCompareCmd(verbose *bool) *cobra.Command {
 
 // cacheResult holds the loaded transcript cache and optional DuckDB variant store.
 type cacheResult struct {
-	cache *cache.Cache
-	store *duckdb.Store // variant cache (DuckDB), nil if --no-cache
+	cache         *cache.Cache
+	store         *duckdb.Store          // variant cache (DuckDB), nil if --no-cache
+	alphaMissense *alphamissense.Store   // AlphaMissense scores, nil if not enabled
 }
 
 // loadCache loads transcripts using gob transcript cache, and opens DuckDB for variant cache.
@@ -405,7 +408,19 @@ func loadCache(logger *zap.Logger, assembly string, noCache, clearCache bool) (*
 		}
 	}
 
-	return &cacheResult{cache: c, store: store}, nil
+	cr := &cacheResult{cache: c, store: store}
+
+	// --- AlphaMissense (optional) ---
+	if viper.GetBool("annotations.alphamissense") {
+		amStore, err := loadAlphaMissense(logger, cacheDir, assembly)
+		if err != nil {
+			logger.Warn("could not load AlphaMissense data", zap.Error(err))
+		} else {
+			cr.alphaMissense = amStore
+		}
+	}
+
+	return cr, nil
 }
 
 // loadFromGTFFASTA loads transcripts from GENCODE GTF and FASTA files.
@@ -431,6 +446,69 @@ func loadFromGTFFASTA(logger *zap.Logger, c *cache.Cache, gtfPath, fastaPath, ca
 		zap.Int("count", c.TranscriptCount()),
 		zap.Duration("elapsed", time.Since(start)))
 	return nil
+}
+
+// loadAlphaMissense opens the AlphaMissense DuckDB store, loading from TSV if needed.
+func loadAlphaMissense(logger *zap.Logger, cacheDir, assembly string) (*alphamissense.Store, error) {
+	dbPath := filepath.Join(cacheDir, "annotations.duckdb")
+	amStore, err := alphamissense.Open(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("open AlphaMissense store: %w", err)
+	}
+
+	if !amStore.Loaded() {
+		tsvPath := filepath.Join(cacheDir, AlphaMissenseFileName(assembly))
+		if _, err := os.Stat(tsvPath); err != nil {
+			amStore.Close()
+			return nil, fmt.Errorf("AlphaMissense TSV not found at %s\nHint: run 'vibe-vep download' to fetch it", tsvPath)
+		}
+
+		logger.Info("loading AlphaMissense data (this may take a few minutes)...", zap.String("path", tsvPath))
+		start := time.Now()
+		if err := amStore.Load(tsvPath); err != nil {
+			amStore.Close()
+			return nil, fmt.Errorf("load AlphaMissense data: %w", err)
+		}
+		logger.Info("loaded AlphaMissense data", zap.Duration("elapsed", time.Since(start)))
+	} else {
+		logger.Info("AlphaMissense data already loaded")
+	}
+
+	return amStore, nil
+}
+
+// isMissense returns true if the consequence includes missense_variant.
+func isMissense(consequence string) bool {
+	for rest := consequence; rest != ""; {
+		term := rest
+		if i := strings.IndexByte(rest, ','); i >= 0 {
+			term = rest[:i]
+			rest = rest[i+1:]
+		} else {
+			rest = ""
+		}
+		if term == "missense_variant" {
+			return true
+		}
+	}
+	return false
+}
+
+// enrichAlphaMissense adds AlphaMissense scores to missense annotations.
+func enrichAlphaMissense(amStore *alphamissense.Store, v *vcf.Variant, anns []*annotate.Annotation) {
+	chrom := v.NormalizeChrom()
+	// Add "chr" prefix if not present (AlphaMissense uses "chr" prefixed chromosomes)
+	if len(chrom) > 0 && chrom[0] != 'c' {
+		chrom = "chr" + chrom
+	}
+	for _, ann := range anns {
+		if isMissense(ann.Consequence) {
+			if r, ok := amStore.Lookup(chrom, v.Pos, v.Ref, v.Alt); ok {
+				ann.AlphaMissenseScore = r.Score
+				ann.AlphaMissenseClass = r.Class
+			}
+		}
+	}
 }
 
 func newPrepareCmd(verbose *bool) *cobra.Command {
@@ -459,6 +537,10 @@ func newPrepareCmd(verbose *bool) *cobra.Command {
 			if cr.store != nil {
 				cr.store.Close()
 			}
+			if cr.alphaMissense != nil {
+				cr.alphaMissense.Close()
+				logger.Info("AlphaMissense data ready")
+			}
 			logger.Info("transcript cache ready",
 				zap.Int("transcripts", cr.cache.TranscriptCount()))
 			return nil
@@ -486,6 +568,9 @@ func runAnnotateMAF(logger *zap.Logger, inputPath, assembly, outputFile string, 
 	}
 	if cr.store != nil {
 		defer cr.store.Close()
+	}
+	if cr.alphaMissense != nil {
+		defer cr.alphaMissense.Close()
 	}
 
 	ann := annotate.NewAnnotator(cr.cache)
@@ -520,7 +605,7 @@ func runAnnotateMAF(logger *zap.Logger, inputPath, assembly, outputFile string, 
 		collectResults = &variantResults
 	}
 
-	if err := runMAFOutput(logger, parser, ann, out, cgl, collectResults); err != nil {
+	if err := runMAFOutput(logger, parser, ann, out, cgl, collectResults, cr.alphaMissense); err != nil {
 		return err
 	}
 
@@ -555,6 +640,9 @@ func runAnnotateVCF(logger *zap.Logger, inputPath, assembly, outputFile string, 
 	if cr.store != nil {
 		defer cr.store.Close()
 	}
+	if cr.alphaMissense != nil {
+		defer cr.alphaMissense.Close()
+	}
 
 	ann := annotate.NewAnnotator(cr.cache)
 	ann.SetCanonicalOnly(canonicalOnly)
@@ -572,9 +660,40 @@ func runAnnotateVCF(logger *zap.Logger, inputPath, assembly, outputFile string, 
 	}
 
 	writer := output.NewVCFWriter(out, parser.Header())
+	if cr.alphaMissense != nil {
+		writer.AddCSQField("AlphaMissense_score")
+		writer.AddCSQField("AlphaMissense_class")
+	}
 	if err := writer.WriteHeader(); err != nil {
 		return fmt.Errorf("writing header: %w", err)
 	}
+
+	// If AlphaMissense is enabled, use enriching annotation pipeline
+	if cr.alphaMissense != nil {
+		amStore := cr.alphaMissense
+		for {
+			v, err := parser.Next()
+			if err != nil {
+				return fmt.Errorf("reading variant: %w", err)
+			}
+			if v == nil {
+				break
+			}
+			anns, err := ann.Annotate(v)
+			if err != nil {
+				logger.Warn("annotation failed", zap.Error(err))
+				continue
+			}
+			enrichAlphaMissense(amStore, v, anns)
+			for _, a := range anns {
+				if err := writer.Write(v, a); err != nil {
+					return fmt.Errorf("writing annotation: %w", err)
+				}
+			}
+		}
+		return writer.Flush()
+	}
+
 	return ann.AnnotateAll(parser, writer)
 }
 
@@ -606,6 +725,9 @@ func runAnnotateVariant(logger *zap.Logger, specInput, assembly, specType string
 	}
 	if cr.store != nil {
 		defer cr.store.Close()
+	}
+	if cr.alphaMissense != nil {
+		defer cr.alphaMissense.Close()
 	}
 
 	ann := annotate.NewAnnotator(cr.cache)
@@ -659,15 +781,37 @@ func runAnnotateVariant(logger *zap.Logger, specInput, assembly, specType string
 			continue
 		}
 
-		fmt.Fprintln(w, "Gene\tTranscript\tCanon\tConsequence\tImpact\tHGVSc\tHGVSp")
-		for _, a := range anns {
-			canon := "no"
-			if a.IsCanonical {
-				canon = "YES"
+		if cr.alphaMissense != nil {
+			enrichAlphaMissense(cr.alphaMissense, v, anns)
+		}
+
+		if cr.alphaMissense != nil {
+			fmt.Fprintln(w, "Gene\tTranscript\tCanon\tConsequence\tImpact\tHGVSc\tHGVSp\tAM_Score\tAM_Class")
+			for _, a := range anns {
+				canon := "no"
+				if a.IsCanonical {
+					canon = "YES"
+				}
+				amScore := ""
+				if a.AlphaMissenseScore > 0 {
+					amScore = fmt.Sprintf("%.4f", a.AlphaMissenseScore)
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					a.GeneName, a.TranscriptID, canon,
+					a.Consequence, a.Impact, a.HGVSc, a.HGVSp,
+					amScore, a.AlphaMissenseClass)
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				a.GeneName, a.TranscriptID, canon,
-				a.Consequence, a.Impact, a.HGVSc, a.HGVSp)
+		} else {
+			fmt.Fprintln(w, "Gene\tTranscript\tCanon\tConsequence\tImpact\tHGVSc\tHGVSp")
+			for _, a := range anns {
+				canon := "no"
+				if a.IsCanonical {
+					canon = "YES"
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					a.GeneName, a.TranscriptID, canon,
+					a.Consequence, a.Impact, a.HGVSc, a.HGVSp)
+			}
 		}
 		w.Flush()
 	}
@@ -719,6 +863,9 @@ func runCompare(logger *zap.Logger, inputPath, assembly string, columns map[stri
 	}
 	if cr.store != nil {
 		defer cr.store.Close()
+	}
+	if cr.alphaMissense != nil {
+		defer cr.alphaMissense.Close()
 	}
 
 	ann := annotate.NewAnnotator(cr.cache)
@@ -779,11 +926,15 @@ func runCompare(logger *zap.Logger, inputPath, assembly string, columns map[stri
 }
 
 // runMAFOutput runs MAF annotation mode, preserving all original columns.
-func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotator, out *os.File, cgl oncokb.CancerGeneList, newResults *[]duckdb.VariantResult) error {
+func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotator, out *os.File, cgl oncokb.CancerGeneList, newResults *[]duckdb.VariantResult, amStore *alphamissense.Store) error {
 	mafWriter := output.NewMAFWriter(out, parser.Header(), parser.Columns())
 
 	if cgl != nil {
 		mafWriter.AddExtraColumn("Gene_Type")
+	}
+	if amStore != nil {
+		mafWriter.AddExtraColumn("AlphaMissense_Score")
+		mafWriter.AddExtraColumn("AlphaMissense_Class")
 	}
 
 	if err := mafWriter.WriteHeader(); err != nil {
@@ -837,6 +988,9 @@ func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotato
 			if ga, ok := cgl[best.GeneName]; ok {
 				best.GeneType = ga.GeneType
 			}
+		}
+		if best != nil && amStore != nil {
+			enrichAlphaMissense(amStore, r.Variant, []*annotate.Annotation{best})
 		}
 		return mafWriter.WriteRow(mafAnn.RawFields, best, r.Variant)
 	}); err != nil {

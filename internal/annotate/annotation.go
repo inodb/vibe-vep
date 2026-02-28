@@ -71,8 +71,10 @@ type Annotation struct {
 	IntronNumber    string // Intron number (e.g., "1/4")
 	CDNAPosition    int64  // Position in cDNA
 	HGVSp           string // HGVS protein notation (e.g., "p.Gly12Cys")
-	HGVSc           string // HGVS coding DNA notation (e.g., "c.34G>T")
-	GeneType        string // Gene classification (e.g., "ONCOGENE", "TSG"), empty if not available
+	HGVSc              string  // HGVS coding DNA notation (e.g., "c.34G>T")
+	GeneType           string  // Gene classification (e.g., "ONCOGENE", "TSG"), empty if not available
+	AlphaMissenseScore float64 // AlphaMissense pathogenicity score (0.0-1.0), 0 if not available
+	AlphaMissenseClass string  // "likely_benign", "ambiguous", "likely_pathogenic", "" if N/A
 }
 
 // GetImpact returns the impact level for a given consequence type.
