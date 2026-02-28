@@ -233,11 +233,11 @@ Supported formats:
   Genomic:  12:25245350:C:A  or  chr12:25245350:C>A  or  12-25245350-C-A
   Protein:  KRAS G12C  or  KRAS p.G12C  or  KRAS p.Gly12Cys
   HGVSc:    KRAS c.35G>T  or  ENST00000311936:c.35G>T`,
-		Example: `  vibe-vep annotate variant "12:25245350:C:A"
-  vibe-vep annotate variant "KRAS G12C"
-  vibe-vep annotate variant "KRAS c.35G>T"
-  vibe-vep annotate variant --type protein "KRAS G12C"`,
-		Args: cobra.ExactArgs(1),
+		Example: `  vibe-vep annotate variant 12:25245350:C:A
+  vibe-vep annotate variant KRAS G12C
+  vibe-vep annotate variant KRAS c.35G>T
+  vibe-vep annotate variant ENST00000311936:c.35G>T`,
+		Args: cobra.MinimumNArgs(1),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			return viper.BindPFlags(cmd.Flags())
 		},
@@ -247,7 +247,7 @@ Supported formats:
 				return fmt.Errorf("creating logger: %w", err)
 			}
 			defer logger.Sync()
-			return runAnnotateVariant(logger, args[0],
+			return runAnnotateVariant(logger, strings.Join(args, " "),
 				viper.GetString("assembly"),
 				viper.GetString("type"),
 				viper.GetBool("no-cache"),
