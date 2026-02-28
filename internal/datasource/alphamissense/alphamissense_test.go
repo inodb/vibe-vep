@@ -9,16 +9,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Small test fixture in AlphaMissense TSV format.
-const testTSV = `# Copyright 2023 Google LLC
+// Small test fixture in AlphaMissense TSV format (matches real 10-column format).
+const testTSV = `# Copyright 2023 DeepMind Technologies Limited
 #
-# Data licensed under CC BY 4.0
-#CHROM	POS	REF	ALT	am_pathogenicity	am_class
-chr1	69094	G	A	0.0782	likely_benign
-chr1	69094	G	C	0.0891	likely_benign
-chr12	25245350	C	A	0.9876	likely_pathogenic
-chr12	25245350	C	T	0.8234	likely_pathogenic
-chr17	7674220	C	T	0.6543	ambiguous
+# Licensed under CC BY-NC-SA 4.0 license
+#CHROM	POS	REF	ALT	genome	uniprot_id	transcript_id	protein_variant	am_pathogenicity	am_class
+chr1	69094	G	A	hg38	Q8NH21	ENST00000335137.4	V2M	0.0782	likely_benign
+chr1	69094	G	C	hg38	Q8NH21	ENST00000335137.4	V2L	0.0891	likely_benign
+chr12	25245350	C	A	hg38	P01116	ENST00000256078.9	G12V	0.9876	likely_pathogenic
+chr12	25245350	C	T	hg38	P01116	ENST00000256078.9	G12D	0.8234	likely_pathogenic
+chr17	7674220	C	T	hg38	P04637	ENST00000269305.9	R175H	0.6543	ambiguous
 `
 
 func writeTSV(t *testing.T) string {
@@ -64,10 +64,14 @@ func TestLoadIdempotent(t *testing.T) {
 	tsvPath := writeTSV(t)
 	require.NoError(t, store.Load(tsvPath))
 
-	// Loading again should fail due to primary key constraint, which is expected.
+	// Loading again should succeed (INSERT OR IGNORE skips duplicates).
 	// In practice we check Loaded() before calling Load().
-	err = store.Load(tsvPath)
-	assert.Error(t, err, "duplicate load should error on primary key conflict")
+	require.NoError(t, store.Load(tsvPath))
+
+	// Data should still be correct
+	r, ok := store.Lookup("chr12", 25245350, "C", "A")
+	assert.True(t, ok)
+	assert.InDelta(t, 0.9876, r.Score, 0.001)
 }
 
 func TestLookupEmpty(t *testing.T) {
