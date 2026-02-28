@@ -27,11 +27,12 @@ func createKRASTranscript() *cache.Transcript {
 		CDSStart:    25209798, // CDS end in genomic coords (start for reverse)
 		CDSEnd:      25245384, // CDS start in genomic coords (end for reverse)
 		Exons: []cache.Exon{
-			{Number: 1, Start: 25250751, End: 25250929, CDSStart: 0, CDSEnd: 0, Frame: -1},              // 5' UTR
-			{Number: 2, Start: 25245274, End: 25245395, CDSStart: 25245274, CDSEnd: 25245384, Frame: 0}, // Contains codon 12
-			{Number: 3, Start: 25227234, End: 25227412, CDSStart: 25227234, CDSEnd: 25227412, Frame: 0},
-			{Number: 4, Start: 25225614, End: 25225773, CDSStart: 25225614, CDSEnd: 25225773, Frame: 2},
+			// Sorted by ascending genomic position (matches GTF loader behavior)
 			{Number: 5, Start: 25209798, End: 25209911, CDSStart: 25209798, CDSEnd: 25209911, Frame: 0}, // Last coding exon
+			{Number: 4, Start: 25225614, End: 25225773, CDSStart: 25225614, CDSEnd: 25225773, Frame: 2},
+			{Number: 3, Start: 25227234, End: 25227412, CDSStart: 25227234, CDSEnd: 25227412, Frame: 0},
+			{Number: 2, Start: 25245274, End: 25245395, CDSStart: 25245274, CDSEnd: 25245384, Frame: 0}, // Contains codon 12
+			{Number: 1, Start: 25250751, End: 25250929, CDSStart: 0, CDSEnd: 0, Frame: -1},              // 5' UTR
 		},
 		// CDS sequence starting from ATG (start codon is last 3 bases in genomic coords)
 		// For KRAS reverse strand, we need the coding sequence 5' to 3'
