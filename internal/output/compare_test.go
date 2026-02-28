@@ -61,6 +61,16 @@ func TestCategorizeConsequence(t *testing.T) {
 		{"missense → intergenic gene model", "missense_variant", "intergenic_variant", CatGeneModelChange},
 		{"synonymous → intergenic gene model", "synonymous_variant", "intergenic_variant", CatGeneModelChange},
 		{"intergenic → missense gene model", "intergenic_variant", "missense_variant", CatGeneModelChange},
+		// Fix 2: non-coding boundary shifts
+		{"non_coding_exon ↔ intron boundary shift", "non_coding_transcript_exon_variant", "intron_variant", CatTranscriptModelChange},
+		{"intron ↔ non_coding_exon boundary shift", "intron_variant", "non_coding_transcript_exon_variant", CatTranscriptModelChange},
+		{"intron ↔ 3'UTR exon boundary shift", "intron_variant", "3_prime_UTR_variant", CatUpstreamReclass},
+		{"non_coding_exon ↔ 5'UTR", "non_coding_transcript_exon_variant", "5_prime_UTR_variant", CatTranscriptModelChange},
+		{"intron ↔ intergenic non-coding gene model", "intron_variant", "intergenic_variant", CatGeneModelChange},
+		// Fix 4: splice reclassification with inframe/start_lost
+		{"inframe+splice → splice_acceptor", "inframe_insertion,splice_region_variant", "splice_acceptor_variant", CatMatch},
+		{"protein_altering → splice_acceptor", "protein_altering_variant,splice_region_variant", "splice_acceptor_variant", CatMatch},
+		{"start_lost → splice_acceptor", "splice_acceptor_variant,coding_sequence_variant,5_prime_UTR_variant,intron_variant", "start_lost", CatMatch},
 		{"mismatch", "missense_variant", "synonymous_variant", CatMismatch},
 	}
 	for _, tt := range tests {
@@ -145,6 +155,11 @@ func TestCategorizeHGVSp(t *testing.T) {
 			want: CatFuzzyFS,
 		},
 		{
+			name: "maf nonstandard intronic with vep prediction - transcript model change",
+			mafHGVSp: "p.*130*", vepHGVSp: "p.G12C",
+			want: CatTranscriptModelChange,
+		},
+		{
 			name: "mismatch",
 			mafHGVSp: "p.G12C", vepHGVSp: "p.A15T",
 			mafHGVSc: "ENST00000256078.4:c.34G>T", vepHGVSc: "c.99A>C",
@@ -174,6 +189,13 @@ func TestCategorizeHGVSc(t *testing.T) {
 		{"position shift dup", "ENST00000357077.9:c.4426dup", "c.4427dup", CatPositionShift},
 		{"delins normalized", "ENST00000324385.9:c.1382_1407delinsG", "c.1383_1407del", CatDelinsNorm},
 		{"dup vs ins", "ENST00000397901.8:c.*46_*49dup", "c.*49_*50insAAGG", CatDupVsIns},
+		// Fix 1: n./c. transcript model change
+		{"n. vs c. transcript model change", "ENST00000123456.1:n.100C>G", "c.50C>G", CatTranscriptModelChange},
+		{"c. vs n. transcript model change", "ENST00000123456.1:c.100C>G", "n.50C>G", CatTranscriptModelChange},
+		{"both n. different coords", "ENST00000123456.1:n.100C>G", "n.200G>C", CatTranscriptModelChange},
+		// Fix 6: insertion cyclic rotation
+		{"cyclic rotation ins", "ENST00000123456.1:c.100_101insTA", "c.101_102insAT", CatPositionShift},
+		{"non-rotation ins stays mismatch", "ENST00000123456.1:c.100_101insAA", "c.101_102insGG", CatMismatch},
 		{"mismatch different SNV", "ENST00000361923.2:c.1428C>G", "c.999A>T", CatMismatch},
 	}
 	for _, tt := range tests {
@@ -351,6 +373,68 @@ func TestCompareWriter_CrossColumnConseqDelinsNorm(t *testing.T) {
 		"consequence mismatch with HGVSc delins_normalized should be reclassified")
 	assert.Equal(t, 0, counts["consequence"][CatMismatch],
 		"should have no consequence mismatches")
+}
+
+func TestCompareWriter_CrossColumnHGVSpDupVsIns(t *testing.T) {
+	// When HGVSc is dup_vs_ins, an HGVSp mismatch should be reclassified.
+	var buf bytes.Buffer
+	cols := map[string]bool{"hgvsp": true, "hgvsc": true}
+	w := NewCompareWriter(&buf, cols, true)
+
+	variant := &vcf.Variant{Chrom: "1", Pos: 100, Ref: "A", Alt: "AG"}
+
+	mafAnn := &maf.MAFAnnotation{
+		HGVSpShort:   "p.V78dup",
+		HGVSc:        "ENST00000123456.1:c.232_233dup",
+		TranscriptID: "ENST00000123456",
+	}
+	vepAnns := []*annotate.Annotation{{
+		TranscriptID: "ENST00000123456",
+		HGVSp:        "p.Val79_80insGly",
+		HGVSc:        "c.233_234insGT",
+	}}
+
+	w.WriteComparison(variant, mafAnn, vepAnns)
+
+	counts := w.Counts()
+	assert.Equal(t, 1, counts["hgvsp"][CatDupVsIns],
+		"hgvsp mismatch with HGVSc dup_vs_ins should be reclassified")
+	assert.Equal(t, 0, counts["hgvsp"][CatMismatch],
+		"should have no hgvsp mismatches")
+}
+
+func TestCompareWriter_CrossColumnTranscriptModelChange(t *testing.T) {
+	// When HGVSc is transcript_model_change (n. vs c.), consequence and
+	// HGVSp mismatches should be reclassified.
+	var buf bytes.Buffer
+	cols := map[string]bool{"consequence": true, "hgvsp": true, "hgvsc": true}
+	w := NewCompareWriter(&buf, cols, true)
+
+	variant := &vcf.Variant{Chrom: "1", Pos: 100, Ref: "A", Alt: "T"}
+
+	mafAnn := &maf.MAFAnnotation{
+		Consequence:  "missense_variant",
+		HGVSpShort:   "p.G12C",
+		HGVSc:        "ENST00000123456.1:n.100A>T",
+		TranscriptID: "ENST00000123456",
+	}
+	vepAnns := []*annotate.Annotation{{
+		TranscriptID: "ENST00000123456",
+		Consequence:  "synonymous_variant",
+		HGVSp:        "p.Ala15=",
+		HGVSc:        "c.50A>T",
+	}}
+
+	w.WriteComparison(variant, mafAnn, vepAnns)
+
+	counts := w.Counts()
+	assert.Equal(t, 1, counts["hgvsc"][CatTranscriptModelChange])
+	assert.Equal(t, 1, counts["consequence"][CatTranscriptModelChange],
+		"consequence mismatch with HGVSc transcript_model_change should be reclassified")
+	assert.Equal(t, 1, counts["hgvsp"][CatTranscriptModelChange],
+		"hgvsp mismatch with HGVSc transcript_model_change should be reclassified")
+	assert.Equal(t, 0, counts["consequence"][CatMismatch])
+	assert.Equal(t, 0, counts["hgvsp"][CatMismatch])
 }
 
 func TestCompareWriter_CrossColumnHGVSpDelinsNorm(t *testing.T) {

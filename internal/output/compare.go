@@ -162,6 +162,29 @@ func (c *CompareWriter) WriteComparison(variant *vcf.Variant, mafAnn *maf.MAFAnn
 		}
 	}
 
+	// Cross-column correction: when HGVSc is dup_vs_ins, HGVSp mismatches
+	// are expected (different dup/ins normalization → different protein).
+	if categories["hgvsc"] == CatDupVsIns {
+		if categories["hgvsp"] == CatMismatch {
+			c.counts["hgvsp"][CatMismatch]--
+			categories["hgvsp"] = CatDupVsIns
+			c.counts["hgvsp"][CatDupVsIns]++
+		}
+	}
+
+	// Cross-column correction: when HGVSc is transcript_model_change,
+	// consequence and HGVSp mismatches are expected (different transcript
+	// biotype → different annotations entirely).
+	if categories["hgvsc"] == CatTranscriptModelChange {
+		for _, col := range []string{"consequence", "hgvsp"} {
+			if categories[col] == CatMismatch {
+				c.counts[col][CatMismatch]--
+				categories[col] = CatTranscriptModelChange
+				c.counts[col][CatTranscriptModelChange]++
+			}
+		}
+	}
+
 	c.lastCategories = categories
 
 	// Decide whether to show row
@@ -294,6 +317,31 @@ func categorizeConsequence(mafConseq, vepConseq string) Category {
 		return CatTranscriptModelChange
 	}
 
+	// Non-coding ↔ non-coding: exon boundary shifts in non-coding transcripts
+	// between GENCODE versions (intron_variant ↔ non_coding_transcript_exon_variant).
+	if isNonCodingConsequence(normMAF) && isNonCodingConsequence(normVEP) {
+		return CatTranscriptModelChange
+	}
+
+	// Non-coding exon ↔ UTR: transcript was non-coding (non_coding_transcript_exon_variant)
+	// in one version and coding (UTR) in another. This is a biotype change.
+	// Note: intron ↔ UTR is handled below as an exon boundary shift.
+	if normMAF == "non_coding_transcript_exon_variant" && isUTRConsequence(normVEP) {
+		return CatTranscriptModelChange
+	}
+	if isUTRConsequence(normMAF) && normVEP == "non_coding_transcript_exon_variant" {
+		return CatTranscriptModelChange
+	}
+
+	// Non-coding ↔ intergenic: gene model boundary change for non-coding
+	// transcripts.
+	if isNonCodingConsequence(normMAF) && normVEP == "intergenic_variant" {
+		return CatGeneModelChange
+	}
+	if normMAF == "intergenic_variant" && isNonCodingConsequence(normVEP) {
+		return CatGeneModelChange
+	}
+
 	// Gene model boundary change: one side has a coding consequence and the
 	// other is intergenic. The gene may exist in one GENCODE version but not
 	// the other.
@@ -307,7 +355,8 @@ func categorizeConsequence(mafConseq, vepConseq string) Category {
 	// UTR ↔ intron: exon boundary shifts between GENCODE versions can move a
 	// position from UTR to intron or vice versa. Reclassify similarly to
 	// upstream/downstream reclassification.
-	if isUTRConsequence(normMAF) && (normVEP == "intron_variant" || isUTRConsequence(normVEP)) {
+	if (isUTRConsequence(normMAF) || normMAF == "intron_variant") &&
+		(isUTRConsequence(normVEP) || normVEP == "intron_variant") {
 		return CatUpstreamReclass
 	}
 
@@ -402,10 +451,13 @@ func spliceReclassMatch(conseqA, conseqB string) bool {
 	if conseqB != "splice_acceptor_variant" && conseqB != "splice_donor_variant" {
 		return false
 	}
-	// conseqA must contain splice_region or be a frameshift/coding variant
-	// near a splice site (frameshift+splice_region, splice_region+intron, etc.)
+	// conseqA must contain splice_region or be a coding variant near a splice
+	// site. normalizeConsequence drops splice_region_variant when a primary
+	// term is present, so we also accept inframe_variant, start_lost, etc.
 	return strings.Contains(conseqA, "splice_region_variant") ||
-		strings.Contains(conseqA, "frameshift_variant")
+		strings.Contains(conseqA, "frameshift_variant") ||
+		strings.Contains(conseqA, "inframe_variant") ||
+		conseqA == "start_lost"
 }
 
 // spliceVsSynRe matches MAF splice notation like p.X125_splice.
@@ -441,8 +493,13 @@ func categorizeHGVSp(mafHGVSp, vepHGVSp, vepConseq, mafHGVSc, vepHGVSc string) C
 		return CatSpliceVsSyn
 	}
 
-	if isNonStandardIntronicHGVSp(mafHGVSp) && vepHGVSp == "" {
-		return CatMafNonstandard
+	if isNonStandardIntronicHGVSp(mafHGVSp) {
+		if vepHGVSp == "" {
+			return CatMafNonstandard
+		}
+		// MAF used a non-coding transcript (p.*N*) while VEP has a protein
+		// prediction from a coding transcript: transcript model change.
+		return CatTranscriptModelChange
 	}
 
 	if isSpliceConsequence(vepConseq) && vepHGVSp == "" {
@@ -496,15 +553,31 @@ func categorizeHGVSc(mafHGVSc, vepHGVSc string) Category {
 	if vepHGVSc == "" {
 		return CatVepEmpty
 	}
-	// Position shift: same operation (base change or indel type) at different positions.
-	if hgvscOperation(mafHGVSc) != "" && hgvscOperation(mafHGVSc) == hgvscOperation(vepHGVSc) {
-		return CatPositionShift
-	}
 
 	// Strip transcript prefix for further comparisons.
 	mafNorm := mafHGVSc
 	if idx := strings.LastIndex(mafNorm, ":"); idx >= 0 {
 		mafNorm = mafNorm[idx+1:]
+	}
+
+	// Transcript model change: one side uses n. notation (non-coding) and the
+	// other uses c. notation (coding), indicating the transcript biotype changed
+	// between GENCODE versions.
+	mafIsNonCodingHGVSc := strings.HasPrefix(mafNorm, "n.")
+	vepIsNonCodingHGVSc := strings.HasPrefix(vepHGVSc, "n.")
+	if mafIsNonCodingHGVSc != vepIsNonCodingHGVSc {
+		return CatTranscriptModelChange
+	}
+
+	// Both non-coding (n.) but different coordinates: different non-coding
+	// transcript used between GENCODE versions.
+	if mafIsNonCodingHGVSc && vepIsNonCodingHGVSc {
+		return CatTranscriptModelChange
+	}
+
+	// Position shift: same operation (base change or indel type) at different positions.
+	if hgvscOperation(mafNorm) != "" && hgvscOperation(mafNorm) == hgvscOperation(vepHGVSc) {
+		return CatPositionShift
 	}
 
 	// Dup vs ins: one side reports a duplication, the other an insertion.
@@ -522,7 +595,34 @@ func categorizeHGVSc(mafHGVSc, vepHGVSc string) Category {
 		return CatDelinsNorm
 	}
 
+	// Insertion cyclic rotation: both sides report insertions with different
+	// sequences at adjacent positions. 3' shifting can produce cyclic rotations
+	// of the inserted sequence (e.g., insTA vs insAT at adjacent positions).
+	if isCyclicRotationIns(mafNorm, vepHGVSc) {
+		return CatPositionShift
+	}
+
 	return CatMismatch
+}
+
+// hgvscInsSeqRe extracts the inserted sequence from an HGVSc insertion.
+var hgvscInsSeqRe = regexp.MustCompile(`ins([ACGT]+)$`)
+
+// isCyclicRotationIns checks if two HGVSc insertions (without transcript prefix)
+// have inserted sequences that are cyclic rotations of each other.
+// e.g., "c.100_101insTA" vs "c.101_102insAT" → true (AT is a rotation of TA).
+func isCyclicRotationIns(a, b string) bool {
+	mA := hgvscInsSeqRe.FindStringSubmatch(a)
+	mB := hgvscInsSeqRe.FindStringSubmatch(b)
+	if len(mA) < 2 || len(mB) < 2 {
+		return false
+	}
+	seqA, seqB := mA[1], mB[1]
+	if len(seqA) != len(seqB) || len(seqA) == 0 {
+		return false
+	}
+	// Check if seqB is a rotation of seqA: seqB appears in seqA+seqA.
+	return strings.Contains(seqA+seqA, seqB)
 }
 
 // hgvscOpRe extracts the operation from an HGVSc value:

@@ -94,7 +94,7 @@ func GetImpact(consequence string) string {
 			ConsequenceSpliceAcceptor, ConsequenceSpliceDonor:
 			impact = ImpactHigh
 		case ConsequenceMissenseVariant, ConsequenceInframeInsertion,
-			ConsequenceInframeDeletion:
+			ConsequenceInframeDeletion, "inframe_variant":
 			impact = ImpactModerate
 		case ConsequenceSynonymousVariant, ConsequenceSpliceRegion,
 			ConsequenceStopRetained, ConsequenceStartRetained,
