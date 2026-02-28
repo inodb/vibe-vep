@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -14,6 +15,7 @@ import (
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
+	"github.com/inodb/vibe-vep/internal/duckdb"
 	"github.com/inodb/vibe-vep/internal/maf"
 	"github.com/inodb/vibe-vep/internal/output"
 	"github.com/inodb/vibe-vep/internal/vcf"
@@ -105,6 +107,12 @@ func main() {
 	}
 }
 
+func addCacheFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("no-cache", false, "Skip transcript cache, always load from GTF/FASTA")
+	cmd.Flags().Bool("clear-cache", false, "Clear and rebuild transcript and variant caches")
+	cmd.Flags().Bool("no-variant-cache", false, "Disable variant result caching")
+}
+
 func newAnnotateCmd(verbose *bool) *cobra.Command {
 	var (
 		assembly      string
@@ -138,6 +146,9 @@ func newAnnotateCmd(verbose *bool) *cobra.Command {
 				viper.GetString("output"),
 				viper.GetBool("canonical"),
 				viper.GetString("input-format"),
+				viper.GetBool("no-cache"),
+				viper.GetBool("clear-cache"),
+				viper.GetBool("no-variant-cache"),
 			)
 		},
 	}
@@ -147,6 +158,7 @@ func newAnnotateCmd(verbose *bool) *cobra.Command {
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file (default: stdout)")
 	cmd.Flags().BoolVar(&canonicalOnly, "canonical", false, "Only report canonical transcript annotations")
 	cmd.Flags().StringVar(&inputFormat, "input-format", "", "Input format: vcf, maf (auto-detected if not specified)")
+	addCacheFlags(cmd)
 
 	return cmd
 }
@@ -189,6 +201,8 @@ func newCompareCmd(verbose *bool) *cobra.Command {
 				viper.GetString("assembly"),
 				colMap,
 				viper.GetBool("all"),
+				viper.GetBool("no-cache"),
+				viper.GetBool("clear-cache"),
 			)
 		},
 	}
@@ -196,11 +210,130 @@ func newCompareCmd(verbose *bool) *cobra.Command {
 	cmd.Flags().StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
 	cmd.Flags().StringVar(&columns, "columns", "consequence,hgvsp,hgvsc", "Columns to compare (comma-separated)")
 	cmd.Flags().BoolVar(&all, "all", false, "Show all rows, not just non-matches")
+	addCacheFlags(cmd)
 
 	return cmd
 }
 
-func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFile string, canonicalOnly bool, inputFormat string) error {
+// cacheResult holds the loaded transcript cache and optional DuckDB variant store.
+type cacheResult struct {
+	cache *cache.Cache
+	store *duckdb.Store // variant cache (DuckDB), nil if --no-cache
+}
+
+// loadCache loads transcripts using gob transcript cache, and opens DuckDB for variant cache.
+func loadCache(logger *zap.Logger, assembly string, noCache, clearCache bool) (*cacheResult, error) {
+	gtfPath, fastaPath, canonicalPath, found := FindGENCODEFiles(assembly)
+	if !found {
+		return nil, fmt.Errorf("no GENCODE cache found for %s\nHint: Download GENCODE annotations with: vibe-vep download --assembly %s", assembly, assembly)
+	}
+
+	logger.Info("using GENCODE cache",
+		zap.String("assembly", assembly),
+		zap.String("gtf", gtfPath),
+		zap.String("fasta", fastaPath))
+
+	c := cache.New()
+	cacheDir := DefaultGENCODEPath(assembly)
+
+	// Fingerprint source files for cache validation
+	gtfFP, err1 := duckdb.StatFile(gtfPath)
+	fastaFP, err2 := duckdb.StatFile(fastaPath)
+	canonicalFP := duckdb.FileFingerprint{}
+	if canonicalPath != "" {
+		canonicalFP, _ = duckdb.StatFile(canonicalPath)
+	}
+
+	// --- Transcript cache (gob) ---
+	transcriptsLoaded := false
+	tc := duckdb.NewTranscriptCache(cacheDir)
+
+	if noCache || clearCache {
+		if clearCache {
+			tc.Clear()
+			logger.Info("cleared transcript cache")
+		}
+	} else if err1 == nil && err2 == nil && tc.Valid(gtfFP, fastaFP, canonicalFP) {
+		start := time.Now()
+		if err := tc.Load(c); err != nil {
+			logger.Warn("transcript cache load failed, falling back to GTF/FASTA", zap.Error(err))
+		} else {
+			logger.Info("loaded transcript cache",
+				zap.Int("count", c.TranscriptCount()),
+				zap.Duration("elapsed", time.Since(start)))
+			transcriptsLoaded = true
+		}
+	}
+
+	if !transcriptsLoaded {
+		// Load from GTF/FASTA
+		if err := loadFromGTFFASTA(logger, c, gtfPath, fastaPath, canonicalPath); err != nil {
+			return nil, err
+		}
+
+		// Write transcript cache for next time
+		if !noCache && err1 == nil && err2 == nil {
+			start := time.Now()
+			if err := tc.Write(c, gtfFP, fastaFP, canonicalFP); err != nil {
+				logger.Warn("could not write transcript cache", zap.Error(err))
+			} else {
+				logger.Info("wrote transcript cache",
+					zap.Int("count", c.TranscriptCount()),
+					zap.Duration("elapsed", time.Since(start)))
+			}
+		}
+	}
+
+	// --- Variant cache (DuckDB) ---
+	if noCache {
+		return &cacheResult{cache: c}, nil
+	}
+
+	dbPath := filepath.Join(cacheDir, "variant_cache.duckdb")
+	store, err := duckdb.Open(dbPath)
+	if err != nil {
+		logger.Warn("could not open variant cache", zap.Error(err))
+		return &cacheResult{cache: c}, nil
+	}
+
+	// Clear variant cache when transcripts changed (annotations depend on transcript data)
+	if clearCache || !transcriptsLoaded {
+		if err := store.ClearVariantResults(); err != nil {
+			logger.Warn("could not clear variant cache", zap.Error(err))
+		} else if clearCache {
+			logger.Info("cleared variant cache")
+		}
+	}
+
+	return &cacheResult{cache: c, store: store}, nil
+}
+
+// loadFromGTFFASTA loads transcripts from GENCODE GTF and FASTA files.
+func loadFromGTFFASTA(logger *zap.Logger, c *cache.Cache, gtfPath, fastaPath, canonicalPath string) error {
+	start := time.Now()
+	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
+
+	if canonicalPath != "" {
+		logger.Info("loading canonical overrides", zap.String("path", canonicalPath))
+		overrides, err := cache.LoadCanonicalOverrides(canonicalPath)
+		if err != nil {
+			logger.Warn("could not load canonical overrides", zap.Error(err))
+		} else {
+			loader.SetCanonicalOverrides(overrides)
+			logger.Info("loaded canonical overrides", zap.Int("count", len(overrides)))
+		}
+	}
+
+	if err := loader.Load(c); err != nil {
+		return fmt.Errorf("loading GENCODE cache: %w", err)
+	}
+	logger.Info("loaded transcripts from GTF/FASTA",
+		zap.Int("count", c.TranscriptCount()),
+		zap.Duration("elapsed", time.Since(start)))
+	return nil
+}
+
+func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFile string, canonicalOnly bool, inputFormat string, noCache, clearCache, noVariantCache bool) error {
 	// Detect input format if not specified
 	detectedFormat := inputFormat
 	if detectedFormat == "" {
@@ -228,40 +361,33 @@ func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFi
 	}
 	defer parser.Close()
 
-	// Load GENCODE cache
-	gtfPath, fastaPath, canonicalPath, found := FindGENCODEFiles(assembly)
-	if !found {
-		return fmt.Errorf("no GENCODE cache found for %s\nHint: Download GENCODE annotations with: vibe-vep download --assembly %s", assembly, assembly)
+	// Load transcript cache
+	cr, err := loadCache(logger, assembly, noCache, clearCache)
+	if err != nil {
+		return err
+	}
+	if cr.store != nil {
+		defer cr.store.Close()
 	}
 
-	logger.Info("using GENCODE cache",
-		zap.String("assembly", assembly),
-		zap.String("gtf", gtfPath),
-		zap.String("fasta", fastaPath))
-
-	c := cache.New()
-	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
-
-	if canonicalPath != "" {
-		logger.Info("loading canonical overrides", zap.String("path", canonicalPath))
-		overrides, err := cache.LoadCanonicalOverrides(canonicalPath)
-		if err != nil {
-			logger.Warn("could not load canonical overrides", zap.Error(err))
-		} else {
-			loader.SetCanonicalOverrides(overrides)
-			logger.Info("loaded canonical overrides", zap.Int("count", len(overrides)))
-		}
-	}
-
-	if err := loader.Load(c); err != nil {
-		return fmt.Errorf("loading GENCODE cache: %w", err)
-	}
-	logger.Info("loaded transcripts", zap.Int("count", c.TranscriptCount()))
-	transcriptCache := c
-
-	ann := annotate.NewAnnotator(transcriptCache)
+	ann := annotate.NewAnnotator(cr.cache)
 	ann.SetCanonicalOnly(canonicalOnly)
 	ann.SetLogger(logger)
+
+	// Load variant cache
+	var variantResults []duckdb.VariantResult
+	if cr.store != nil && !noVariantCache {
+		start := time.Now()
+		vc, err := cr.store.LoadVariantCache()
+		if err != nil {
+			logger.Warn("could not load variant cache", zap.Error(err))
+		} else if vc.Len() > 0 {
+			ann.SetVariantCache(vc)
+			logger.Info("loaded variant cache",
+				zap.Int("variants", vc.Len()),
+				zap.Duration("elapsed", time.Since(start)))
+		}
+	}
 
 	var out *os.File
 	if outputFile == "" {
@@ -304,7 +430,17 @@ func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFi
 		if !ok {
 			return fmt.Errorf("MAF output requires MAF parser")
 		}
-		return runMAFOutput(logger, mafParser, ann, out, cgl)
+		if err := runMAFOutput(logger, mafParser, ann, out, cgl); err != nil {
+			return err
+		}
+
+		// Write new variant results to DuckDB
+		if cr.store != nil && !noVariantCache && len(variantResults) > 0 {
+			if err := cr.store.WriteVariantResults(variantResults); err != nil {
+				logger.Warn("could not write variant results to cache", zap.Error(err))
+			}
+		}
+		return nil
 	}
 
 	// VCF output
@@ -329,7 +465,7 @@ func runAnnotate(logger *zap.Logger, inputPath, assembly, outputFormat, outputFi
 	return fmt.Errorf("unknown output format %q", outputFormat)
 }
 
-func runCompare(logger *zap.Logger, inputPath, assembly string, columns map[string]bool, showAll bool) error {
+func runCompare(logger *zap.Logger, inputPath, assembly string, columns map[string]bool, showAll bool, noCache, clearCache bool) error {
 	parser, err := maf.NewParser(inputPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -339,37 +475,16 @@ func runCompare(logger *zap.Logger, inputPath, assembly string, columns map[stri
 	}
 	defer parser.Close()
 
-	// Load GENCODE cache
-	gtfPath, fastaPath, canonicalPath, found := FindGENCODEFiles(assembly)
-	if !found {
-		return fmt.Errorf("no GENCODE cache found for %s\nHint: Download GENCODE annotations with: vibe-vep download --assembly %s", assembly, assembly)
+	// Load transcript cache
+	cr, err := loadCache(logger, assembly, noCache, clearCache)
+	if err != nil {
+		return err
+	}
+	if cr.store != nil {
+		defer cr.store.Close()
 	}
 
-	logger.Info("using GENCODE cache",
-		zap.String("assembly", assembly),
-		zap.String("gtf", gtfPath),
-		zap.String("fasta", fastaPath))
-
-	c := cache.New()
-	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
-
-	if canonicalPath != "" {
-		logger.Info("loading canonical overrides", zap.String("path", canonicalPath))
-		overrides, err := cache.LoadCanonicalOverrides(canonicalPath)
-		if err != nil {
-			logger.Warn("could not load canonical overrides", zap.Error(err))
-		} else {
-			loader.SetCanonicalOverrides(overrides)
-			logger.Info("loaded canonical overrides", zap.Int("count", len(overrides)))
-		}
-	}
-
-	if err := loader.Load(c); err != nil {
-		return fmt.Errorf("loading GENCODE cache: %w", err)
-	}
-	logger.Info("loaded transcripts", zap.Int("count", c.TranscriptCount()))
-
-	ann := annotate.NewAnnotator(c)
+	ann := annotate.NewAnnotator(cr.cache)
 	ann.SetLogger(logger)
 
 	cmpWriter := output.NewCompareWriter(os.Stdout, columns, showAll)

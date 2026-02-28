@@ -16,9 +16,15 @@ type TranscriptLookup interface {
 	FindTranscripts(chrom string, pos int64) []*cache.Transcript
 }
 
+// VariantCache provides cached lookup of previously computed annotations.
+type VariantCache interface {
+	Get(chrom string, pos int64, ref, alt string) ([]*Annotation, bool)
+}
+
 // Annotator annotates variants with consequence predictions.
 type Annotator struct {
 	cache         TranscriptLookup
+	variantCache  VariantCache
 	canonicalOnly bool
 	logger        *zap.Logger
 }
@@ -41,10 +47,22 @@ func (a *Annotator) SetLogger(l *zap.Logger) {
 	a.logger = l
 }
 
+// SetVariantCache sets an optional variant cache for looking up previously computed annotations.
+func (a *Annotator) SetVariantCache(vc VariantCache) {
+	a.variantCache = vc
+}
+
 // Annotate annotates a single variant and returns all annotations.
 func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 	// Normalize chromosome
 	chrom := v.NormalizeChrom()
+
+	// Check variant cache first
+	if a.variantCache != nil {
+		if anns, ok := a.variantCache.Get(chrom, v.Pos, v.Ref, v.Alt); ok {
+			return anns, nil
+		}
+	}
 
 	// Find overlapping transcripts
 	transcripts := a.cache.FindTranscripts(chrom, v.Pos)
