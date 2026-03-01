@@ -1,11 +1,17 @@
 package alphamissense
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/vcf"
+)
+
+// Pre-built keys for Extra map to avoid per-variant string concatenation.
+const (
+	extraKeyScore = "alphamissense.score"
+	extraKeyClass = "alphamissense.class"
 )
 
 // Source wraps an AlphaMissense Store as an annotate.AnnotationSource.
@@ -37,8 +43,8 @@ func (s *Source) Annotate(v *vcf.Variant, anns []*annotate.Annotation) {
 	for _, ann := range anns {
 		if isMissense(ann.Consequence) {
 			if r, ok := s.store.Lookup(chrom, v.Pos, v.Ref, v.Alt); ok {
-				ann.SetExtra("alphamissense", "score", fmt.Sprintf("%.4f", r.Score))
-				ann.SetExtra("alphamissense", "class", r.Class)
+				ann.SetExtraKey(extraKeyScore, formatScore(r.Score))
+				ann.SetExtraKey(extraKeyClass, r.Class)
 			}
 		}
 	}
@@ -47,6 +53,11 @@ func (s *Source) Annotate(v *vcf.Variant, anns []*annotate.Annotation) {
 // Store returns the underlying AlphaMissense store.
 func (s *Source) Store() *Store {
 	return s.store
+}
+
+// formatScore formats a float64 score as a 4-decimal string without fmt.Sprintf.
+func formatScore(score float64) string {
+	return strconv.FormatFloat(score, 'f', 4, 64)
 }
 
 // isMissense returns true if the consequence includes missense_variant.

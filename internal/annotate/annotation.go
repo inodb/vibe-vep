@@ -133,21 +133,20 @@ func formatInt64(n int64) string {
 	if n == 0 {
 		return "0"
 	}
-
-	var digits []byte
+	var buf [21]byte // max int64 digits + sign
+	i := len(buf)
 	negative := n < 0
 	if negative {
 		n = -n
 	}
-
 	for n > 0 {
-		digits = append([]byte{byte('0' + n%10)}, digits...)
+		i--
+		buf[i] = byte('0' + n%10)
 		n /= 10
 	}
-
 	if negative {
-		digits = append([]byte{'-'}, digits...)
+		i--
+		buf[i] = '-'
 	}
-
-	return string(digits)
+	return string(buf[i:])
 }

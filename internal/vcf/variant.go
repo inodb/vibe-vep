@@ -10,7 +10,8 @@ type Variant struct {
 	Alt           string                 // Alternate allele (single allele after splitting)
 	Qual          float64                // Quality score
 	Filter        string                 // Filter status (PASS or filter name)
-	Info          map[string]interface{} // INFO field key-value pairs
+	Info          map[string]interface{} // INFO field key-value pairs (lazily parsed from RawInfo)
+	RawInfo       string                 // Raw INFO field string (used for passthrough)
 	SampleColumns string                 // Raw tab-joined FORMAT + sample columns (preserved, not parsed)
 }
 

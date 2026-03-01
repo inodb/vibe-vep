@@ -62,13 +62,89 @@ func (t *Transcript) ContainsCDS(pos int64) bool {
 }
 
 // FindExon returns the exon containing the given genomic position, or nil if not in an exon.
+// Uses binary search. Handles both forward-strand (ascending Start) and
+// reverse-strand (descending Start) exon ordering.
 func (t *Transcript) FindExon(pos int64) *Exon {
-	for i := range t.Exons {
-		if pos >= t.Exons[i].Start && pos <= t.Exons[i].End {
-			return &t.Exons[i]
+	n := len(t.Exons)
+	if n == 0 {
+		return nil
+	}
+	// Detect ordering: forward-strand exons are ascending, reverse-strand descending.
+	ascending := n < 2 || t.Exons[0].Start <= t.Exons[n-1].Start
+	lo, hi := 0, n-1
+	for lo <= hi {
+		mid := lo + (hi-lo)/2
+		e := &t.Exons[mid]
+		if pos >= e.Start && pos <= e.End {
+			return e
+		}
+		if ascending {
+			if pos < e.Start {
+				hi = mid - 1
+			} else {
+				lo = mid + 1
+			}
+		} else {
+			// Descending: higher Start values come first
+			if pos > e.End {
+				hi = mid - 1
+			} else {
+				lo = mid + 1
+			}
 		}
 	}
 	return nil
+}
+
+// FindNearestExonIdx returns the index of the exon nearest to pos using binary search.
+// Returns the index of the exon containing pos, or the nearest exon boundary.
+// Handles both ascending (forward-strand) and descending (reverse-strand) exon ordering.
+func (t *Transcript) FindNearestExonIdx(pos int64) int {
+	n := len(t.Exons)
+	if n == 0 {
+		return 0
+	}
+	ascending := n < 2 || t.Exons[0].Start <= t.Exons[n-1].Start
+	lo, hi := 0, n-1
+	for lo <= hi {
+		mid := lo + (hi-lo)/2
+		e := &t.Exons[mid]
+		if pos >= e.Start && pos <= e.End {
+			return mid // inside exon
+		}
+		if ascending {
+			if pos < e.Start {
+				hi = mid - 1
+			} else {
+				lo = mid + 1
+			}
+		} else {
+			if pos > e.End {
+				hi = mid - 1
+			} else {
+				lo = mid + 1
+			}
+		}
+	}
+	// pos is between exons. Return the closer one.
+	if lo >= n {
+		return n - 1
+	}
+	if hi < 0 {
+		return 0
+	}
+	distHi := pos - t.Exons[hi].End
+	if distHi < 0 {
+		distHi = -distHi
+	}
+	distLo := t.Exons[lo].Start - pos
+	if distLo < 0 {
+		distLo = -distLo
+	}
+	if distHi <= distLo {
+		return hi
+	}
+	return lo
 }
 
 // IsCoding returns true if the exon contains coding sequence.

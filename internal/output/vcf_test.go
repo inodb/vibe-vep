@@ -263,14 +263,15 @@ func TestVCFWriter_PreservesOriginalInfo(t *testing.T) {
 	}
 
 	v := &vcf.Variant{
-		Chrom:  "12",
-		Pos:    25245351,
-		ID:     ".",
-		Ref:    "C",
-		Alt:    "A",
-		Qual:   100,
-		Filter: "PASS",
-		Info:   map[string]interface{}{"DP": "50"},
+		Chrom:   "12",
+		Pos:     25245351,
+		ID:      ".",
+		Ref:     "C",
+		Alt:     "A",
+		Qual:    100,
+		Filter:  "PASS",
+		RawInfo: "DP=50",
+		Info:    map[string]interface{}{"DP": "50"},
 	}
 
 	ann := &annotate.Annotation{
@@ -331,6 +332,7 @@ func TestVCFWriter_SampleColumns(t *testing.T) {
 		Alt:           "A",
 		Qual:          100,
 		Filter:        "PASS",
+		RawInfo:       "DP=50",
 		Info:          map[string]interface{}{"DP": "50"},
 		SampleColumns: "GT:DP\t0/1:30\t0/0:20",
 	}

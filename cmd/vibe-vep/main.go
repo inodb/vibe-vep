@@ -531,6 +531,17 @@ func loadAlphaMissense(logger *zap.Logger, cacheDir, assembly string) (*alphamis
 		logger.Info("AlphaMissense data already loaded")
 	}
 
+	// Preload into memory for fast lookups (eliminates per-variant DuckDB overhead)
+	logger.Info("preloading AlphaMissense data into memory...")
+	start := time.Now()
+	if err := amStore.PreloadToMemory(); err != nil {
+		logger.Warn("could not preload AlphaMissense to memory, using DuckDB fallback", zap.Error(err))
+	} else {
+		logger.Info("preloaded AlphaMissense data",
+			zap.Int64("variants", amStore.MemCacheSize()),
+			zap.Duration("elapsed", time.Since(start)))
+	}
+
 	return amStore, nil
 }
 

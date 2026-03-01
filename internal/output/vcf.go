@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
@@ -38,12 +39,15 @@ type VCFWriter struct {
 	w           *bufio.Writer
 	headerLines []string // original VCF header lines (## and #CHROM)
 	sources     []annotate.AnnotationSource
+	sourceKeys  []string // pre-built Extra map keys for source columns
 
 	// Buffered state for the current variant.
-	currentKey  string                 // "chrom:pos" key for grouping
-	currentVars []*vcf.Variant         // variants seen for this key (may differ in alt)
-	annotations []*annotate.Annotation // buffered annotations
-	alts        []string               // unique alt alleles seen
+	currentChrom string                 // chromosome for grouping
+	currentPos   int64                  // position for grouping
+	hasVariant   bool                   // whether we have a buffered variant
+	currentVars  []*vcf.Variant         // variants seen for this key (may differ in alt)
+	annotations  []*annotate.Annotation // buffered annotations
+	alts         []string               // unique alt alleles seen
 }
 
 // NewVCFWriter creates a new VCF output writer.
@@ -57,6 +61,7 @@ func NewVCFWriter(w io.Writer, headerLines []string) *VCFWriter {
 // SetSources registers annotation sources whose fields will be included in CSQ.
 func (vw *VCFWriter) SetSources(sources []annotate.AnnotationSource) {
 	vw.sources = sources
+	vw.sourceKeys = buildSourceKeys(sources)
 }
 
 // WriteHeader writes the original VCF header lines with an inserted CSQ INFO line.
@@ -91,16 +96,16 @@ func (vw *VCFWriter) WriteHeader() error {
 // Write buffers an annotation for the given variant. When a new variant is
 // encountered (different chrom/pos), the previous variant's VCF line is flushed.
 func (vw *VCFWriter) Write(v *vcf.Variant, ann *annotate.Annotation) error {
-	key := fmt.Sprintf("%s:%d", v.Chrom, v.Pos)
-
-	if vw.currentKey != "" && vw.currentKey != key {
+	if vw.hasVariant && (vw.currentChrom != v.Chrom || vw.currentPos != v.Pos) {
 		if err := vw.flushVariant(); err != nil {
 			return err
 		}
 	}
 
-	if vw.currentKey == "" || vw.currentKey != key {
-		vw.currentKey = key
+	if !vw.hasVariant || vw.currentChrom != v.Chrom || vw.currentPos != v.Pos {
+		vw.currentChrom = v.Chrom
+		vw.currentPos = v.Pos
+		vw.hasVariant = true
 		vw.currentVars = nil
 		vw.annotations = nil
 		vw.alts = nil
@@ -126,7 +131,7 @@ func (vw *VCFWriter) Write(v *vcf.Variant, ann *annotate.Annotation) error {
 
 // Flush writes any buffered variant and flushes the underlying writer.
 func (vw *VCFWriter) Flush() error {
-	if vw.currentKey != "" {
+	if vw.hasVariant {
 		if err := vw.flushVariant(); err != nil {
 			return err
 		}
@@ -146,44 +151,58 @@ func (vw *VCFWriter) flushVariant() error {
 	// Reconstruct ALT (may be multi-allelic)
 	alt := strings.Join(vw.alts, ",")
 
-	// Format QUAL
-	qual := "."
+	// Reconstruct INFO field from raw string
+	info := vw.formatInfo(v.RawInfo)
+
+	// Build CSQ value and append to INFO
+	var lb strings.Builder
+	lb.Grow(256)
+
+	// Write VCF line fields
+	lb.WriteString(v.Chrom)
+	lb.WriteByte('\t')
+	lb.WriteString(strconv.FormatInt(v.Pos, 10))
+	lb.WriteByte('\t')
+	lb.WriteString(v.ID)
+	lb.WriteByte('\t')
+	lb.WriteString(v.Ref)
+	lb.WriteByte('\t')
+	lb.WriteString(alt)
+	lb.WriteByte('\t')
 	if v.Qual != 0 {
-		qual = fmt.Sprintf("%g", v.Qual)
-	}
-
-	// Reconstruct INFO field
-	info := vw.formatInfo(v.Info)
-
-	// Build CSQ value
-	var csqEntries []string
-	for _, ann := range vw.annotations {
-		csqEntries = append(csqEntries, vw.formatCSQEntry(ann))
-	}
-	csqValue := strings.Join(csqEntries, ",")
-
-	// Append CSQ to INFO
-	if info == "." {
-		info = "CSQ=" + csqValue
+		lb.WriteString(strconv.FormatFloat(v.Qual, 'g', -1, 64))
 	} else {
-		info = info + ";CSQ=" + csqValue
+		lb.WriteByte('.')
 	}
-
-	// Write VCF line
-	line := fmt.Sprintf("%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s",
-		v.Chrom, v.Pos, v.ID, v.Ref, alt, qual, v.Filter, info)
+	lb.WriteByte('\t')
+	lb.WriteString(v.Filter)
+	lb.WriteByte('\t')
+	if info == "." {
+		lb.WriteString("CSQ=")
+	} else {
+		lb.WriteString(info)
+		lb.WriteString(";CSQ=")
+	}
+	for i, ann := range vw.annotations {
+		if i > 0 {
+			lb.WriteByte(',')
+		}
+		vw.writeCSQEntry(&lb, ann)
+	}
 
 	// Append FORMAT + sample columns if present
 	if v.SampleColumns != "" {
-		line += "\t" + v.SampleColumns
+		lb.WriteByte('\t')
+		lb.WriteString(v.SampleColumns)
 	}
 
-	if _, err := vw.w.WriteString(line + "\n"); err != nil {
+	lb.WriteByte('\n')
+	if _, err := vw.w.WriteString(lb.String()); err != nil {
 		return err
 	}
 
 	// Reset buffer
-	vw.currentKey = ""
+	vw.hasVariant = false
 	vw.currentVars = nil
 	vw.annotations = nil
 	vw.alts = nil
@@ -191,85 +210,108 @@ func (vw *VCFWriter) flushVariant() error {
 	return nil
 }
 
-// formatInfo reconstructs the INFO field string from a parsed map,
-// excluding any existing CSQ field.
-func (vw *VCFWriter) formatInfo(info map[string]interface{}) string {
-	if len(info) == 0 {
+// formatInfo strips any existing CSQ field from the raw INFO string.
+func (vw *VCFWriter) formatInfo(rawInfo string) string {
+	if rawInfo == "" || rawInfo == "." {
 		return "."
 	}
 
-	var parts []string
-	for k, v := range info {
-		if k == "CSQ" {
-			continue // Don't carry forward old CSQ
-		}
-		if b, ok := v.(bool); ok && b {
-			parts = append(parts, k)
+	// Fast path: no CSQ field present
+	if !strings.Contains(rawInfo, "CSQ") {
+		return rawInfo
+	}
+
+	// Strip CSQ=... from the INFO string
+	var b strings.Builder
+	for rest := rawInfo; rest != ""; {
+		semi := strings.IndexByte(rest, ';')
+		var field string
+		if semi >= 0 {
+			field = rest[:semi]
+			rest = rest[semi+1:]
 		} else {
-			parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+			field = rest
+			rest = ""
 		}
+		if strings.HasPrefix(field, "CSQ=") || field == "CSQ" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte(';')
+		}
+		b.WriteString(field)
 	}
 
-	if len(parts) == 0 {
+	if b.Len() == 0 {
 		return "."
 	}
-	return strings.Join(parts, ";")
+	return b.String()
 }
 
-// formatCSQEntry formats a single annotation as a pipe-delimited CSQ entry.
-func (vw *VCFWriter) formatCSQEntry(ann *annotate.Annotation) string {
-	canonical := ""
-	if ann.IsCanonical {
-		canonical = "YES"
-	}
-
-	featureType := ""
+// writeCSQEntry writes a single annotation as a pipe-delimited CSQ entry to a builder.
+func (vw *VCFWriter) writeCSQEntry(b *strings.Builder, ann *annotate.Annotation) {
+	// Write core fields separated by |
+	b.WriteString(ann.Allele)
+	b.WriteByte('|')
+	b.WriteString(ann.Consequence)
+	b.WriteByte('|')
+	b.WriteString(ann.Impact)
+	b.WriteByte('|')
+	b.WriteString(ann.GeneName)
+	b.WriteByte('|')
+	b.WriteString(ann.GeneID)
+	b.WriteByte('|')
 	if ann.TranscriptID != "" {
-		featureType = "Transcript"
+		b.WriteString("Transcript")
 	}
-
-	cdsPos := ""
-	if ann.CDSPosition > 0 {
-		cdsPos = fmt.Sprintf("%d", ann.CDSPosition)
-	}
-
-	proteinPos := ""
-	if ann.ProteinPosition > 0 {
-		proteinPos = fmt.Sprintf("%d", ann.ProteinPosition)
-	}
-
-	cdnaPos := ""
+	b.WriteByte('|')
+	b.WriteString(ann.TranscriptID)
+	b.WriteByte('|')
+	b.WriteString(ann.Biotype)
+	b.WriteByte('|')
+	b.WriteString(ann.ExonNumber)
+	b.WriteByte('|')
+	b.WriteString(ann.IntronNumber)
+	b.WriteByte('|')
+	b.WriteString(ann.HGVSc)
+	b.WriteByte('|')
+	b.WriteString(ann.HGVSp)
+	b.WriteByte('|')
 	if ann.CDNAPosition > 0 {
-		cdnaPos = fmt.Sprintf("%d", ann.CDNAPosition)
+		b.WriteString(strconv.FormatInt(ann.CDNAPosition, 10))
+	}
+	b.WriteByte('|')
+	if ann.CDSPosition > 0 {
+		b.WriteString(strconv.FormatInt(ann.CDSPosition, 10))
+	}
+	b.WriteByte('|')
+	if ann.ProteinPosition > 0 {
+		b.WriteString(strconv.FormatInt(ann.ProteinPosition, 10))
+	}
+	b.WriteByte('|')
+	b.WriteString(ann.AminoAcidChange)
+	b.WriteByte('|')
+	b.WriteString(ann.CodonChange)
+	b.WriteByte('|')
+	if ann.IsCanonical {
+		b.WriteString("YES")
 	}
 
-	fields := []string{
-		ann.Allele,
-		ann.Consequence,
-		ann.Impact,
-		ann.GeneName,
-		ann.GeneID,
-		featureType,
-		ann.TranscriptID,
-		ann.Biotype,
-		ann.ExonNumber,
-		ann.IntronNumber,
-		ann.HGVSc,
-		ann.HGVSp,
-		cdnaPos,
-		cdsPos,
-		proteinPos,
-		ann.AminoAcidChange,
-		ann.CodonChange,
-		canonical,
+	// Append annotation source fields from Extra map using pre-built keys
+	for _, key := range vw.sourceKeys {
+		b.WriteByte('|')
+		b.WriteString(ann.GetExtraKey(key))
 	}
+}
 
-	// Append annotation source fields from Extra map
-	for _, src := range vw.sources {
+// buildSourceKeys pre-computes the Extra map keys for all source columns.
+func buildSourceKeys(sources []annotate.AnnotationSource) []string {
+	var keys []string
+	for _, src := range sources {
+		name := src.Name()
 		for _, col := range src.Columns() {
-			fields = append(fields, ann.GetExtra(src.Name(), col.Name))
+			keys = append(keys, name+"."+col.Name)
 		}
 	}
-
-	return strings.Join(fields, "|")
+	return keys
 }

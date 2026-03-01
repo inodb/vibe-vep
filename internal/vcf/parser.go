@@ -147,42 +147,69 @@ func (p *Parser) Next() (*Variant, error) {
 }
 
 // parseLine parses a single VCF data line into a Variant.
+// Uses index-based field scanning to avoid allocating a slice for all columns.
 func (p *Parser) parseLine(line string) (*Variant, error) {
-	fields := strings.Split(line, "\t")
-	if len(fields) < 8 {
+	// Find the first 8 tab-separated fields by scanning for tab positions.
+	var tabs [8]int // positions of first 8 tabs
+	found := 0
+	for i := 0; i < len(line) && found < 8; i++ {
+		if line[i] == '\t' {
+			tabs[found] = i
+			found++
+		}
+	}
+	if found < 7 {
 		return nil, &ParseError{
 			Line:    p.lineNumber,
-			Message: fmt.Sprintf("expected at least 8 columns, found %d", len(fields)),
+			Message: fmt.Sprintf("expected at least 8 columns, found %d", found+1),
 		}
 	}
 
-	pos, err := strconv.ParseInt(fields[1], 10, 64)
+	// Extract fields: [0..tab0), [tab0+1..tab1), ...
+	chrom := line[:tabs[0]]
+	posStr := line[tabs[0]+1 : tabs[1]]
+	id := line[tabs[1]+1 : tabs[2]]
+	ref := line[tabs[2]+1 : tabs[3]]
+	alt := line[tabs[3]+1 : tabs[4]]
+	qualStr := line[tabs[4]+1 : tabs[5]]
+	filter := line[tabs[5]+1 : tabs[6]]
+
+	// INFO field: from tab[6]+1 to tab[7] (or end of line if only 8 columns)
+	var rawInfo string
+	var sampleCols string
+	if found >= 8 {
+		rawInfo = line[tabs[6]+1 : tabs[7]]
+		// Everything after tab[7] is FORMAT + samples
+		if tabs[7]+1 < len(line) {
+			sampleCols = line[tabs[7]+1:]
+		}
+	} else {
+		rawInfo = line[tabs[6]+1:]
+	}
+
+	pos, err := strconv.ParseInt(posStr, 10, 64)
 	if err != nil {
 		return nil, &ParseError{
 			Line:    p.lineNumber,
-			Message: fmt.Sprintf("invalid position: %s", fields[1]),
+			Message: fmt.Sprintf("invalid position: %s", posStr),
 		}
 	}
 
 	qual := 0.0
-	if fields[5] != "." {
-		qual, _ = strconv.ParseFloat(fields[5], 64)
+	if qualStr != "." {
+		qual, _ = strconv.ParseFloat(qualStr, 64)
 	}
 
 	v := &Variant{
-		Chrom:  fields[0],
-		Pos:    pos,
-		ID:     fields[2],
-		Ref:    fields[3],
-		Alt:    fields[4],
-		Qual:   qual,
-		Filter: fields[6],
-		Info:   parseInfo(fields[7]),
-	}
-
-	// Capture FORMAT + sample columns if present
-	if len(fields) > 8 {
-		v.SampleColumns = strings.Join(fields[8:], "\t")
+		Chrom:         chrom,
+		Pos:           pos,
+		ID:            id,
+		Ref:           ref,
+		Alt:           alt,
+		Qual:          qual,
+		Filter:        filter,
+		RawInfo:       rawInfo,
+		SampleColumns: sampleCols,
 	}
 
 	return v, nil
@@ -225,7 +252,8 @@ func SplitMultiAllelic(v *Variant) []*Variant {
 			Alt:           alt,
 			Qual:          v.Qual,
 			Filter:        v.Filter,
-			Info:          v.Info, // Note: INFO is shared, may need deep copy for some use cases
+			Info:          v.Info,
+			RawInfo:       v.RawInfo,
 			SampleColumns: v.SampleColumns,
 		}
 	}

@@ -59,10 +59,11 @@ func (t *IntervalTree) FindOverlaps(pos int64) []*Transcript {
 	})
 	// hi is the first index with start > pos; candidates are [0, hi).
 
-	for i := 0; i < hi; i++ {
-		// Prune: if maxEnd[i] < pos, no interval from i onward can contain pos.
+	for i := hi - 1; i >= 0; i-- {
+		// Prune: maxEnd[i] is the max end for intervals[i:].
+		// If maxEnd[i] < pos, no interval from 0..i can contain pos.
 		if t.maxEnd[i] < pos {
-			continue
+			break
 		}
 		if t.intervals[i].end >= pos {
 			result = append(result, t.intervals[i].transcript)

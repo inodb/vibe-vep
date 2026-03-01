@@ -834,15 +834,23 @@ func isSpliceConsequence(conseq string) bool {
 // hgvspToShort converts 3-letter HGVSp notation to single-letter.
 // e.g., "p.Gly12Cys" → "p.G12C", "p.Ter130=" → "p.*130="
 func hgvspToShort(hgvsp string) string {
-	result := hgvsp
-	for single, three := range annotate.AminoAcidSingleToThree {
-		if single == '*' {
-			result = strings.ReplaceAll(result, three, "*")
-		} else {
-			result = strings.ReplaceAll(result, three, string(single))
-		}
+	if len(hgvsp) == 0 {
+		return hgvsp
 	}
-	return result
+	var b strings.Builder
+	b.Grow(len(hgvsp))
+	for i := 0; i < len(hgvsp); {
+		if i+3 <= len(hgvsp) {
+			if single, ok := annotate.AminoAcidThreeToSingle[hgvsp[i:i+3]]; ok {
+				b.WriteByte(single)
+				i += 3
+				continue
+			}
+		}
+		b.WriteByte(hgvsp[i])
+		i++
+	}
+	return b.String()
 }
 
 // hgvspChangeType extracts the amino acid change signature from a single-letter

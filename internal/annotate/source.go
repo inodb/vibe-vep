@@ -29,16 +29,26 @@ var CoreColumns = []ColumnDef{
 
 // SetExtra sets a value in the annotation's Extra map.
 func (a *Annotation) SetExtra(source, field, value string) {
+	a.SetExtraKey(source+"."+field, value)
+}
+
+// SetExtraKey sets a value in the annotation's Extra map using a pre-built key.
+func (a *Annotation) SetExtraKey(key, value string) {
 	if a.Extra == nil {
 		a.Extra = make(map[string]string)
 	}
-	a.Extra[source+"."+field] = value
+	a.Extra[key] = value
 }
 
 // GetExtra returns a value from the annotation's Extra map.
 func (a *Annotation) GetExtra(source, field string) string {
+	return a.GetExtraKey(source + "." + field)
+}
+
+// GetExtraKey returns a value from the annotation's Extra map using a pre-built key.
+func (a *Annotation) GetExtraKey(key string) string {
 	if a.Extra == nil {
 		return ""
 	}
-	return a.Extra[source+"."+field]
+	return a.Extra[key]
 }

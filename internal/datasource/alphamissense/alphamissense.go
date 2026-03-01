@@ -13,10 +13,50 @@ import (
 	_ "github.com/marcboeker/go-duckdb"
 )
 
+// amEntry is a compact in-memory representation of an AlphaMissense variant.
+// Uses 16 bytes per entry (with padding) instead of ~100+ bytes for a map entry.
+type amEntry struct {
+	pos    int64
+	refAlt uint8   // encodeBase(ref)<<2 | encodeBase(alt)
+	score  float32
+	class  uint8   // 0=likely_benign, 1=ambiguous, 2=likely_pathogenic
+}
+
+func encodeBase(b byte) uint8 {
+	switch b {
+	case 'A', 'a':
+		return 0
+	case 'C', 'c':
+		return 1
+	case 'G', 'g':
+		return 2
+	case 'T', 't':
+		return 3
+	}
+	return 0
+}
+
+func encodeClass(class string) uint8 {
+	switch class {
+	case "likely_benign":
+		return 0
+	case "ambiguous":
+		return 1
+	case "likely_pathogenic":
+		return 2
+	}
+	return 1
+}
+
+var classNames = [3]string{"likely_benign", "ambiguous", "likely_pathogenic"}
+
 // Store provides AlphaMissense score lookups backed by DuckDB.
 type Store struct {
 	db       *sql.DB
 	lookupPS *sql.Stmt // prepared statement for Lookup, lazily initialized
+
+	// In-memory cache: sorted slices per chromosome for O(log n) lookup.
+	memCache map[string][]amEntry
 }
 
 // Open opens or creates a DuckDB database for AlphaMissense data at the given path.
@@ -115,9 +155,95 @@ type Result struct {
 	Class string
 }
 
+// PreloadToMemory loads all AlphaMissense data from DuckDB into sorted in-memory
+// slices for O(log n) lookup without database overhead. Uses ~1.2GB for 72M variants.
+func (s *Store) PreloadToMemory() error {
+	rows, err := s.db.Query("SELECT DISTINCT chrom, pos, ref, alt, am_pathogenicity, am_class FROM alphamissense ORDER BY chrom, pos")
+	if err != nil {
+		return fmt.Errorf("query alphamissense for preload: %w", err)
+	}
+	defer rows.Close()
+
+	cache := make(map[string][]amEntry)
+	for rows.Next() {
+		var chrom, ref, alt, class string
+		var pos int64
+		var score float32
+		if err := rows.Scan(&chrom, &pos, &ref, &alt, &score, &class); err != nil {
+			return fmt.Errorf("scan preload row: %w", err)
+		}
+		if len(ref) != 1 || len(alt) != 1 {
+			continue // skip non-SNV entries
+		}
+		entry := amEntry{
+			pos:    pos,
+			refAlt: encodeBase(ref[0])<<2 | encodeBase(alt[0]),
+			score:  score,
+			class:  encodeClass(class),
+		}
+		cache[chrom] = append(cache[chrom], entry)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("preload rows: %w", err)
+	}
+
+	s.memCache = cache
+	return nil
+}
+
+// MemCacheSize returns the number of variants in the in-memory cache, or 0 if not loaded.
+func (s *Store) MemCacheSize() int64 {
+	if s.memCache == nil {
+		return 0
+	}
+	var n int64
+	for _, entries := range s.memCache {
+		n += int64(len(entries))
+	}
+	return n
+}
+
 // Lookup queries the AlphaMissense score for a specific variant.
-// It lazily prepares the lookup statement for efficient repeated calls.
+// Uses in-memory cache if available, otherwise falls back to DuckDB.
 func (s *Store) Lookup(chrom string, pos int64, ref, alt string) (Result, bool) {
+	// Fast path: in-memory binary search
+	if s.memCache != nil {
+		entries := s.memCache[chrom]
+		if len(entries) == 0 {
+			return Result{}, false
+		}
+		if len(ref) != 1 || len(alt) != 1 {
+			return Result{}, false
+		}
+		target := encodeBase(ref[0])<<2 | encodeBase(alt[0])
+		// Binary search for pos
+		lo, hi := 0, len(entries)-1
+		for lo <= hi {
+			mid := lo + (hi-lo)/2
+			if entries[mid].pos < pos {
+				lo = mid + 1
+			} else if entries[mid].pos > pos {
+				hi = mid - 1
+			} else {
+				// Found pos, scan for matching ref/alt
+				// Check mid and neighbors (typically 3 entries per pos)
+				for i := mid; i >= 0 && entries[i].pos == pos; i-- {
+					if entries[i].refAlt == target {
+						return Result{Score: float64(entries[i].score), Class: classNames[entries[i].class]}, true
+					}
+				}
+				for i := mid + 1; i < len(entries) && entries[i].pos == pos; i++ {
+					if entries[i].refAlt == target {
+						return Result{Score: float64(entries[i].score), Class: classNames[entries[i].class]}, true
+					}
+				}
+				return Result{}, false
+			}
+		}
+		return Result{}, false
+	}
+
+	// Fallback: DuckDB prepared statement
 	if s.lookupPS == nil {
 		ps, err := s.db.Prepare(
 			"SELECT am_pathogenicity, am_class FROM alphamissense WHERE chrom=? AND pos=? AND ref=? AND alt=? LIMIT 1",

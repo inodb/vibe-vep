@@ -18,6 +18,7 @@ type MAFWriter struct {
 	headerLine string
 	columns    maf.ColumnIndices
 	sources    []annotate.AnnotationSource
+	sourceKeys []string // pre-built Extra map keys for source columns
 }
 
 // NewMAFWriter creates a new MAF writer that preserves all original columns.
@@ -32,6 +33,7 @@ func NewMAFWriter(w io.Writer, headerLine string, columns maf.ColumnIndices) *MA
 // SetSources registers annotation sources whose columns will be appended.
 func (m *MAFWriter) SetSources(sources []annotate.AnnotationSource) {
 	m.sources = sources
+	m.sourceKeys = buildSourceKeys(sources)
 }
 
 // WriteHeader writes the original MAF header line plus vibe.* columns.
@@ -75,15 +77,13 @@ func (m *MAFWriter) WriteRow(rawFields []string, ann *annotate.Annotation, v *vc
 		row = append(row, "", "", "", "", "", "", "")
 	}
 
-	// Annotation source columns
-	for _, src := range m.sources {
-		for _, col := range src.Columns() {
-			val := ""
-			if ann != nil {
-				val = ann.GetExtra(src.Name(), col.Name)
-			}
-			row = append(row, val)
+	// Annotation source columns using pre-built keys
+	for _, key := range m.sourceKeys {
+		val := ""
+		if ann != nil {
+			val = ann.GetExtraKey(key)
 		}
+		row = append(row, val)
 	}
 
 	_, err := m.w.WriteString(strings.Join(row, "\t") + "\n")

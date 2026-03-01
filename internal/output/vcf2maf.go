@@ -2,8 +2,8 @@ package output
 
 import (
 	"bufio"
-	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
@@ -45,11 +45,12 @@ var vcf2mafColumns = []string{
 
 // VCF2MAFWriter converts annotated VCF variants to MAF format.
 type VCF2MAFWriter struct {
-	w                *bufio.Writer
-	assembly         string
-	tumorSampleID    string
-	sources          []annotate.AnnotationSource
-	headerWritten    bool
+	w             *bufio.Writer
+	assembly      string
+	tumorSampleID string
+	sources       []annotate.AnnotationSource
+	sourceKeys    []string // pre-built Extra map keys for source columns
+	headerWritten bool
 }
 
 // NewVCF2MAFWriter creates a new VCF→MAF converter.
@@ -64,6 +65,7 @@ func NewVCF2MAFWriter(w io.Writer, assembly, tumorSampleID string) *VCF2MAFWrite
 // SetSources registers annotation sources whose columns will be appended.
 func (m *VCF2MAFWriter) SetSources(sources []annotate.AnnotationSource) {
 	m.sources = sources
+	m.sourceKeys = buildSourceKeys(sources)
 }
 
 // WriteHeader writes the MAF header line.
@@ -88,93 +90,95 @@ func (m *VCF2MAFWriter) WriteRow(v *vcf.Variant, ann *annotate.Annotation) error
 	ref, alt, start, end := VCFToMAFAlleles(v.Pos, v.Ref, v.Alt)
 	variantType := VariantType(ref, alt)
 
-	// dbSNP RS ID
-	dbSNP := ""
-	if v.ID != "" && v.ID != "." {
-		dbSNP = v.ID
+	var b strings.Builder
+	b.Grow(512)
+
+	first := true
+	writeField := func(s string) {
+		if !first {
+			b.WriteByte('\t')
+		}
+		first = false
+		b.WriteString(s)
 	}
 
-	// Annotation fields
-	hugoSymbol := ""
-	variantClass := ""
-	hgvsc := ""
-	hgvsp := ""
-	hgvspShort := ""
-	transcriptID := ""
-	exonNumber := ""
-	consequence := ""
-	impact := ""
-	biotype := ""
-	canonical := ""
-	proteinPos := ""
-	aminoAcids := ""
-	codons := ""
+	writeInt := func(n int64) {
+		b.WriteByte('\t')
+		first = false
+		b.WriteString(strconv.FormatInt(n, 10))
+	}
 
 	if ann != nil {
-		hugoSymbol = ann.GeneName
-		consequence = ann.Consequence
-		variantClass = SOToMAFClassification(ann.Consequence, v)
-		hgvsc = ann.HGVSc
-		hgvsp = ann.HGVSp
-		hgvspShort = hgvspToShort(ann.HGVSp)
-		transcriptID = ann.TranscriptID
-		exonNumber = ann.ExonNumber
-		impact = ann.Impact
-		biotype = ann.Biotype
+		writeField(ann.GeneName) // Hugo_Symbol
+	} else {
+		writeField("") // Hugo_Symbol
+	}
+	writeField("")         // Entrez_Gene_Id
+	writeField("")         // Center
+	writeField(m.assembly) // NCBI_Build
+	writeField(v.Chrom)    // Chromosome
+	writeInt(start)        // Start_Position
+	writeInt(end)          // End_Position
+	writeField("+")        // Strand
+
+	if ann != nil {
+		writeField(SOToMAFClassification(ann.Consequence, v)) // Variant_Classification
+	} else {
+		writeField("") // Variant_Classification
+	}
+	writeField(variantType) // Variant_Type
+	writeField(ref)         // Reference_Allele
+	writeField(ref)         // Tumor_Seq_Allele1
+	writeField(alt)         // Tumor_Seq_Allele2
+
+	// dbSNP RS ID
+	if v.ID != "" && v.ID != "." {
+		writeField(v.ID)
+	} else {
+		writeField("")
+	}
+	writeField("")              // dbSNP_Val_Status
+	writeField(m.tumorSampleID) // Tumor_Sample_Barcode
+	writeField("")              // Matched_Norm_Sample_Barcode
+
+	if ann != nil {
+		writeField(ann.HGVSc)              // HGVSc
+		writeField(ann.HGVSp)              // HGVSp
+		writeField(hgvspToShort(ann.HGVSp)) // HGVSp_Short
+		writeField(ann.TranscriptID)        // Transcript_ID
+		writeField(ann.ExonNumber)          // Exon_Number
+		writeField(ann.Consequence)         // Consequence
+		writeField(ann.Impact)              // IMPACT
+		writeField(ann.Biotype)             // BIOTYPE
 		if ann.IsCanonical {
-			canonical = "YES"
+			writeField("YES")
+		} else {
+			writeField("")
 		}
 		if ann.ProteinPosition > 0 {
-			proteinPos = fmt.Sprintf("%d", ann.ProteinPosition)
+			writeInt(ann.ProteinPosition)
+		} else {
+			writeField("")
 		}
-		aminoAcids = ann.AminoAcidChange
-		codons = ann.CodonChange
-	}
-
-	fields := []string{
-		hugoSymbol,         // Hugo_Symbol
-		"",                 // Entrez_Gene_Id
-		"",                 // Center
-		m.assembly,         // NCBI_Build
-		v.Chrom,            // Chromosome
-		fmt.Sprintf("%d", start), // Start_Position
-		fmt.Sprintf("%d", end),   // End_Position
-		"+",                // Strand
-		variantClass,       // Variant_Classification
-		variantType,        // Variant_Type
-		ref,                // Reference_Allele
-		ref,                // Tumor_Seq_Allele1
-		alt,                // Tumor_Seq_Allele2
-		dbSNP,              // dbSNP_RS
-		"",                 // dbSNP_Val_Status
-		m.tumorSampleID,    // Tumor_Sample_Barcode
-		"",                 // Matched_Norm_Sample_Barcode
-		hgvsc,              // HGVSc
-		hgvsp,              // HGVSp
-		hgvspShort,         // HGVSp_Short
-		transcriptID,       // Transcript_ID
-		exonNumber,         // Exon_Number
-		consequence,        // Consequence
-		impact,             // IMPACT
-		biotype,            // BIOTYPE
-		canonical,          // CANONICAL
-		proteinPos,         // Protein_position
-		aminoAcids,         // Amino_acids
-		codons,             // Codons
-	}
-
-	// Append source columns
-	for _, src := range m.sources {
-		for _, col := range src.Columns() {
-			val := ""
-			if ann != nil {
-				val = ann.GetExtra(src.Name(), col.Name)
-			}
-			fields = append(fields, val)
+		writeField(ann.AminoAcidChange) // Amino_acids
+		writeField(ann.CodonChange)     // Codons
+	} else {
+		for range 12 {
+			writeField("")
 		}
 	}
 
-	_, err := m.w.WriteString(strings.Join(fields, "\t") + "\n")
+	// Append source columns using pre-built keys
+	for _, key := range m.sourceKeys {
+		if ann != nil {
+			writeField(ann.GetExtraKey(key))
+		} else {
+			writeField("")
+		}
+	}
+
+	b.WriteByte('\n')
+	_, err := m.w.WriteString(b.String())
 	return err
 }
 

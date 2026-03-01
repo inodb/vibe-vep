@@ -904,15 +904,22 @@ func CDSToCodonPosition(cdsPos int64) (codonNumber int64, positionInCodon int) {
 // Forward strand: exon.End+1/+2 = donor, exon.Start-1/-2 = acceptor
 // Reverse strand: exon.Start-1/-2 = donor, exon.End+1/+2 = acceptor
 func spliceSiteType(pos int64, t *cache.Transcript) string {
-	for _, exon := range t.Exons {
-		// Positions after exon.End (intron side): +1, +2
+	idx := t.FindNearestExonIdx(pos)
+	if idx < 0 {
+		return ""
+	}
+	// Check the nearest exon and its immediate neighbors (pos is in the intron between exons).
+	for _, i := range [3]int{idx - 1, idx, idx + 1} {
+		if i < 0 || i >= len(t.Exons) {
+			continue
+		}
+		exon := &t.Exons[i]
 		if pos == exon.End+1 || pos == exon.End+2 {
 			if t.IsForwardStrand() {
 				return ConsequenceSpliceDonor
 			}
 			return ConsequenceSpliceAcceptor
 		}
-		// Positions before exon.Start (intron side): -1, -2
 		if pos == exon.Start-1 || pos == exon.Start-2 {
 			if t.IsForwardStrand() {
 				return ConsequenceSpliceAcceptor
@@ -1012,23 +1019,27 @@ func indelSpliceSiteType(v *vcf.Variant, t *cache.Transcript) string {
 // side of a splice site. The 1-2bp immediately into the intron are splice
 // donor/acceptor territory, not splice region.
 func isSpliceRegion(pos int64, t *cache.Transcript) bool {
-	for _, exon := range t.Exons {
+	idx := t.FindNearestExonIdx(pos)
+	if idx < 0 {
+		return false
+	}
+	// Check the nearest exon and its immediate neighbors.
+	for _, i := range [3]int{idx - 1, idx, idx + 1} {
+		if i < 0 || i >= len(t.Exons) {
+			continue
+		}
+		exon := &t.Exons[i]
 		// Near exon Start boundary
-		// Exon side: exon.Start, exon.Start+1, exon.Start+2
 		if pos >= exon.Start && pos <= exon.Start+2 {
 			return true
 		}
-		// Intron side: 3-8bp before exon start (skip ±1,±2 = splice donor/acceptor)
 		if pos >= exon.Start-8 && pos <= exon.Start-3 {
 			return true
 		}
-
 		// Near exon End boundary
-		// Exon side: exon.End-2, exon.End-1, exon.End
 		if pos >= exon.End-2 && pos <= exon.End {
 			return true
 		}
-		// Intron side: 3-8bp after exon end
 		if pos >= exon.End+3 && pos <= exon.End+8 {
 			return true
 		}
@@ -1046,16 +1057,22 @@ func nearestSpliceBoundaryProteinPos(pos int64, t *cache.Transcript) int64 {
 	// Find the closest exon boundary on the coding side of the splice site.
 	var boundaryGenomic int64
 	minDist := int64(1<<62 - 1)
-	for _, exon := range t.Exons {
+	idx := t.FindNearestExonIdx(pos)
+	if idx < 0 {
+		return 0
+	}
+	for _, i := range [3]int{idx - 1, idx, idx + 1} {
+		if i < 0 || i >= len(t.Exons) {
+			continue
+		}
+		exon := &t.Exons[i]
 		if !exon.IsCoding() {
 			continue
 		}
-		// Check exon.End boundary (splice site at End+1, End+2)
 		if d := abs64(pos - exon.End); d < minDist && d <= 2 {
 			minDist = d
 			boundaryGenomic = exon.CDSEnd
 		}
-		// Check exon.Start boundary (splice site at Start-1, Start-2)
 		if d := abs64(pos - exon.Start); d < minDist && d <= 2 {
 			minDist = d
 			boundaryGenomic = exon.CDSStart
