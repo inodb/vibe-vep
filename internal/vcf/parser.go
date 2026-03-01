@@ -13,11 +13,12 @@ import (
 
 // Parser reads variants from a VCF file.
 type Parser struct {
-	reader     *bufio.Reader
-	file       *os.File
-	gzipReader *gzip.Reader
-	lineNumber int
-	header     []string
+	reader      *bufio.Reader
+	file        *os.File
+	gzipReader  *gzip.Reader
+	lineNumber  int
+	header      []string
+	sampleNames []string // sample names from #CHROM header line
 }
 
 // NewParser creates a new VCF parser for the given file.
@@ -104,6 +105,11 @@ func (p *Parser) parseHeader() error {
 
 		if strings.HasPrefix(line, "#CHROM") {
 			p.header = append(p.header, line)
+			// Extract sample names from columns after FORMAT (index 9+)
+			fields := strings.Split(line, "\t")
+			if len(fields) > 9 {
+				p.sampleNames = fields[9:]
+			}
 			return nil
 		}
 
@@ -174,6 +180,11 @@ func (p *Parser) parseLine(line string) (*Variant, error) {
 		Info:   parseInfo(fields[7]),
 	}
 
+	// Capture FORMAT + sample columns if present
+	if len(fields) > 8 {
+		v.SampleColumns = strings.Join(fields[8:], "\t")
+	}
+
 	return v, nil
 }
 
@@ -207,14 +218,15 @@ func SplitMultiAllelic(v *Variant) []*Variant {
 	variants := make([]*Variant, len(alts))
 	for i, alt := range alts {
 		variants[i] = &Variant{
-			Chrom:  v.Chrom,
-			Pos:    v.Pos,
-			ID:     v.ID,
-			Ref:    v.Ref,
-			Alt:    alt,
-			Qual:   v.Qual,
-			Filter: v.Filter,
-			Info:   v.Info, // Note: INFO is shared, may need deep copy for some use cases
+			Chrom:         v.Chrom,
+			Pos:           v.Pos,
+			ID:            v.ID,
+			Ref:           v.Ref,
+			Alt:           alt,
+			Qual:          v.Qual,
+			Filter:        v.Filter,
+			Info:          v.Info, // Note: INFO is shared, may need deep copy for some use cases
+			SampleColumns: v.SampleColumns,
 		}
 	}
 
@@ -224,6 +236,12 @@ func SplitMultiAllelic(v *Variant) []*Variant {
 // Header returns the VCF header lines.
 func (p *Parser) Header() []string {
 	return p.header
+}
+
+// SampleNames returns sample names from the #CHROM header line.
+// Returns nil if no sample columns are present.
+func (p *Parser) SampleNames() []string {
+	return p.sampleNames
 }
 
 // LineNumber returns the current line number being processed.

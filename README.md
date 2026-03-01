@@ -9,8 +9,9 @@ An experiment in vibe coding a lightweight variant effect predictor for use by t
 - **VCF/MAF Parsing**: Annotate variants from VCF or MAF files
 - **GENCODE Annotations**: Uses GENCODE GTF/FASTA (~95MB download vs 17GB VEP cache)
 - **Consequence Prediction**: Classifies variants using Sequence Ontology terms
-- **Validation Mode**: Compare existing MAF annotations against predictions
-- **Fast**: ~4,000 variants/sec end-to-end (parse + annotate + write), single-threaded (see [validation report](testdata/tcga/validation_report.md))
+- **Validation Mode**: Compare existing MAF annotations against predictions (`vibe-vep compare`)
+- **VCF→MAF Conversion**: Convert VCF files to MAF format with annotations (`vibe-vep convert vcf2maf`)
+- **Fast**: ~14,000 variants/sec parallel (4 workers), ~5,000 single-threaded (see [validation report](testdata/tcga/validation_report.md))
 
 ## Installation
 
@@ -44,13 +45,16 @@ This downloads ~95MB of annotation data to `~/.vibe-vep/`.
 
 ```bash
 # Annotate a VCF file
-vibe-vep annotate input.vcf
+vibe-vep annotate vcf input.vcf
 
 # Annotate a MAF file
-vibe-vep annotate input.maf
+vibe-vep annotate maf input.maf
 
 # Output to file
-vibe-vep annotate -o output.txt input.vcf
+vibe-vep annotate vcf -o output.vcf input.vcf
+
+# Convert VCF to MAF
+vibe-vep convert vcf2maf input.vcf
 ```
 
 ### 3. Validate MAF Annotations
@@ -58,7 +62,7 @@ vibe-vep annotate -o output.txt input.vcf
 Compare existing MAF annotations against VEP predictions:
 
 ```bash
-vibe-vep annotate --validate data_mutations.txt
+vibe-vep compare data_mutations.txt
 ```
 
 ## Usage
@@ -67,18 +71,23 @@ vibe-vep annotate --validate data_mutations.txt
 vibe-vep - Variant Effect Predictor
 
 Commands:
-  annotate    Annotate variants in a VCF or MAF file
+  annotate    Annotate variants (vcf, maf, or variant subcommands)
+  compare     Compare MAF annotations against predictions
   config      Manage configuration (show/set/get)
+  convert     Convert between formats (vcf2maf)
   download    Download GENCODE annotation files
-  help        Show help message
+  prepare     Build transcript cache for fast startup
+  version     Show version and data source information
 
 Annotate Options:
   --assembly      Genome assembly: GRCh37 or GRCh38 (default: GRCh38)
-  --validate      Validate MAF annotations against predictions
-  --validate-all  Show all variants in validation (default: mismatches only)
-  -f, --output-format   Output format: vcf, maf (default: auto-detect from input)
   -o, --output    Output file (default: stdout)
   --canonical     Only report canonical transcript annotations
+  --pick          One annotation per variant (best transcript)
+  --most-severe   One annotation per variant (highest impact)
+  --save-results  Save annotation results to DuckDB for later lookup
+  --no-cache      Skip transcript cache, always load from GTF/FASTA
+  --clear-cache   Clear and rebuild transcript and variant caches
 
 Download Options:
   --assembly      Genome assembly: GRCh37 or GRCh38 (default: GRCh38)
@@ -92,7 +101,7 @@ Download Options:
 The repository includes a small [example VCF](examples/example.vcf) containing the KRAS G12C (p.Gly12Cys) hotspot mutation:
 
 ```bash
-vibe-vep annotate examples/example.vcf
+vibe-vep annotate vcf examples/example.vcf
 ```
 
 VCF input produces VCF output by default — the original VCF lines are preserved and a `CSQ` INFO field is added with consequence annotations for all overlapping transcripts (canonical flagged with `YES`):
@@ -109,7 +118,7 @@ VCF input produces VCF output by default — the original VCF lines are preserve
 The repository also includes a small [example MAF](examples/example.maf) with the same KRAS G12C variant:
 
 ```bash
-vibe-vep annotate examples/example.maf
+vibe-vep annotate maf examples/example.maf
 ```
 
 When the input is MAF, the output defaults to MAF format — all original columns are preserved and annotation columns are updated with fresh VEP predictions:
@@ -123,13 +132,19 @@ KRAS         3845            .       ...  missense_variant  Missense_Mutation   
 
 ```bash
 # Validate TCGA MAF file
-vibe-vep annotate --validate data_mutations.txt
+vibe-vep compare data_mutations.txt
 
 # Show all validation results (not just mismatches)
-vibe-vep annotate --validate --validate-all data_mutations.txt
+vibe-vep compare --all data_mutations.txt
 
 # Annotate with GRCh37
-vibe-vep annotate --assembly GRCh37 sample.vcf
+vibe-vep annotate vcf --assembly GRCh37 sample.vcf
+
+# Pick one annotation per variant (best transcript)
+vibe-vep annotate vcf --pick input.vcf
+
+# Convert VCF to MAF format
+vibe-vep convert vcf2maf input.vcf -o output.maf
 ```
 
 ## Consequence Prediction
@@ -176,7 +191,7 @@ For `miRNA` biotype transcripts, exonic variants are classified as `mature_miRNA
 
 ### How Validation Works
 
-The `--validate` flag compares existing MAF annotations against fresh predictions. For each MAF variant, the tool:
+The `vibe-vep compare` command compares existing MAF annotations against fresh predictions. For each MAF variant, the tool:
 
 1. Parses the variant and its existing annotation (consequence, gene, transcript ID)
 2. Re-annotates the variant against all overlapping GENCODE transcripts
@@ -253,16 +268,28 @@ Canonical transcripts are flagged with `CANONICAL=YES`.
 
 ### MAF output (default for MAF input)
 
-When the input is a MAF file, vibe-vep outputs MAF format by default. All original columns are preserved and annotation columns (`Hugo_Symbol`, `Consequence`, `Variant_Classification`, `HGVSp`, `HGVSp_Short`, `HGVSc`, `Transcript_ID`) are updated with fresh VEP predictions. Original values are kept when VEP has no prediction (e.g., intergenic variants).
+When the input is a MAF file, vibe-vep outputs MAF format by default. All original columns are preserved exactly as-is, and `vibe.*` namespaced columns are appended with fresh predictions:
 
-When an [OncoKB cancer gene list](https://www.oncokb.org/cancerGenes) is configured, a `Gene_Type` column is appended with oncogene/TSG classification (see [Configuration](#configuration)).
+| Column | Description |
+|--------|-------------|
+| `vibe.hugo_symbol` | Gene symbol |
+| `vibe.consequence` | SO consequence term |
+| `vibe.variant_classification` | MAF variant classification |
+| `vibe.transcript_id` | Ensembl transcript ID |
+| `vibe.hgvsc` | HGVS coding DNA notation |
+| `vibe.hgvsp` | HGVS protein notation (3-letter) |
+| `vibe.hgvsp_short` | HGVS protein notation (1-letter) |
+
+When annotation sources are configured, additional `vibe.{source}.{column}` columns are appended (e.g., `vibe.oncokb.gene_type`, `vibe.alphamissense.score`).
+
+Use `vibe-vep version --maf-columns` to see the full column mapping.
 
 ## Performance
 
-- **End-to-end throughput**: ~4,000 variants/sec (MAF parse + annotate + compare + write, single-threaded)
+- **End-to-end throughput**: ~14,000 variants/sec parallel (4 workers), ~5,000 single-threaded
 - **Cache loading**: ~25 seconds to load 254k GENCODE v46 transcripts
 - **Memory**: Proportional to transcript count (~254k for GENCODE v46)
-- **Total benchmark**: 1,052,366 variants across 7 TCGA studies in ~4.5 minutes
+- **Total benchmark**: 1,052,366 variants across 7 TCGA studies
 
 ## Configuration
 
@@ -297,14 +324,17 @@ go test ./...
 # Run benchmarks
 go test ./internal/annotate/ -bench .
 
-# Build
-go build -o vibe-vep ./cmd/vibe-vep
+# Build (CGO_ENABLED=1 required for DuckDB)
+CGO_ENABLED=1 go build -o vibe-vep ./cmd/vibe-vep
 
 # Download TCGA test data for validation (~1.6GB)
 make download-testdata
 
 # Run validation against TCGA data
-vibe-vep annotate --validate testdata/tcga/chol_tcga_gdc_data_mutations.txt
+vibe-vep compare testdata/tcga/chol_tcga_gdc_data_mutations.txt
+
+# Run full validation benchmark
+go test ./internal/output/ -run TestValidationBenchmark -v -count=1 -timeout 30m
 ```
 
 ## Roadmap
@@ -314,6 +344,8 @@ vibe-vep annotate --validate testdata/tcga/chol_tcga_gdc_data_mutations.txt
   - [x] HGVSp/HGVSc notation (94.8%/98.6% match rates)
   - [x] Full MAF output format (all required columns)
   - [x] Cancer gene annotations (OncoKB oncogene/TSG classification)
+  - [x] VCF→MAF conversion (`vibe-vep convert vcf2maf`)
+  - [x] `--pick` / `--most-severe` annotation filtering
 - [ ] **Additional annotation sources** — Pathogenicity predictions and external databases
   - [x] AlphaMissense pathogenicity scores (CC BY 4.0, Google DeepMind)
   - [ ] SIFT predictions (tolerated/deleterious)

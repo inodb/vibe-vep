@@ -205,6 +205,117 @@ func TestCategorizeHGVSc(t *testing.T) {
 	}
 }
 
+func TestPickBestAnnotation(t *testing.T) {
+	tests := []struct {
+		name string
+		anns []*annotate.Annotation
+		want string // expected TranscriptID
+	}{
+		{
+			name: "empty",
+			anns: nil,
+			want: "",
+		},
+		{
+			name: "single",
+			anns: []*annotate.Annotation{{TranscriptID: "T1"}},
+			want: "T1",
+		},
+		{
+			name: "prefer canonical",
+			anns: []*annotate.Annotation{
+				{TranscriptID: "T1", Impact: "HIGH", Biotype: "protein_coding"},
+				{TranscriptID: "T2", Impact: "MODERATE", Biotype: "protein_coding", IsCanonical: true},
+			},
+			want: "T2",
+		},
+		{
+			name: "prefer protein-coding over non-coding",
+			anns: []*annotate.Annotation{
+				{TranscriptID: "T1", Impact: "HIGH", Biotype: "retained_intron"},
+				{TranscriptID: "T2", Impact: "MODERATE", Biotype: "protein_coding"},
+			},
+			want: "T2",
+		},
+		{
+			name: "prefer higher impact when both coding",
+			anns: []*annotate.Annotation{
+				{TranscriptID: "T1", Impact: "MODERATE", Biotype: "protein_coding"},
+				{TranscriptID: "T2", Impact: "HIGH", Biotype: "protein_coding"},
+			},
+			want: "T2",
+		},
+		{
+			name: "prefer HGVSp when all else equal",
+			anns: []*annotate.Annotation{
+				{TranscriptID: "T1", Impact: "MODERATE", Biotype: "protein_coding"},
+				{TranscriptID: "T2", Impact: "MODERATE", Biotype: "protein_coding", HGVSp: "p.G12C"},
+			},
+			want: "T2",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := PickBestAnnotation(tt.anns)
+			if tt.want == "" {
+				assert.Nil(t, result)
+			} else {
+				require.NotNil(t, result)
+				assert.Equal(t, tt.want, result.TranscriptID)
+			}
+		})
+	}
+}
+
+func TestPickMostSevere(t *testing.T) {
+	tests := []struct {
+		name string
+		anns []*annotate.Annotation
+		want string
+	}{
+		{
+			name: "empty",
+			anns: nil,
+			want: "",
+		},
+		{
+			name: "prefer highest impact",
+			anns: []*annotate.Annotation{
+				{TranscriptID: "T1", Impact: "MODERATE", Biotype: "protein_coding", IsCanonical: true},
+				{TranscriptID: "T2", Impact: "HIGH", Biotype: "retained_intron"},
+			},
+			want: "T2",
+		},
+		{
+			name: "tie-break canonical",
+			anns: []*annotate.Annotation{
+				{TranscriptID: "T1", Impact: "HIGH", Biotype: "protein_coding"},
+				{TranscriptID: "T2", Impact: "HIGH", Biotype: "protein_coding", IsCanonical: true},
+			},
+			want: "T2",
+		},
+		{
+			name: "tie-break protein-coding",
+			anns: []*annotate.Annotation{
+				{TranscriptID: "T1", Impact: "MODERATE", Biotype: "retained_intron"},
+				{TranscriptID: "T2", Impact: "MODERATE", Biotype: "protein_coding"},
+			},
+			want: "T2",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := PickMostSevere(tt.anns)
+			if tt.want == "" {
+				assert.Nil(t, result)
+			} else {
+				require.NotNil(t, result)
+				assert.Equal(t, tt.want, result.TranscriptID)
+			}
+		})
+	}
+}
+
 func TestCompareWriter_AllColumns(t *testing.T) {
 	var buf bytes.Buffer
 	cols := map[string]bool{"consequence": true, "hgvsp": true, "hgvsc": true}

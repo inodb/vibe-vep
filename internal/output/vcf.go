@@ -173,6 +173,11 @@ func (vw *VCFWriter) flushVariant() error {
 	line := fmt.Sprintf("%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s",
 		v.Chrom, v.Pos, v.ID, v.Ref, alt, qual, v.Filter, info)
 
+	// Append FORMAT + sample columns if present
+	if v.SampleColumns != "" {
+		line += "\t" + v.SampleColumns
+	}
+
 	if _, err := vw.w.WriteString(line + "\n"); err != nil {
 		return err
 	}

@@ -11,6 +11,8 @@ type Cache struct {
 	transcripts map[string][]*Transcript
 	// geneIndex maps gene name to transcripts (built lazily)
 	geneIndex map[string][]*Transcript
+	// trees stores interval trees indexed by chromosome (built by BuildIndex)
+	trees map[string]*IntervalTree
 }
 
 // New creates a new empty cache.
@@ -28,8 +30,26 @@ func (c *Cache) AddTranscript(t *Transcript) {
 	c.geneIndex = nil
 }
 
+// BuildIndex builds interval trees for all chromosomes for O(log n + k) lookup.
+// Should be called after all transcripts are loaded.
+func (c *Cache) BuildIndex() {
+	c.trees = make(map[string]*IntervalTree, len(c.transcripts))
+	for chrom, txs := range c.transcripts {
+		c.trees[chrom] = BuildIntervalTree(txs)
+	}
+}
+
 // FindTranscripts returns all transcripts that overlap a given genomic position.
 func (c *Cache) FindTranscripts(chrom string, pos int64) []*Transcript {
+	// Use interval tree if built
+	if c.trees != nil {
+		if tree, ok := c.trees[chrom]; ok {
+			return tree.FindOverlaps(pos)
+		}
+		return nil
+	}
+
+	// Fallback to linear scan
 	transcripts, ok := c.transcripts[chrom]
 	if !ok {
 		return nil

@@ -3,6 +3,7 @@ package annotate
 import (
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
@@ -66,8 +67,23 @@ func (a *Annotator) ParallelAnnotate(items <-chan WorkItem, workers int) <-chan 
 // as soon as the next expected sequence number is available.
 // Blocks until the results channel is closed.
 func OrderedCollect(results <-chan WorkResult, fn func(WorkResult) error) error {
+	return OrderedCollectWithProgress(results, 0, nil, fn)
+}
+
+// OrderedCollectWithProgress is like OrderedCollect but periodically calls
+// progress with the number of variants processed so far.
+// If interval is 0 or progress is nil, no progress reporting is done.
+func OrderedCollectWithProgress(results <-chan WorkResult, interval time.Duration, progress func(int), fn func(WorkResult) error) error {
 	pending := make(map[int]WorkResult)
 	nextSeq := 0
+
+	var ticker *time.Ticker
+	var tickC <-chan time.Time
+	if interval > 0 && progress != nil {
+		ticker = time.NewTicker(interval)
+		tickC = ticker.C
+		defer ticker.Stop()
+	}
 
 	for r := range results {
 		pending[r.Seq] = r
@@ -84,6 +100,15 @@ func OrderedCollect(results <-chan WorkResult, fn func(WorkResult) error) error 
 				for range results {
 				}
 				return err
+			}
+		}
+
+		// Check if we should report progress (non-blocking)
+		if tickC != nil {
+			select {
+			case <-tickC:
+				progress(nextSeq)
+			default:
 			}
 		}
 	}

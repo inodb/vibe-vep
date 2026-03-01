@@ -694,6 +694,47 @@ func SelectBestAnnotation(mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotat
 	return bestAnn
 }
 
+// PickBestAnnotation selects the best annotation without MAF context.
+// Priority: canonical > protein-coding > highest impact > has HGVSp.
+func PickBestAnnotation(anns []*annotate.Annotation) *annotate.Annotation {
+	if len(anns) == 0 {
+		return nil
+	}
+	best := anns[0]
+	for _, ann := range anns[1:] {
+		if AnnotationBetter(ann, best) {
+			best = ann
+		}
+	}
+	return best
+}
+
+// PickMostSevere selects the highest-impact annotation.
+// Tie-breaks: canonical > protein-coding.
+func PickMostSevere(anns []*annotate.Annotation) *annotate.Annotation {
+	if len(anns) == 0 {
+		return nil
+	}
+	best := anns[0]
+	for _, ann := range anns[1:] {
+		annImpact := annotate.ImpactRank(ann.Impact)
+		bestImpact := annotate.ImpactRank(best.Impact)
+		if annImpact > bestImpact {
+			best = ann
+		} else if annImpact == bestImpact {
+			// Tie-break: canonical > protein-coding
+			if ann.IsCanonical && !best.IsCanonical {
+				best = ann
+			} else if ann.IsCanonical == best.IsCanonical {
+				if isProteinCodingBiotype(ann.Biotype) && !isProteinCodingBiotype(best.Biotype) {
+					best = ann
+				}
+			}
+		}
+	}
+	return best
+}
+
 // AnnotationBetter returns true if ann is a better pick than current for comparison.
 // Priority: canonical > protein-coding biotype > higher impact > has HGVSp.
 func AnnotationBetter(ann, current *annotate.Annotation) bool {

@@ -311,6 +311,62 @@ func TestVCFWriter_PreservesOriginalInfo(t *testing.T) {
 	}
 }
 
+func TestVCFWriter_SampleColumns(t *testing.T) {
+	headers := []string{
+		"##fileformat=VCFv4.2",
+		"#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tTUMOR\tNORMAL",
+	}
+
+	var buf bytes.Buffer
+	w := NewVCFWriter(&buf, headers)
+	if err := w.WriteHeader(); err != nil {
+		t.Fatal(err)
+	}
+
+	v := &vcf.Variant{
+		Chrom:         "12",
+		Pos:           25245351,
+		ID:            ".",
+		Ref:           "C",
+		Alt:           "A",
+		Qual:          100,
+		Filter:        "PASS",
+		Info:          map[string]interface{}{"DP": "50"},
+		SampleColumns: "GT:DP\t0/1:30\t0/0:20",
+	}
+
+	ann := &annotate.Annotation{
+		Allele:       "A",
+		Consequence:  "missense_variant",
+		Impact:       "MODERATE",
+		GeneName:     "KRAS",
+		TranscriptID: "ENST00000311936",
+		Biotype:      "protein_coding",
+	}
+
+	if err := w.Write(v, ann); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	out := buf.String()
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	dataLine := lines[len(lines)-1]
+
+	// Should end with FORMAT + sample columns
+	if !strings.HasSuffix(dataLine, "GT:DP\t0/1:30\t0/0:20") {
+		t.Errorf("data line should end with sample columns, got: %s", dataLine)
+	}
+
+	// Should have 11 tab-separated fields (8 standard + FORMAT + 2 samples)
+	fields := strings.Split(dataLine, "\t")
+	if len(fields) != 11 {
+		t.Errorf("expected 11 fields, got %d", len(fields))
+	}
+}
+
 func TestVCFWriter_MultipleVariants(t *testing.T) {
 	headers := []string{
 		"##fileformat=VCFv4.2",

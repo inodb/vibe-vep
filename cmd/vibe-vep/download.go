@@ -19,22 +19,24 @@ import (
 // GENCODE FTP URLs
 const (
 	gencodeBaseURL = "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_46"
-	gencodeVersion = "v46"
+
+	// GencodeVersion is the GENCODE release version used for annotations.
+	GencodeVersion = "v46"
 )
 
 // getGENCODEURLs returns the GTF and FASTA URLs for the given assembly.
 func getGENCODEURLs(assembly string) (gtfURL, fastaURL string) {
 	switch strings.ToUpper(assembly) {
 	case "GRCH37":
-		gtfURL = fmt.Sprintf("%s/GRCh37_mapping/gencode.%slift37.annotation.gtf.gz", gencodeBaseURL, gencodeVersion)
-		fastaURL = fmt.Sprintf("%s/GRCh37_mapping/gencode.%slift37.pc_transcripts.fa.gz", gencodeBaseURL, gencodeVersion)
+		gtfURL = fmt.Sprintf("%s/GRCh37_mapping/gencode.%slift37.annotation.gtf.gz", gencodeBaseURL, GencodeVersion)
+		fastaURL = fmt.Sprintf("%s/GRCh37_mapping/gencode.%slift37.pc_transcripts.fa.gz", gencodeBaseURL, GencodeVersion)
 	case "GRCH38":
-		gtfURL = fmt.Sprintf("%s/gencode.%s.annotation.gtf.gz", gencodeBaseURL, gencodeVersion)
-		fastaURL = fmt.Sprintf("%s/gencode.%s.pc_transcripts.fa.gz", gencodeBaseURL, gencodeVersion)
+		gtfURL = fmt.Sprintf("%s/gencode.%s.annotation.gtf.gz", gencodeBaseURL, GencodeVersion)
+		fastaURL = fmt.Sprintf("%s/gencode.%s.pc_transcripts.fa.gz", gencodeBaseURL, GencodeVersion)
 	default:
 		// Default to GRCh38
-		gtfURL = fmt.Sprintf("%s/gencode.%s.annotation.gtf.gz", gencodeBaseURL, gencodeVersion)
-		fastaURL = fmt.Sprintf("%s/gencode.%s.pc_transcripts.fa.gz", gencodeBaseURL, gencodeVersion)
+		gtfURL = fmt.Sprintf("%s/gencode.%s.annotation.gtf.gz", gencodeBaseURL, GencodeVersion)
+		fastaURL = fmt.Sprintf("%s/gencode.%s.pc_transcripts.fa.gz", gencodeBaseURL, GencodeVersion)
 	}
 	return
 }
@@ -96,7 +98,7 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 
 	gtfURL, fastaURL := getGENCODEURLs(assembly)
 
-	fmt.Printf("Downloading GENCODE %s annotations for %s...\n", gencodeVersion, assembly)
+	fmt.Printf("Downloading GENCODE %s annotations for %s...\n", GencodeVersion, assembly)
 	fmt.Printf("Destination: %s\n\n", destDir)
 
 	// Download GTF

@@ -3,14 +3,15 @@ package vcf
 
 // Variant represents a single genomic variant from a VCF file.
 type Variant struct {
-	Chrom  string                 // Chromosome name (e.g., "12", "chr12")
-	Pos    int64                  // 1-based genomic position
-	ID     string                 // Variant identifier (e.g., rs ID)
-	Ref    string                 // Reference allele
-	Alt    string                 // Alternate allele (single allele after splitting)
-	Qual   float64                // Quality score
-	Filter string                 // Filter status (PASS or filter name)
-	Info   map[string]interface{} // INFO field key-value pairs
+	Chrom         string                 // Chromosome name (e.g., "12", "chr12")
+	Pos           int64                  // 1-based genomic position
+	ID            string                 // Variant identifier (e.g., rs ID)
+	Ref           string                 // Reference allele
+	Alt           string                 // Alternate allele (single allele after splitting)
+	Qual          float64                // Quality score
+	Filter        string                 // Filter status (PASS or filter name)
+	Info          map[string]interface{} // INFO field key-value pairs
+	SampleColumns string                 // Raw tab-joined FORMAT + sample columns (preserved, not parsed)
 }
 
 // IsSNV returns true if the variant is a single nucleotide variant.
