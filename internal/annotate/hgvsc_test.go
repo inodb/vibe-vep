@@ -276,12 +276,12 @@ func TestShiftDeletionThreePrime(t *testing.T) {
 
 func TestShiftInsertionThreePrime(t *testing.T) {
 	tests := []struct {
-		name       string
-		cdsSeq     string
-		insertSeq  string
-		anchorIdx  int
-		wantSeq    string
-		wantIdx    int
+		name      string
+		cdsSeq    string
+		insertSeq string
+		anchorIdx int
+		wantSeq   string
+		wantIdx   int
 	}{
 		{
 			name:      "shift through poly-A",

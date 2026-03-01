@@ -61,13 +61,22 @@ func (s *Store) WriteVariantResults(results []VariantResult) error {
 
 	for _, r := range deduped {
 		a := r.Ann
+		geneType := a.GetExtra("oncokb", "gene_type")
+		amScore := a.GetExtra("alphamissense", "score")
+		amClass := a.GetExtra("alphamissense", "class")
+
+		var amScoreF float32
+		if amScore != "" {
+			fmt.Sscanf(amScore, "%f", &amScoreF)
+		}
+
 		if err := appender.AppendRow(
 			r.Chrom, r.Pos, r.Ref, r.Alt, a.TranscriptID,
 			a.GeneName, a.GeneID, a.Consequence, a.Impact,
 			a.CDSPosition, a.ProteinPosition, a.AminoAcidChange, a.CodonChange,
 			a.IsCanonical, a.Allele, a.Biotype, a.ExonNumber, a.IntronNumber,
-			a.CDNAPosition, a.HGVSp, a.HGVSc, a.GeneType,
-			float32(a.AlphaMissenseScore), a.AlphaMissenseClass,
+			a.CDNAPosition, a.HGVSp, a.HGVSc, geneType,
+			amScoreF, amClass,
 		); err != nil {
 			return fmt.Errorf("append variant result: %w", err)
 		}
@@ -101,14 +110,25 @@ func (s *Store) LookupVariant(chrom string, pos int64, ref, alt string) ([]*anno
 	var anns []*annotate.Annotation
 	for rows.Next() {
 		var ann annotate.Annotation
+		var geneType, amClass string
+		var amScore float32
 		if err := rows.Scan(
 			&ann.TranscriptID, &ann.GeneName, &ann.GeneID, &ann.Consequence, &ann.Impact,
 			&ann.CDSPosition, &ann.ProteinPosition, &ann.AminoAcidChange, &ann.CodonChange,
 			&ann.IsCanonical, &ann.Allele, &ann.Biotype, &ann.ExonNumber, &ann.IntronNumber,
-			&ann.CDNAPosition, &ann.HGVSp, &ann.HGVSc, &ann.GeneType,
-			&ann.AlphaMissenseScore, &ann.AlphaMissenseClass,
+			&ann.CDNAPosition, &ann.HGVSp, &ann.HGVSc, &geneType,
+			&amScore, &amClass,
 		); err != nil {
 			return nil, fmt.Errorf("scan variant: %w", err)
+		}
+		if geneType != "" {
+			ann.SetExtra("oncokb", "gene_type", geneType)
+		}
+		if amScore > 0 {
+			ann.SetExtra("alphamissense", "score", fmt.Sprintf("%.4f", amScore))
+		}
+		if amClass != "" {
+			ann.SetExtra("alphamissense", "class", amClass)
 		}
 		ann.VariantID = annotate.FormatVariantID(chrom, pos, ref, alt)
 		anns = append(anns, &ann)
@@ -169,16 +189,28 @@ func scanVariantResults(rows interface {
 		var chrom, ref, alt string
 		var pos int64
 		var ann annotate.Annotation
+		var geneType, amClass string
+		var amScore float32
 
 		if err := rows.Scan(
 			&chrom, &pos, &ref, &alt, &ann.TranscriptID,
 			&ann.GeneName, &ann.GeneID, &ann.Consequence, &ann.Impact,
 			&ann.CDSPosition, &ann.ProteinPosition, &ann.AminoAcidChange, &ann.CodonChange,
 			&ann.IsCanonical, &ann.Allele, &ann.Biotype, &ann.ExonNumber, &ann.IntronNumber,
-			&ann.CDNAPosition, &ann.HGVSp, &ann.HGVSc, &ann.GeneType,
-			&ann.AlphaMissenseScore, &ann.AlphaMissenseClass,
+			&ann.CDNAPosition, &ann.HGVSp, &ann.HGVSc, &geneType,
+			&amScore, &amClass,
 		); err != nil {
 			return nil, fmt.Errorf("scan variant result: %w", err)
+		}
+
+		if geneType != "" {
+			ann.SetExtra("oncokb", "gene_type", geneType)
+		}
+		if amScore > 0 {
+			ann.SetExtra("alphamissense", "score", fmt.Sprintf("%.4f", amScore))
+		}
+		if amClass != "" {
+			ann.SetExtra("alphamissense", "class", amClass)
 		}
 
 		ann.VariantID = annotate.FormatVariantID(chrom, pos, ref, alt)

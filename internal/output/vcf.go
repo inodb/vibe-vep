@@ -37,7 +37,7 @@ var csqFields = []string{
 type VCFWriter struct {
 	w           *bufio.Writer
 	headerLines []string // original VCF header lines (## and #CHROM)
-	extraCSQ    []string // additional CSQ subfield names (e.g. AlphaMissense_score)
+	sources     []annotate.AnnotationSource
 
 	// Buffered state for the current variant.
 	currentKey  string                 // "chrom:pos" key for grouping
@@ -54,14 +54,21 @@ func NewVCFWriter(w io.Writer, headerLines []string) *VCFWriter {
 	}
 }
 
-// AddCSQField registers an additional subfield to include in the CSQ annotation.
-func (vw *VCFWriter) AddCSQField(name string) {
-	vw.extraCSQ = append(vw.extraCSQ, name)
+// SetSources registers annotation sources whose fields will be included in CSQ.
+func (vw *VCFWriter) SetSources(sources []annotate.AnnotationSource) {
+	vw.sources = sources
 }
 
 // WriteHeader writes the original VCF header lines with an inserted CSQ INFO line.
 func (vw *VCFWriter) WriteHeader() error {
-	allFields := append(csqFields, vw.extraCSQ...)
+	allFields := make([]string, len(csqFields))
+	copy(allFields, csqFields)
+	for _, src := range vw.sources {
+		for _, col := range src.Columns() {
+			allFields = append(allFields, src.Name()+"_"+col.Name)
+		}
+	}
+
 	csqLine := fmt.Sprintf(
 		"##INFO=<ID=CSQ,Number=.,Type=String,Description=\"Consequence annotations from vibe-vep. Format: %s\">",
 		strings.Join(allFields, "|"),
@@ -252,19 +259,10 @@ func (vw *VCFWriter) formatCSQEntry(ann *annotate.Annotation) string {
 		canonical,
 	}
 
-	// Append extra CSQ subfields
-	for _, name := range vw.extraCSQ {
-		switch name {
-		case "AlphaMissense_score":
-			if ann.AlphaMissenseScore > 0 {
-				fields = append(fields, fmt.Sprintf("%.4f", ann.AlphaMissenseScore))
-			} else {
-				fields = append(fields, "")
-			}
-		case "AlphaMissense_class":
-			fields = append(fields, ann.AlphaMissenseClass)
-		default:
-			fields = append(fields, "")
+	// Append annotation source fields from Extra map
+	for _, src := range vw.sources {
+		for _, col := range src.Columns() {
+			fields = append(fields, ann.GetExtra(src.Name(), col.Name))
 		}
 	}
 

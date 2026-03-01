@@ -82,85 +82,85 @@ func TestCategorizeConsequence(t *testing.T) {
 
 func TestCategorizeHGVSp(t *testing.T) {
 	tests := []struct {
-		name                             string
-		mafHGVSp, vepHGVSp, vepConseq   string
-		mafHGVSc, vepHGVSc              string
-		want                             Category
+		name                          string
+		mafHGVSp, vepHGVSp, vepConseq string
+		mafHGVSc, vepHGVSc            string
+		want                          Category
 	}{
 		{
-			name: "exact match",
+			name:     "exact match",
 			mafHGVSp: "p.G12C", vepHGVSp: "p.G12C",
 			want: CatMatch,
 		},
 		{
-			name: "both empty",
+			name:     "both empty",
 			mafHGVSp: "", vepHGVSp: "",
 			want: CatBothEmpty,
 		},
 		{
-			name: "fuzzy frameshift",
+			name:     "fuzzy frameshift",
 			mafHGVSp: "p.G12fs", vepHGVSp: "p.G15fs*33",
 			want: CatFuzzyFS,
 		},
 		{
-			name: "splice vs syn",
+			name:     "splice vs syn",
 			mafHGVSp: "p.X125_splice", vepHGVSp: "p.G125=",
 			want: CatSpliceVsSyn,
 		},
 		{
-			name: "maf nonstandard intronic",
+			name:     "maf nonstandard intronic",
 			mafHGVSp: "p.*130*", vepHGVSp: "",
 			want: CatMafNonstandard,
 		},
 		{
-			name: "splice no protein",
+			name:     "splice no protein",
 			mafHGVSp: "p.X125_splice", vepHGVSp: "",
 			vepConseq: "splice_acceptor_variant",
-			want: CatSpliceNoProtein,
+			want:      CatSpliceNoProtein,
 		},
 		{
-			name: "maf empty",
+			name:     "maf empty",
 			mafHGVSp: "", vepHGVSp: "p.G12C",
 			want: CatMafEmpty,
 		},
 		{
-			name: "vep empty",
+			name:     "vep empty",
 			mafHGVSp: "p.G12C", vepHGVSp: "",
 			want: CatVepEmpty,
 		},
 		{
-			name: "position shift - same change type",
+			name:     "position shift - same change type",
 			mafHGVSp: "p.Y1145C", vepHGVSp: "p.Y1215C",
 			want: CatPositionShift,
 		},
 		{
-			name: "position shift - synonymous",
+			name:     "position shift - synonymous",
 			mafHGVSp: "p.A735=", vepHGVSp: "p.A744=",
 			want: CatPositionShift,
 		},
 		{
-			name: "position shift - hgvsc matches",
+			name:     "position shift - hgvsc matches",
 			mafHGVSp: "p.G12C", vepHGVSp: "p.G15C",
 			mafHGVSc: "ENST00000256078.4:c.34G>T", vepHGVSc: "c.34G>T",
 			want: CatPositionShift,
 		},
 		{
-			name: "frameshift vs stop_gained",
+			name:     "frameshift vs stop_gained",
 			mafHGVSp: "p.E454Sfs*117", vepHGVSp: "p.K453*",
 			want: CatFuzzyFS,
 		},
 		{
-			name: "stop_gained vs frameshift",
+			name:     "stop_gained vs frameshift",
 			mafHGVSp: "p.K453*", vepHGVSp: "p.E454Sfs*117",
 			want: CatFuzzyFS,
 		},
 		{
-			name: "maf nonstandard intronic with vep prediction - transcript model change",
+			name:     "maf nonstandard intronic with vep prediction - transcript model change",
 			mafHGVSp: "p.*130*", vepHGVSp: "p.G12C",
 			want: CatTranscriptModelChange,
 		},
 		{
-			name: "mismatch",
+			name:     "mismatch",
 			mafHGVSp: "p.G12C", vepHGVSp: "p.A15T",
 			mafHGVSc: "ENST00000256078.4:c.34G>T", vepHGVSc: "c.99A>C",
 			want: CatMismatch,

@@ -146,7 +146,7 @@ func TestMutateCodon(t *testing.T) {
 		newBase         byte
 		want            string
 	}{
-		{"first position", "GGT", 0, 'T', "TGT"},   // G12C: GGT -> TGT
+		{"first position", "GGT", 0, 'T', "TGT"}, // G12C: GGT -> TGT
 		{"second position", "GGT", 1, 'A', "GAT"},
 		{"third position", "GGT", 2, 'A', "GGA"},
 		{"invalid position", "GGT", 3, 'A', "GGT"},

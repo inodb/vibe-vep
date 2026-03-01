@@ -99,4 +99,3 @@ func (c *Cache) buildGeneIndex() {
 		}
 	}
 }
-

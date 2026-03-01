@@ -69,15 +69,15 @@ func (l *GTFLoader) loadGTF(c *Cache, filterChrom string) error {
 
 // gtfFeature represents a parsed GTF line.
 type gtfFeature struct {
-	chrom      string
-	source     string
+	chrom       string
+	source      string
 	featureType string
-	start      int64
-	end        int64
-	score      string
-	strand     string
-	phase      string
-	attributes map[string]string
+	start       int64
+	end         int64
+	score       string
+	strand      string
+	phase       string
+	attributes  map[string]string
 }
 
 // parseGTF parses GTF content and returns transcripts.

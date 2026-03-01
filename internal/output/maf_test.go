@@ -21,8 +21,10 @@ func TestMAFWriter_Header(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := buf.String()
-	if got != header+"\n" {
-		t.Errorf("header = %q, want %q", got, header+"\n")
+	// Header should have original columns + 7 vibe.* core columns
+	wantPrefix := header + "\tvibe.hugo_symbol\tvibe.consequence\tvibe.variant_classification\tvibe.transcript_id\tvibe.hgvsc\tvibe.hgvsp\tvibe.hgvsp_short\n"
+	if got != wantPrefix {
+		t.Errorf("header = %q, want %q", got, wantPrefix)
 	}
 }
 
@@ -51,7 +53,7 @@ func TestMAFWriter_PreservesAllColumns(t *testing.T) {
 		HGVSp:                 -1,
 	}
 	w := NewMAFWriter(&buf, "header", cols)
-	// nil annotation = no updates
+	// nil annotation = empty vibe.* columns
 	if err := w.WriteRow(fields, nil, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -61,18 +63,50 @@ func TestMAFWriter_PreservesAllColumns(t *testing.T) {
 
 	got := strings.TrimRight(buf.String(), "\n")
 	parts := strings.Split(got, "\t")
-	if len(parts) != 20 {
-		t.Fatalf("expected 20 columns, got %d", len(parts))
+	// 20 original + 7 vibe.* core columns
+	if len(parts) != 27 {
+		t.Fatalf("expected 27 columns, got %d", len(parts))
 	}
-	for i, p := range parts {
+	for i := 0; i < 20; i++ {
 		want := fields[i]
-		if p != want {
-			t.Errorf("column %d = %q, want %q", i, p, want)
+		if parts[i] != want {
+			t.Errorf("column %d = %q, want %q", i, parts[i], want)
+		}
+	}
+	// vibe.* columns should be empty
+	for i := 20; i < 27; i++ {
+		if parts[i] != "" {
+			t.Errorf("vibe column %d = %q, want empty", i, parts[i])
 		}
 	}
 }
 
-func TestMAFWriter_UpdatesAnnotationColumns(t *testing.T) {
+func TestMAFWriter_NamespacedColumns(t *testing.T) {
+	fields := []string{
+		"OLD_GENE",   // 0: Hugo_Symbol
+		"old_conseq", // 1: Consequence
+		"p.O1X",      // 2: HGVSp_Short
+		"ENST0001",   // 3: Transcript_ID
+		"12",         // 4: Chromosome
+		"100",        // 5: Start_Position
+		"100",        // 6: End_Position
+		"C",          // 7: Reference_Allele
+		"T",          // 8: Tumor_Seq_Allele2
+		"c.1A>T",     // 9: HGVSc
+		"Silent",     // 10: Variant_Classification
+		"p.Old1New",  // 11: HGVSp
+	}
+
+	ann := &annotate.Annotation{
+		GeneName:     "KRAS",
+		Consequence:  "missense_variant",
+		TranscriptID: "ENST00000311936",
+		HGVSp:        "p.Gly12Cys",
+		HGVSc:        "c.34G>T",
+	}
+	v := &vcf.Variant{Ref: "C", Alt: "T"}
+
+	var buf bytes.Buffer
 	cols := maf.ColumnIndices{
 		Chromosome:            4,
 		StartPosition:         5,
@@ -89,32 +123,6 @@ func TestMAFWriter_UpdatesAnnotationColumns(t *testing.T) {
 		VariantClassification: 10,
 		HGVSp:                 11,
 	}
-
-	fields := []string{
-		"OLD_GENE",  // 0: Hugo_Symbol
-		"old_conseq", // 1: Consequence
-		"p.O1X",     // 2: HGVSp_Short
-		"ENST0001",  // 3: Transcript_ID
-		"12",        // 4: Chromosome
-		"100",       // 5: Start_Position
-		"100",       // 6: End_Position
-		"C",         // 7: Reference_Allele
-		"T",         // 8: Tumor_Seq_Allele2
-		"c.1A>T",    // 9: HGVSc
-		"Silent",    // 10: Variant_Classification
-		"p.Old1New", // 11: HGVSp
-	}
-
-	ann := &annotate.Annotation{
-		GeneName:     "KRAS",
-		Consequence:  "missense_variant",
-		TranscriptID: "ENST00000311936",
-		HGVSp:        "p.Gly12Cys",
-		HGVSc:        "c.34G>T",
-	}
-	v := &vcf.Variant{Ref: "C", Alt: "T"}
-
-	var buf bytes.Buffer
 	w := NewMAFWriter(&buf, "header", cols)
 	if err := w.WriteRow(fields, ann, v); err != nil {
 		t.Fatal(err)
@@ -125,93 +133,41 @@ func TestMAFWriter_UpdatesAnnotationColumns(t *testing.T) {
 
 	parts := strings.Split(strings.TrimRight(buf.String(), "\n"), "\t")
 
+	// Original columns should NOT be modified
+	if parts[0] != "OLD_GENE" {
+		t.Errorf("original Hugo_Symbol = %q, want OLD_GENE (preserved)", parts[0])
+	}
+	if parts[1] != "old_conseq" {
+		t.Errorf("original Consequence = %q, want old_conseq (preserved)", parts[1])
+	}
+	if parts[10] != "Silent" {
+		t.Errorf("original Variant_Classification = %q, want Silent (preserved)", parts[10])
+	}
+
+	// vibe.* columns should have predictions
+	vibeStart := len(fields)
 	checks := map[int]string{
-		0:  "KRAS",
-		1:  "missense_variant",
-		2:  "p.G12C",
-		3:  "ENST00000311936",
-		9:  "c.34G>T",
-		10: "Missense_Mutation",
-		11: "p.Gly12Cys",
+		vibeStart + 0: "KRAS",              // vibe.hugo_symbol
+		vibeStart + 1: "missense_variant",  // vibe.consequence
+		vibeStart + 2: "Missense_Mutation", // vibe.variant_classification
+		vibeStart + 3: "ENST00000311936",   // vibe.transcript_id
+		vibeStart + 4: "c.34G>T",           // vibe.hgvsc
+		vibeStart + 5: "p.Gly12Cys",        // vibe.hgvsp
+		vibeStart + 6: "p.G12C",            // vibe.hgvsp_short
 	}
 	for idx, want := range checks {
+		if idx >= len(parts) {
+			t.Errorf("column %d missing, want %q", idx, want)
+			continue
+		}
 		if parts[idx] != want {
 			t.Errorf("column %d = %q, want %q", idx, parts[idx], want)
 		}
 	}
 }
 
-func TestMAFWriter_PreservesOriginalWhenEmpty(t *testing.T) {
-	cols := maf.ColumnIndices{
-		Chromosome:            -1,
-		StartPosition:         -1,
-		EndPosition:           -1,
-		ReferenceAllele:       -1,
-		TumorSeqAllele2:       -1,
-		HugoSymbol:            0,
-		Consequence:           1,
-		HGVSpShort:            2,
-		TranscriptID:          3,
-		VariantType:           -1,
-		NCBIBuild:             -1,
-		HGVSc:                 4,
-		VariantClassification: 5,
-		HGVSp:                 6,
-	}
-
-	fields := []string{
-		"ORIGINAL_GENE",
-		"original_consequence",
-		"p.O1X",
-		"ENST0001",
-		"c.1A>T",
-		"Missense_Mutation",
-		"p.Orig",
-	}
-
-	// Intergenic annotation — most fields empty
-	ann := &annotate.Annotation{
-		Consequence: "intergenic_variant",
-	}
-	v := &vcf.Variant{Ref: "C", Alt: "T"}
-
+func TestMAFWriter_WithSources(t *testing.T) {
 	var buf bytes.Buffer
-	w := NewMAFWriter(&buf, "header", cols)
-	if err := w.WriteRow(fields, ann, v); err != nil {
-		t.Fatal(err)
-	}
-	if err := w.Flush(); err != nil {
-		t.Fatal(err)
-	}
-
-	parts := strings.Split(strings.TrimRight(buf.String(), "\n"), "\t")
-
-	// Gene, HGVSp_Short, Transcript_ID, HGVSc, HGVSp should be preserved (VEP has empty values)
-	if parts[0] != "ORIGINAL_GENE" {
-		t.Errorf("Hugo_Symbol = %q, want preserved original", parts[0])
-	}
-	if parts[2] != "p.O1X" {
-		t.Errorf("HGVSp_Short = %q, want preserved original", parts[2])
-	}
-	if parts[3] != "ENST0001" {
-		t.Errorf("Transcript_ID = %q, want preserved original", parts[3])
-	}
-	if parts[4] != "c.1A>T" {
-		t.Errorf("HGVSc = %q, want preserved original", parts[4])
-	}
-	if parts[6] != "p.Orig" {
-		t.Errorf("HGVSp = %q, want preserved original", parts[6])
-	}
-	// Consequence and Variant_Classification should be updated
-	if parts[1] != "intergenic_variant" {
-		t.Errorf("Consequence = %q, want intergenic_variant", parts[1])
-	}
-	if parts[5] != "IGR" {
-		t.Errorf("Variant_Classification = %q, want IGR", parts[5])
-	}
-}
-
-func TestMAFWriter_ExtraGeneTypeColumn(t *testing.T) {
 	cols := maf.ColumnIndices{
 		Chromosome:            -1,
 		StartPosition:         -1,
@@ -229,25 +185,28 @@ func TestMAFWriter_ExtraGeneTypeColumn(t *testing.T) {
 		HGVSp:                 -1,
 	}
 
-	var buf bytes.Buffer
 	w := NewMAFWriter(&buf, "Hugo_Symbol\tConsequence", cols)
-	w.AddExtraColumn("Gene_Type")
+	w.SetSources([]annotate.AnnotationSource{&testSource{
+		name:    "oncokb",
+		version: "v1",
+		columns: []annotate.ColumnDef{{Name: "gene_type", Description: "Gene type"}},
+	}})
 
 	if err := w.WriteHeader(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Row with GeneType
+	// Row with extra data
 	ann := &annotate.Annotation{
 		GeneName:    "KRAS",
 		Consequence: "missense_variant",
-		GeneType:    "ONCOGENE",
 	}
+	ann.SetExtra("oncokb", "gene_type", "ONCOGENE")
 	if err := w.WriteRow([]string{"KRAS", "old"}, ann, &vcf.Variant{Ref: "C", Alt: "T"}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Row without GeneType
+	// Row without extra data
 	ann2 := &annotate.Annotation{
 		GeneName:    "UNKNOWN",
 		Consequence: "intron_variant",
@@ -265,21 +224,21 @@ func TestMAFWriter_ExtraGeneTypeColumn(t *testing.T) {
 		t.Fatalf("expected 3 lines (header + 2 rows), got %d", len(lines))
 	}
 
-	// Header should have extra column
-	if !strings.HasSuffix(lines[0], "\tGene_Type") {
-		t.Errorf("header missing Gene_Type column: %s", lines[0])
+	// Header should have vibe.oncokb.gene_type
+	if !strings.HasSuffix(lines[0], "\tvibe.oncokb.gene_type") {
+		t.Errorf("header missing vibe.oncokb.gene_type: %s", lines[0])
 	}
 
-	// First row should have ONCOGENE
+	// First row should have ONCOGENE in last column
 	parts := strings.Split(lines[1], "\t")
 	if parts[len(parts)-1] != "ONCOGENE" {
-		t.Errorf("Gene_Type = %q, want ONCOGENE", parts[len(parts)-1])
+		t.Errorf("vibe.oncokb.gene_type = %q, want ONCOGENE", parts[len(parts)-1])
 	}
 
-	// Second row should have empty Gene_Type
+	// Second row should have empty gene_type
 	parts2 := strings.Split(lines[2], "\t")
 	if parts2[len(parts2)-1] != "" {
-		t.Errorf("Gene_Type = %q, want empty", parts2[len(parts2)-1])
+		t.Errorf("vibe.oncokb.gene_type = %q, want empty", parts2[len(parts2)-1])
 	}
 }
 
@@ -321,3 +280,15 @@ func TestSOToMAFClassification(t *testing.T) {
 		}
 	}
 }
+
+// testSource is a minimal AnnotationSource for testing.
+type testSource struct {
+	name    string
+	version string
+	columns []annotate.ColumnDef
+}
+
+func (s *testSource) Name() string                                         { return s.name }
+func (s *testSource) Version() string                                      { return s.version }
+func (s *testSource) Columns() []annotate.ColumnDef                        { return s.columns }
+func (s *testSource) Annotate(v *vcf.Variant, anns []*annotate.Annotation) {}

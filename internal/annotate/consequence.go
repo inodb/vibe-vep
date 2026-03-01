@@ -2,8 +2,6 @@
 package annotate
 
 import (
-
-
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
@@ -973,13 +971,13 @@ func putInt64(buf []byte, v int64) int {
 // spliceRegionCompound maps single consequences to their compound form with
 // splice_region_variant appended. Pre-built to avoid runtime concatenation.
 var spliceRegionCompound = map[string]string{
-	ConsequenceMissenseVariant:     ConsequenceMissenseVariant + "," + ConsequenceSpliceRegion,
-	ConsequenceSynonymousVariant:   ConsequenceSynonymousVariant + "," + ConsequenceSpliceRegion,
-	ConsequenceStopGained:          ConsequenceStopGained + "," + ConsequenceSpliceRegion,
-	ConsequenceStopRetained:        ConsequenceStopRetained + "," + ConsequenceSpliceRegion,
-	ConsequenceFrameshiftVariant:   ConsequenceFrameshiftVariant + "," + ConsequenceSpliceRegion,
-	ConsequenceInframeDeletion:     ConsequenceInframeDeletion + "," + ConsequenceSpliceRegion,
-	ConsequenceInframeInsertion:    ConsequenceInframeInsertion + "," + ConsequenceSpliceRegion,
+	ConsequenceMissenseVariant:       ConsequenceMissenseVariant + "," + ConsequenceSpliceRegion,
+	ConsequenceSynonymousVariant:     ConsequenceSynonymousVariant + "," + ConsequenceSpliceRegion,
+	ConsequenceStopGained:            ConsequenceStopGained + "," + ConsequenceSpliceRegion,
+	ConsequenceStopRetained:          ConsequenceStopRetained + "," + ConsequenceSpliceRegion,
+	ConsequenceFrameshiftVariant:     ConsequenceFrameshiftVariant + "," + ConsequenceSpliceRegion,
+	ConsequenceInframeDeletion:       ConsequenceInframeDeletion + "," + ConsequenceSpliceRegion,
+	ConsequenceInframeInsertion:      ConsequenceInframeInsertion + "," + ConsequenceSpliceRegion,
 	ConsequenceCodingSequenceVariant: ConsequenceCodingSequenceVariant + "," + ConsequenceSpliceRegion,
 }
 

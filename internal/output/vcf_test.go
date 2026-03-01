@@ -143,15 +143,15 @@ func TestVCFWriter_SingleAnnotation(t *testing.T) {
 
 	// Check specific CSQ fields
 	checks := map[int]string{
-		0:  "A",              // Allele
+		0:  "A",                // Allele
 		1:  "missense_variant", // Consequence
-		2:  "MODERATE",       // IMPACT
-		3:  "KRAS",           // SYMBOL
-		6:  "ENST00000311936", // Feature
-		7:  "protein_coding", // BIOTYPE
-		10: "c.34G>T",        // HGVSc
-		11: "p.Gly12Cys",     // HGVSp
-		17: "YES",            // CANONICAL
+		2:  "MODERATE",         // IMPACT
+		3:  "KRAS",             // SYMBOL
+		6:  "ENST00000311936",  // Feature
+		7:  "protein_coding",   // BIOTYPE
+		10: "c.34G>T",          // HGVSc
+		11: "p.Gly12Cys",       // HGVSp
+		17: "YES",              // CANONICAL
 	}
 	for idx, want := range checks {
 		if parts[idx] != want {

@@ -552,7 +552,7 @@ func TestPredictConsequence_FrameshiftWithStopDistance(t *testing.T) {
 	// fsTer = 8 - 3 + 1 = 6
 
 	cds2 := "ATGGCTGCAGGGGGG" + "TAA" // 18bp: M A A G G *
-	utr3 := "ACTAAGGG"                 // provides stop in shifted frame
+	utr3 := "ACTAAGGG"                // provides stop in shifted frame
 
 	transcript := &cache.Transcript{
 		ID:           "ENST_FS_TEST",

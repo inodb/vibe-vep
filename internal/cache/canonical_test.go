@@ -39,4 +39,3 @@ func TestParseMSKCCOverrides(t *testing.T) {
 	assert.Equal(t, "ENST00000257430", overrides["APC"])
 	assert.Equal(t, "ENST00000269305", overrides["TP53"])
 }
-

@@ -2,7 +2,6 @@ package output
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"strings"
 
@@ -12,11 +11,13 @@ import (
 )
 
 // MAFWriter writes annotated variants in MAF format, preserving all original columns.
+// All vibe-vep output is appended as namespaced vibe.* columns — original columns
+// are never overwritten.
 type MAFWriter struct {
-	w            *bufio.Writer
-	headerLine   string
-	columns      maf.ColumnIndices
-	extraColumns []string // additional column names appended after original columns
+	w          *bufio.Writer
+	headerLine string
+	columns    maf.ColumnIndices
+	sources    []annotate.AnnotationSource
 }
 
 // NewMAFWriter creates a new MAF writer that preserves all original columns.
@@ -28,53 +29,61 @@ func NewMAFWriter(w io.Writer, headerLine string, columns maf.ColumnIndices) *MA
 	}
 }
 
-// AddExtraColumn registers an additional column to append after the original MAF columns.
-func (m *MAFWriter) AddExtraColumn(name string) {
-	m.extraColumns = append(m.extraColumns, name)
+// SetSources registers annotation sources whose columns will be appended.
+func (m *MAFWriter) SetSources(sources []annotate.AnnotationSource) {
+	m.sources = sources
 }
 
-// WriteHeader writes the original MAF header line plus any extra columns.
+// WriteHeader writes the original MAF header line plus vibe.* columns.
 func (m *MAFWriter) WriteHeader() error {
 	header := m.headerLine
-	for _, col := range m.extraColumns {
-		header += "\t" + col
+
+	// Core prediction columns
+	for _, col := range annotate.CoreColumns {
+		header += "\tvibe." + col.Name
 	}
+
+	// Annotation source columns
+	for _, src := range m.sources {
+		for _, col := range src.Columns() {
+			header += "\tvibe." + src.Name() + "." + col.Name
+		}
+	}
+
 	_, err := m.w.WriteString(header + "\n")
 	return err
 }
 
-// WriteRow writes a MAF row, updating annotation columns with VEP predictions.
-// Original values are preserved when the VEP annotation has no prediction.
+// WriteRow writes a MAF row with vibe.* namespaced columns appended.
+// Original MAF columns are preserved exactly as-is.
 func (m *MAFWriter) WriteRow(rawFields []string, ann *annotate.Annotation, v *vcf.Variant) error {
-	row := make([]string, len(rawFields))
+	row := make([]string, len(rawFields), len(rawFields)+7+len(m.sources)*3)
 	copy(row, rawFields)
 
+	// Core prediction columns
 	if ann != nil {
-		m.updateField(row, m.columns.HugoSymbol, ann.GeneName)
-		m.updateField(row, m.columns.Consequence, ann.Consequence)
-		m.updateField(row, m.columns.TranscriptID, ann.TranscriptID)
-		m.updateField(row, m.columns.HGVSc, ann.HGVSc)
-		m.updateField(row, m.columns.HGVSp, ann.HGVSp)
-		m.updateField(row, m.columns.HGVSpShort, hgvspToShort(ann.HGVSp))
-		m.updateField(row, m.columns.VariantClassification, SOToMAFClassification(ann.Consequence, v))
+		row = append(row,
+			ann.GeneName,    // vibe.hugo_symbol
+			ann.Consequence, // vibe.consequence
+			SOToMAFClassification(ann.Consequence, v), // vibe.variant_classification
+			ann.TranscriptID,        // vibe.transcript_id
+			ann.HGVSc,               // vibe.hgvsc
+			ann.HGVSp,               // vibe.hgvsp
+			hgvspToShort(ann.HGVSp), // vibe.hgvsp_short
+		)
+	} else {
+		row = append(row, "", "", "", "", "", "", "")
 	}
 
-	// Append extra column values
-	for _, col := range m.extraColumns {
-		val := ""
-		if ann != nil {
-			switch col {
-			case "Gene_Type":
-				val = ann.GeneType
-			case "AlphaMissense_Score":
-				if ann.AlphaMissenseScore > 0 {
-					val = fmt.Sprintf("%.4f", ann.AlphaMissenseScore)
-				}
-			case "AlphaMissense_Class":
-				val = ann.AlphaMissenseClass
+	// Annotation source columns
+	for _, src := range m.sources {
+		for _, col := range src.Columns() {
+			val := ""
+			if ann != nil {
+				val = ann.GetExtra(src.Name(), col.Name)
 			}
+			row = append(row, val)
 		}
-		row = append(row, val)
 	}
 
 	_, err := m.w.WriteString(strings.Join(row, "\t") + "\n")
@@ -84,13 +93,6 @@ func (m *MAFWriter) WriteRow(rawFields []string, ann *annotate.Annotation, v *vc
 // Flush flushes any buffered data to the underlying writer.
 func (m *MAFWriter) Flush() error {
 	return m.w.Flush()
-}
-
-// updateField sets row[idx] to value only if idx is valid and value is non-empty.
-func (m *MAFWriter) updateField(row []string, idx int, value string) {
-	if idx >= 0 && idx < len(row) && value != "" {
-		row[idx] = value
-	}
 }
 
 // SOToMAFClassification converts an SO consequence term to a MAF Variant_Classification.

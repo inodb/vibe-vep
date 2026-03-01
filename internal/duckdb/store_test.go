@@ -112,7 +112,7 @@ func TestSearchByGene(t *testing.T) {
 			Chrom: "12", Pos: 25245350, Ref: "C", Alt: "A",
 			Ann: &annotate.Annotation{
 				TranscriptID: "ENST00000311936.8",
-				GeneName: "KRAS", Consequence: "missense_variant", Impact: "MODERATE",
+				GeneName:     "KRAS", Consequence: "missense_variant", Impact: "MODERATE",
 				AminoAcidChange: "G/V", Allele: "A", Biotype: "protein_coding",
 			},
 		},
@@ -120,7 +120,7 @@ func TestSearchByGene(t *testing.T) {
 			Chrom: "7", Pos: 140753336, Ref: "A", Alt: "T",
 			Ann: &annotate.Annotation{
 				TranscriptID: "ENST00000288602.11",
-				GeneName: "BRAF", Consequence: "missense_variant", Impact: "MODERATE",
+				GeneName:     "BRAF", Consequence: "missense_variant", Impact: "MODERATE",
 				Allele: "T", Biotype: "protein_coding",
 			},
 		},
@@ -149,7 +149,7 @@ func TestSearchByProteinChange(t *testing.T) {
 			Chrom: "12", Pos: 25245350, Ref: "C", Alt: "A",
 			Ann: &annotate.Annotation{
 				TranscriptID: "ENST00000311936.8",
-				GeneName: "KRAS", Consequence: "missense_variant", Impact: "MODERATE",
+				GeneName:     "KRAS", Consequence: "missense_variant", Impact: "MODERATE",
 				AminoAcidChange: "G/V", Allele: "A", Biotype: "protein_coding",
 			},
 		},
@@ -157,7 +157,7 @@ func TestSearchByProteinChange(t *testing.T) {
 			Chrom: "12", Pos: 25245351, Ref: "G", Alt: "T",
 			Ann: &annotate.Annotation{
 				TranscriptID: "ENST00000311936.8",
-				GeneName: "KRAS", Consequence: "missense_variant", Impact: "MODERATE",
+				GeneName:     "KRAS", Consequence: "missense_variant", Impact: "MODERATE",
 				AminoAcidChange: "G/C", Allele: "T", Biotype: "protein_coding",
 			},
 		},

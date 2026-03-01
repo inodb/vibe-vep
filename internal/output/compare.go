@@ -3,36 +3,36 @@ package output
 
 import (
 	"fmt"
+	"github.com/inodb/vibe-vep/internal/annotate"
+	"github.com/inodb/vibe-vep/internal/maf"
+	"github.com/inodb/vibe-vep/internal/vcf"
 	"io"
 	"regexp"
 	"sort"
 	"strings"
-	"github.com/inodb/vibe-vep/internal/annotate"
-	"github.com/inodb/vibe-vep/internal/maf"
-	"github.com/inodb/vibe-vep/internal/vcf"
 )
 
 // Category classifies the comparison result for a single column.
 type Category string
 
 const (
-	CatMatch            Category = "match"
-	CatBothEmpty        Category = "both_empty"
-	CatFuzzyFS          Category = "fuzzy_fs"
-	CatSpliceVsSyn      Category = "splice_vs_syn"
-	CatMafNonstandard   Category = "maf_nonstandard"
-	CatSpliceNoProtein  Category = "splice_no_protein"
-	CatPositionShift    Category = "position_shift"
-	CatVepEmpty         Category = "vep_empty"
-	CatMafEmpty         Category = "maf_empty"
-	CatUpstreamReclass  Category = "upstream_reclassified"
-	CatNoCDS            Category = "no_cds_data"
-	CatDupVsIns         Category = "dup_vs_ins"
-	CatDelinsNorm       Category = "delins_normalized"
-	CatSpliceVsPredicted    Category = "splice_vs_predicted"
+	CatMatch                 Category = "match"
+	CatBothEmpty             Category = "both_empty"
+	CatFuzzyFS               Category = "fuzzy_fs"
+	CatSpliceVsSyn           Category = "splice_vs_syn"
+	CatMafNonstandard        Category = "maf_nonstandard"
+	CatSpliceNoProtein       Category = "splice_no_protein"
+	CatPositionShift         Category = "position_shift"
+	CatVepEmpty              Category = "vep_empty"
+	CatMafEmpty              Category = "maf_empty"
+	CatUpstreamReclass       Category = "upstream_reclassified"
+	CatNoCDS                 Category = "no_cds_data"
+	CatDupVsIns              Category = "dup_vs_ins"
+	CatDelinsNorm            Category = "delins_normalized"
+	CatSpliceVsPredicted     Category = "splice_vs_predicted"
 	CatTranscriptModelChange Category = "transcript_model_change"
-	CatGeneModelChange      Category = "gene_model_change"
-	CatMismatch             Category = "mismatch"
+	CatGeneModelChange       Category = "gene_model_change"
+	CatMismatch              Category = "mismatch"
 )
 
 // isShownByDefault returns whether rows with this category are shown without --all.

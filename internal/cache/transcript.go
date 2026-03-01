@@ -3,22 +3,22 @@ package cache
 
 // Transcript represents a specific gene isoform.
 type Transcript struct {
-	ID              string  // Transcript ID (e.g., ENST00000311936)
-	GeneID          string  // Parent gene ID
-	GeneName        string  // Parent gene symbol
-	Chrom           string  // Chromosome
-	Start           int64   // Transcript start (1-based)
-	End             int64   // Transcript end (1-based, inclusive)
-	Strand          int8    // +1 or -1
-	Biotype         string  // Transcript biotype
-	IsCanonical     bool    // Ensembl canonical flag
-	IsMANESelect    bool    // MANE Select transcript
-	Exons           []Exon  // Ordered exons
-	CDSStart        int64   // CDS start (genomic, 1-based), 0 if non-coding
-	CDSEnd          int64   // CDS end (genomic, 1-based), 0 if non-coding
-	CDSSequence     string  // Coding DNA sequence (loaded on demand)
-	UTR3Sequence    string  // 3'UTR sequence immediately following CDSSequence (for stop scanning)
-	ProteinSequence string  // Translated protein sequence (loaded on demand)
+	ID              string // Transcript ID (e.g., ENST00000311936)
+	GeneID          string // Parent gene ID
+	GeneName        string // Parent gene symbol
+	Chrom           string // Chromosome
+	Start           int64  // Transcript start (1-based)
+	End             int64  // Transcript end (1-based, inclusive)
+	Strand          int8   // +1 or -1
+	Biotype         string // Transcript biotype
+	IsCanonical     bool   // Ensembl canonical flag
+	IsMANESelect    bool   // MANE Select transcript
+	Exons           []Exon // Ordered exons
+	CDSStart        int64  // CDS start (genomic, 1-based), 0 if non-coding
+	CDSEnd          int64  // CDS end (genomic, 1-based), 0 if non-coding
+	CDSSequence     string // Coding DNA sequence (loaded on demand)
+	UTR3Sequence    string // 3'UTR sequence immediately following CDSSequence (for stop scanning)
+	ProteinSequence string // Translated protein sequence (loaded on demand)
 }
 
 // Exon represents a single exon within a transcript.

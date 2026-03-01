@@ -15,38 +15,38 @@ import (
 
 // Standard MAF column names
 const (
-	ColChromosome       = "Chromosome"
-	ColStartPosition    = "Start_Position"
-	ColEndPosition      = "End_Position"
-	ColReferenceAllele  = "Reference_Allele"
-	ColTumorSeqAllele2  = "Tumor_Seq_Allele2"
-	ColHugoSymbol       = "Hugo_Symbol"
-	ColConsequence      = "Consequence"
-	ColHGVSpShort       = "HGVSp_Short"
-	ColTranscriptID     = "Transcript_ID"
-	ColVariantType      = "Variant_Type"
-	ColNCBIBuild        = "NCBI_Build"
-	ColHGVSc                  = "HGVSc"
-	ColVariantClassification  = "Variant_Classification"
-	ColHGVSp                  = "HGVSp"
+	ColChromosome            = "Chromosome"
+	ColStartPosition         = "Start_Position"
+	ColEndPosition           = "End_Position"
+	ColReferenceAllele       = "Reference_Allele"
+	ColTumorSeqAllele2       = "Tumor_Seq_Allele2"
+	ColHugoSymbol            = "Hugo_Symbol"
+	ColConsequence           = "Consequence"
+	ColHGVSpShort            = "HGVSp_Short"
+	ColTranscriptID          = "Transcript_ID"
+	ColVariantType           = "Variant_Type"
+	ColNCBIBuild             = "NCBI_Build"
+	ColHGVSc                 = "HGVSc"
+	ColVariantClassification = "Variant_Classification"
+	ColHGVSp                 = "HGVSp"
 )
 
 // ColumnIndices holds the indices of important MAF columns.
 type ColumnIndices struct {
-	Chromosome             int
-	StartPosition          int
-	EndPosition            int
-	ReferenceAllele        int
-	TumorSeqAllele2        int
-	HugoSymbol             int
-	Consequence            int
-	HGVSpShort             int
-	TranscriptID           int
-	VariantType            int
-	NCBIBuild              int
-	HGVSc                  int
-	VariantClassification  int
-	HGVSp                  int
+	Chromosome            int
+	StartPosition         int
+	EndPosition           int
+	ReferenceAllele       int
+	TumorSeqAllele2       int
+	HugoSymbol            int
+	Consequence           int
+	HGVSpShort            int
+	TranscriptID          int
+	VariantType           int
+	NCBIBuild             int
+	HGVSc                 int
+	VariantClassification int
+	HGVSp                 int
 }
 
 // MAFAnnotation holds the original MAF annotation data for validation.
