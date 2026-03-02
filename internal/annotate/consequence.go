@@ -454,6 +454,53 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 	return result
 }
 
+// splicedReader provides virtual access to a concatenation of up to 4 string
+// parts without allocating the full concatenated string. Used to avoid the
+// O(CDS) allocation when scanning mutant sequences for frameshifts and stops.
+type splicedReader struct {
+	parts   [4]string
+	offsets [5]int // cumulative lengths: offsets[i] = sum of len(parts[0..i-1])
+}
+
+func newSplicedReader(a, b, c, d string) splicedReader {
+	s := splicedReader{parts: [4]string{a, b, c, d}}
+	s.offsets[1] = len(a)
+	s.offsets[2] = s.offsets[1] + len(b)
+	s.offsets[3] = s.offsets[2] + len(c)
+	s.offsets[4] = s.offsets[3] + len(d)
+	return s
+}
+
+func (s *splicedReader) Len() int { return s.offsets[4] }
+
+func (s *splicedReader) At(i int) byte {
+	for p := 0; p < 4; p++ {
+		if i < s.offsets[p+1] {
+			return s.parts[p][i-s.offsets[p]]
+		}
+	}
+	return 0
+}
+
+// Codon returns the 3-byte codon at position i. Returns a substring (no alloc)
+// when all 3 bytes are in the same part; allocates only at part boundaries.
+func (s *splicedReader) Codon(i int) string {
+	for p := 0; p < 4; p++ {
+		if i < s.offsets[p+1] {
+			localIdx := i - s.offsets[p]
+			if localIdx+3 <= len(s.parts[p]) {
+				return s.parts[p][localIdx : localIdx+3]
+			}
+			var buf [3]byte
+			buf[0] = s.At(i)
+			buf[1] = s.At(i + 1)
+			buf[2] = s.At(i + 2)
+			return string(buf[:])
+		}
+	}
+	return ""
+}
+
 // computeFrameshiftDetails builds the mutant CDS for a frameshift variant and
 // finds the first amino acid position that actually changes, along with the
 // distance to the first new stop codon. If no stop is found in the CDS, it
@@ -478,14 +525,15 @@ func computeFrameshiftDetails(v *vcf.Variant, t *cache.Transcript, cdsPos int64)
 		endIdx = len(t.CDSSequence)
 	}
 
-	// Build mutant sequence: CDS with the variant applied, plus 3'UTR for scanning
-	mutSeq := t.CDSSequence[:cdsIdx] + alt + t.CDSSequence[endIdx:] + t.UTR3Sequence
+	// Virtual mutant sequence: CDS prefix + alt + CDS suffix + 3'UTR.
+	// Uses splicedReader to avoid allocating the entire concatenated string.
+	mut := newSplicedReader(t.CDSSequence[:cdsIdx], alt, t.CDSSequence[endIdx:], t.UTR3Sequence)
 
 	// Scan from the codon containing the variant position forward,
 	// comparing each mutant codon against the original to find the first change.
 	codonStart := (cdsIdx / 3) * 3
-	for i := codonStart; i+3 <= len(mutSeq); i += 3 {
-		mutAA := TranslateCodon(mutSeq[i : i+3])
+	for i := codonStart; i+3 <= mut.Len(); i += 3 {
+		mutAA := TranslateCodon(mut.Codon(i))
 		if proteinPos == 0 {
 			// Still looking for the first changed codon
 			var origAA byte
@@ -646,9 +694,8 @@ func computeInframeProteinChange(v *vcf.Variant, t *cache.Transcript, cdsPos int
 }
 
 // stopCodonPreserved checks whether an insertion at/after the stop codon
-// preserves the stop codon in the mutant CDS. It builds the mutant sequence
-// and checks for a stop codon at both the original position and the shifted
-// position (insertion pushes the stop codon rightward).
+// preserves the stop codon in the mutant CDS. Uses splicedReader to avoid
+// allocating the entire mutant CDS string.
 func stopCodonPreserved(v *vcf.Variant, t *cache.Transcript, cdsPos int64) bool {
 	if len(t.CDSSequence) < 3 || cdsPos < 1 {
 		return false
@@ -666,8 +713,6 @@ func stopCodonPreserved(v *vcf.Variant, t *cache.Transcript, cdsPos int64) bool 
 		endIdx = len(t.CDSSequence)
 	}
 
-	mutCDS := t.CDSSequence[:cdsIdx] + alt + t.CDSSequence[endIdx:]
-
 	origStop := len(t.CDSSequence) - 3
 	if origStop < 0 {
 		return false
@@ -676,14 +721,16 @@ func stopCodonPreserved(v *vcf.Variant, t *cache.Transcript, cdsPos int64) bool 
 		return false
 	}
 
+	mut := newSplicedReader(t.CDSSequence[:cdsIdx], alt, t.CDSSequence[endIdx:], "")
+
 	// Check at original position
-	if origStop+3 <= len(mutCDS) && TranslateCodon(mutCDS[origStop:origStop+3]) == '*' {
+	if origStop+3 <= mut.Len() && TranslateCodon(mut.Codon(origStop)) == '*' {
 		return true
 	}
 
 	// Check at shifted position (insertion pushes stop codon right by diff bases)
 	shifted := origStop + len(alt) - len(ref)
-	if shifted >= 0 && shifted+3 <= len(mutCDS) && TranslateCodon(mutCDS[shifted:shifted+3]) == '*' {
+	if shifted >= 0 && shifted+3 <= mut.Len() && TranslateCodon(mut.Codon(shifted)) == '*' {
 		return true
 	}
 
@@ -691,18 +738,14 @@ func stopCodonPreserved(v *vcf.Variant, t *cache.Transcript, cdsPos int64) bool 
 }
 
 // indelCreatesStop checks if an indel creates a stop codon near the variant site.
-// It reconstructs the local CDS around the indel and checks the first few codons.
+// Uses splicedReader to avoid allocating the entire mutant CDS string.
 func indelCreatesStop(v *vcf.Variant, t *cache.Transcript, cdsPos int64) bool {
 	if len(t.CDSSequence) == 0 || cdsPos < 1 {
 		return false
 	}
 
-	// Build the mutant CDS by splicing the alt allele into the CDS
-	// VCF indels share a prefix base: REF=A ALT=ATAC means insert TAC after pos
-	// For deletion: REF=ATAC ALT=A means delete TAC after pos
 	cdsIdx := int(cdsPos - 1) // 0-based index in CDS
 
-	// Determine the ref/alt on the coding strand
 	ref := v.Ref
 	alt := v.Alt
 	if t.IsReverseStrand() {
@@ -710,35 +753,30 @@ func indelCreatesStop(v *vcf.Variant, t *cache.Transcript, cdsPos int64) bool {
 		alt = ReverseComplement(alt)
 	}
 
-	// Reconstruct local mutant sequence: take CDS before variant, insert alt, then CDS after ref
 	endIdx := cdsIdx + len(ref)
 	if endIdx > len(t.CDSSequence) {
 		endIdx = len(t.CDSSequence)
 	}
 
-	mutCDS := t.CDSSequence[:cdsIdx] + alt + t.CDSSequence[endIdx:]
+	mut := newSplicedReader(t.CDSSequence[:cdsIdx], alt, t.CDSSequence[endIdx:], "")
 
 	// Find the codon-aligned start position for the variant
 	codonStart := (cdsIdx / 3) * 3
 
 	// Check codons at and after the variant position for new stop codons.
-	// For insertions, the stop is typically at the variant codon.
-	// For deletions, the junction codon may be further downstream.
-	nCodons := (len(ref) + 2) / 3 // check enough codons to cover the indel span
+	nCodons := (len(ref) + 2) / 3
 	if nCodons < 2 {
 		nCodons = 2
 	}
 	for i := 0; i < nCodons; i++ {
 		pos := codonStart + i*3
-		if pos+3 > len(mutCDS) {
+		if pos+3 > mut.Len() {
 			break
 		}
-		codon := mutCDS[pos : pos+3]
-		if TranslateCodon(codon) == '*' {
+		if TranslateCodon(mut.Codon(pos)) == '*' {
 			// Only report if this is a NEW stop (not present in original)
 			if pos+3 <= len(t.CDSSequence) {
-				origCodon := t.CDSSequence[pos : pos+3]
-				if TranslateCodon(origCodon) == '*' {
+				if TranslateCodon(t.CDSSequence[pos:pos+3]) == '*' {
 					return false
 				}
 			}
@@ -751,62 +789,60 @@ func indelCreatesStop(v *vcf.Variant, t *cache.Transcript, cdsPos int64) bool {
 // GenomicToCDS converts a genomic position to CDS position within a transcript.
 // Returns 0 if the position is not in the CDS.
 func GenomicToCDS(genomicPos int64, t *cache.Transcript) int64 {
-	if !t.IsProteinCoding() {
+	if !t.IsProteinCoding() || !t.ContainsCDS(genomicPos) {
 		return 0
 	}
 
-	if !t.ContainsCDS(genomicPos) {
+	// Fast path: binary search pre-computed CDS regions.
+	if len(t.CDSRegions) > 0 {
+		regions := t.CDSRegions
+		lo, hi := 0, len(regions)-1
+		for lo <= hi {
+			mid := lo + (hi-lo)/2
+			r := &regions[mid]
+			if genomicPos >= r.GenomicStart && genomicPos <= r.GenomicEnd {
+				if t.Strand == 1 {
+					return r.CDSOffset + (genomicPos - r.GenomicStart) + 1
+				}
+				return r.CDSOffset + (r.GenomicEnd - genomicPos) + 1
+			}
+			if genomicPos < r.GenomicStart {
+				hi = mid - 1
+			} else {
+				lo = mid + 1
+			}
+		}
 		return 0
 	}
 
-	var cdsPos int64 = 0
-
-	if t.IsForwardStrand() {
+	// Fallback: linear scan (for transcripts without pre-built index).
+	var cdsPos int64
+	if t.Strand == 1 {
 		for _, exon := range t.Exons {
-			// Skip non-coding exons
 			if !exon.IsCoding() {
 				continue
 			}
-
-			// Determine the CDS portion of this exon
-			cdsStart := exon.CDSStart
-			cdsEnd := exon.CDSEnd
-
-			if genomicPos >= cdsStart && genomicPos <= cdsEnd {
-				// Position is in this exon's CDS
-				cdsPos += genomicPos - cdsStart + 1
-				return cdsPos
+			if genomicPos >= exon.CDSStart && genomicPos <= exon.CDSEnd {
+				return cdsPos + genomicPos - exon.CDSStart + 1
 			}
-
-			if genomicPos > cdsEnd {
-				// Position is after this exon, add full exon length
-				cdsPos += cdsEnd - cdsStart + 1
+			if genomicPos > exon.CDSEnd {
+				cdsPos += exon.CDSEnd - exon.CDSStart + 1
 			}
 		}
 	} else {
-		// Reverse strand - iterate exons in reverse order
 		for i := len(t.Exons) - 1; i >= 0; i-- {
 			exon := t.Exons[i]
 			if !exon.IsCoding() {
 				continue
 			}
-
-			cdsStart := exon.CDSStart
-			cdsEnd := exon.CDSEnd
-
-			if genomicPos >= cdsStart && genomicPos <= cdsEnd {
-				// Position is in this exon's CDS (count from end for reverse strand)
-				cdsPos += cdsEnd - genomicPos + 1
-				return cdsPos
+			if genomicPos >= exon.CDSStart && genomicPos <= exon.CDSEnd {
+				return cdsPos + exon.CDSEnd - genomicPos + 1
 			}
-
-			if genomicPos < cdsStart {
-				// Position is after this exon (in genomic terms, before in CDS terms)
-				cdsPos += cdsEnd - cdsStart + 1
+			if genomicPos < exon.CDSStart {
+				cdsPos += exon.CDSEnd - exon.CDSStart + 1
 			}
 		}
 	}
-
 	return 0
 }
 
@@ -818,23 +854,55 @@ func CDSToGenomic(cdsPos int64, t *cache.Transcript) int64 {
 		return 0
 	}
 
-	var cumulative int64
+	// Fast path: binary search pre-computed CDS regions.
+	if len(t.CDSRegions) > 0 {
+		regions := t.CDSRegions
+		n := len(regions)
+		lo, hi := 0, n-1
+		for lo <= hi {
+			mid := lo + (hi-lo)/2
+			r := &regions[mid]
+			regionLen := r.GenomicEnd - r.GenomicStart + 1
+			if cdsPos > r.CDSOffset && cdsPos <= r.CDSOffset+regionLen {
+				offset := cdsPos - r.CDSOffset - 1
+				if t.Strand == 1 {
+					return r.GenomicStart + offset
+				}
+				return r.GenomicEnd - offset
+			}
+			if t.Strand == 1 {
+				// Forward: CDSOffset ascending with array index.
+				if cdsPos <= r.CDSOffset {
+					hi = mid - 1
+				} else {
+					lo = mid + 1
+				}
+			} else {
+				// Reverse: CDSOffset descending with array index.
+				if cdsPos <= r.CDSOffset {
+					lo = mid + 1
+				} else {
+					hi = mid - 1
+				}
+			}
+		}
+		return 0
+	}
 
-	if t.IsForwardStrand() {
+	// Fallback: linear scan.
+	var cumulative int64
+	if t.Strand == 1 {
 		for _, exon := range t.Exons {
 			if !exon.IsCoding() {
 				continue
 			}
 			exonLen := exon.CDSEnd - exon.CDSStart + 1
 			if cumulative+exonLen >= cdsPos {
-				// CDS position falls in this exon
-				offset := cdsPos - cumulative - 1
-				return exon.CDSStart + offset
+				return exon.CDSStart + (cdsPos - cumulative - 1)
 			}
 			cumulative += exonLen
 		}
 	} else {
-		// Reverse strand: iterate exons in reverse
 		for i := len(t.Exons) - 1; i >= 0; i-- {
 			exon := t.Exons[i]
 			if !exon.IsCoding() {
@@ -842,14 +910,11 @@ func CDSToGenomic(cdsPos int64, t *cache.Transcript) int64 {
 			}
 			exonLen := exon.CDSEnd - exon.CDSStart + 1
 			if cumulative+exonLen >= cdsPos {
-				// CDS position falls in this exon (count from end for reverse strand)
-				offset := cdsPos - cumulative - 1
-				return exon.CDSEnd - offset
+				return exon.CDSEnd - (cdsPos - cumulative - 1)
 			}
 			cumulative += exonLen
 		}
 	}
-
 	return 0
 }
 
@@ -858,13 +923,24 @@ func CDSToGenomic(cdsPos int64, t *cache.Transcript) int64 {
 // positions are counted from the transcript 5' end. Returns 0 if the position
 // is not within an exon.
 func GenomicToTranscriptPos(genomicPos int64, t *cache.Transcript) int64 {
-	var pos int64
+	// Fast path: binary search + pre-computed cumulative bases.
+	if len(t.ExonCumBases) == len(t.Exons) && len(t.Exons) > 0 {
+		idx := t.FindExonIdx(genomicPos)
+		if idx < 0 {
+			return 0
+		}
+		if t.Strand == 1 {
+			return t.ExonCumBases[idx] + (genomicPos - t.Exons[idx].Start) + 1
+		}
+		return t.ExonCumBases[idx] + (t.Exons[idx].End - genomicPos) + 1
+	}
 
-	if t.IsForwardStrand() {
+	// Fallback: linear scan.
+	var pos int64
+	if t.Strand == 1 {
 		for _, exon := range t.Exons {
 			if genomicPos >= exon.Start && genomicPos <= exon.End {
-				pos += genomicPos - exon.Start + 1
-				return pos
+				return pos + genomicPos - exon.Start + 1
 			}
 			if genomicPos > exon.End {
 				pos += exon.End - exon.Start + 1
@@ -874,15 +950,13 @@ func GenomicToTranscriptPos(genomicPos int64, t *cache.Transcript) int64 {
 		for i := len(t.Exons) - 1; i >= 0; i-- {
 			exon := t.Exons[i]
 			if genomicPos >= exon.Start && genomicPos <= exon.End {
-				pos += exon.End - genomicPos + 1
-				return pos
+				return pos + exon.End - genomicPos + 1
 			}
 			if genomicPos < exon.Start {
 				pos += exon.End - exon.Start + 1
 			}
 		}
 	}
-
 	return 0
 }
 

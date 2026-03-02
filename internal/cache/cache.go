@@ -30,11 +30,15 @@ func (c *Cache) AddTranscript(t *Transcript) {
 	c.geneIndex = nil
 }
 
-// BuildIndex builds interval trees for all chromosomes for O(log n + k) lookup.
+// BuildIndex builds interval trees for all chromosomes for O(log n + k) lookup,
+// and pre-computes per-transcript CDS offsets and exonic base counts.
 // Should be called after all transcripts are loaded.
 func (c *Cache) BuildIndex() {
 	c.trees = make(map[string]*IntervalTree, len(c.transcripts))
 	for chrom, txs := range c.transcripts {
+		for _, t := range txs {
+			t.BuildCDSIndex()
+		}
 		c.trees[chrom] = BuildIntervalTree(txs)
 	}
 }

@@ -422,10 +422,22 @@ func exonicDistance(from, to int64, t *cache.Transcript) int64 {
 
 // intronicHGVScPos computes the HGVSc position for an intronic position.
 // Format: c.{boundary}+{offset} or c.{boundary}-{offset}
+// Uses FindNearestExonIdx for O(log n) flanking exon lookup.
 func intronicHGVScPos(pos int64, t *cache.Transcript) string {
-	// Find flanking exons
+	idx := t.FindNearestExonIdx(pos)
+	n := len(t.Exons)
+	if n == 0 {
+		return ""
+	}
+
+	// Find flanking exons by checking idx and its neighbors.
+	// Exons are sorted ascending by Start. An intronic position has
+	// an upstream exon (End < pos) and a downstream exon (Start > pos).
 	var upstreamExon, downstreamExon *cache.Exon
-	for i := range t.Exons {
+	for _, i := range [3]int{idx - 1, idx, idx + 1} {
+		if i < 0 || i >= n {
+			continue
+		}
 		exon := &t.Exons[i]
 		if exon.End < pos {
 			if upstreamExon == nil || exon.End > upstreamExon.End {
@@ -462,27 +474,18 @@ func intronicHGVScPos(pos int64, t *cache.Transcript) string {
 
 	if t.IsForwardStrand() {
 		if useUpstream {
-			// After upstream exon end: c.{CDSpos}+{offset}
 			boundaryPos := exonBoundaryHGVScPos(upstreamExon.End, upstreamExon, t)
 			return boundaryPos + "+" + strconv.FormatInt(distToUpstream, 10)
 		}
-		// Before downstream exon start: c.{CDSpos}-{offset}
 		boundaryPos := exonBoundaryHGVScPos(downstreamExon.Start, downstreamExon, t)
 		return boundaryPos + "-" + strconv.FormatInt(distToDownstream, 10)
 	}
 
-	// Reverse strand: genomic upstream exon end = transcript 5' direction
-	// On reverse strand, the exon with higher genomic coords is upstream in transcript
+	// Reverse strand
 	if useUpstream {
-		// pos is after upstreamExon.End genomically, meaning it's in the intron
-		// on reverse strand, this is *before* the exon in transcript order
-		// So: c.{CDSpos of exon.End}-{offset}  (approaching from 3' side)
 		boundaryPos := exonBoundaryHGVScPos(upstreamExon.End, upstreamExon, t)
 		return boundaryPos + "-" + strconv.FormatInt(distToUpstream, 10)
 	}
-	// pos is before downstreamExon.Start genomically
-	// on reverse strand, this is *after* the exon in transcript order
-	// So: c.{CDSpos of exon.Start}+{offset}
 	boundaryPos := exonBoundaryHGVScPos(downstreamExon.Start, downstreamExon, t)
 	return boundaryPos + "+" + strconv.FormatInt(distToDownstream, 10)
 }
