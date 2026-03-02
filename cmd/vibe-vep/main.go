@@ -38,6 +38,46 @@ var (
 	date    = "unknown"
 )
 
+// isColorTerminal returns true if stdout appears to be a color-capable terminal.
+func isColorTerminal() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+func banner() string {
+	const plain = "\n" +
+		"  ██╗   ██╗██╗██████╗ ███████╗    ██╗   ██╗███████╗██████╗ \n" +
+		"  ██║   ██║██║██╔══██╗██╔════╝    ██║   ██║██╔════╝██╔══██╗\n" +
+		"  ██║   ██║██║██████╔╝█████╗      ██║   ██║█████╗  ██████╔╝\n" +
+		"  ╚██╗ ██╔╝██║██╔══██╗██╔══╝     ╚██╗ ██╔╝██╔══╝  ██╔═══╝ \n" +
+		"   ╚████╔╝ ██║██████╔╝███████╗    ╚████╔╝ ███████╗██║     \n" +
+		"    ╚═══╝  ╚═╝╚═════╝ ╚══════╝    ╚═══╝  ╚══════╝╚═╝     \n" +
+		"\n" +
+		"  Variant Effect Predictor and Annotator for Oncology.\n" +
+		"  Combines Ensembl VEP, Genome Nexus, and other annotation tools into one binary."
+
+	if !isColorTerminal() {
+		return plain
+	}
+
+	return "\n" +
+		"\033[96m  ██╗   ██╗██╗██████╗ ███████╗    ██╗   ██╗███████╗██████╗ \n" +
+		"\033[36m  ██║   ██║██║██╔══██╗██╔════╝    ██║   ██║██╔════╝██╔══██╗\n" +
+		"\033[94m  ██║   ██║██║██████╔╝█████╗      ██║   ██║█████╗  ██████╔╝\n" +
+		"\033[34m  ╚██╗ ██╔╝██║██╔══██╗██╔══╝     ╚██╗ ██╔╝██╔══╝  ██╔═══╝ \n" +
+		"\033[95m   ╚████╔╝ ██║██████╔╝███████╗    ╚████╔╝ ███████╗██║     \n" +
+		"\033[35m    ╚═══╝  ╚═╝╚═════╝ ╚══════╝    ╚═══╝  ╚══════╝╚═╝     \n" +
+		"\033[0m\n" +
+		"\033[2m  Variant Effect Predictor and Annotator for Oncology.\n" +
+		"  Combines Ensembl VEP, Genome Nexus, and other annotation tools into one binary.\033[0m"
+}
+
 func newRootCmd() *cobra.Command {
 	var (
 		verbose    bool
@@ -47,7 +87,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:     "vibe-vep",
 		Short:   "Variant Effect Predictor",
-		Long:    "vibe-vep - Variant Effect Predictor using GENCODE annotations",
+		Long:    banner(),
 		Version: fmt.Sprintf("%s (%s) built %s", version, commit, date),
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			return initConfig(configFile)
