@@ -1,8 +1,9 @@
 # Annotation Sources Report
 
-Generated: 2026-03-01 04:57 UTC  
+Generated: 2026-03-03 16:19 UTC  
 GENCODE transcripts: 254070  
 AlphaMissense variants in database: 71697556  
+Cancer Hotspots: 679 genes, 4183 positions  
 Workers: 4 (GOMAXPROCS)
 
 ## AlphaMissense Coverage
@@ -18,15 +19,28 @@ Workers: 4 (GOMAXPROCS)
 | skcm_tcga_gdc | 353450 | 204372 | 185786 | 90.9% | 115483 | 20014 | 50289 |
 | **Total** | **1052366** | **621937** | **571148** | **91.8%** | **343663** | **62385** | **165100** |
 
+## Cancer Hotspots Coverage
+
+| Study | Variants | Checked | Hotspot Hits | Hit Rate | single residue | in-frame indel | 3d | splice |
+|-------|----------|---------|--------------|----------|----------------|----------------|----|--------|
+| blca_tcga_gdc | 115850 | 114037 | 572 | 0.50% | 301 | 1 | 248 | 0 |
+| brca_tcga_gdc | 89012 | 87866 | 884 | 1.01% | 538 | 0 | 309 | 0 |
+| chol_tcga_gdc | 3764 | 3695 | 41 | 1.11% | 30 | 0 | 11 | 0 |
+| coad_tcga_gdc | 244552 | 239629 | 1099 | 0.46% | 608 | 1 | 468 | 0 |
+| gbm_tcga_gdc | 54870 | 54144 | 397 | 0.73% | 153 | 0 | 213 | 0 |
+| luad_tcga_gdc | 190868 | 187939 | 825 | 0.44% | 393 | 0 | 400 | 0 |
+| skcm_tcga_gdc | 353450 | 348150 | 838 | 0.24% | 345 | 0 | 476 | 0 |
+| **Total** | **1052366** | **1035460** | **4656** | **0.45%** | **2368** | **2** | **2125** | **0** |
+
 ## AlphaMissense Performance
 
 | Study | Variants | Base Time | AM Lookup Time | AM Overhead | Lookups/sec |
 |-------|----------|-----------|----------------|-------------|-------------|
-| blca_tcga_gdc | 115850 | 19.151s | 5.03s | 26.3% | 15098 |
-| brca_tcga_gdc | 89012 | 15.912s | 4.447s | 27.9% | 12977 |
-| chol_tcga_gdc | 3764 | 679ms | 2.303s | 339.2% | 1015 |
-| coad_tcga_gdc | 244552 | 30.406s | 7.233s | 23.8% | 17787 |
-| gbm_tcga_gdc | 54870 | 8.464s | 3.649s | 43.1% | 8957 |
-| luad_tcga_gdc | 190868 | 28.32s | 6.491s | 22.9% | 18526 |
-| skcm_tcga_gdc | 353450 | 44.148s | 9.31s | 21.1% | 21953 |
-| **Total** | **1052366** | **2m27.08s** | **38.461s** | **26.2%** | **16170** |
+| blca_tcga_gdc | 115850 | 1m11.254s | 9.158s | 12.9% | 8292 |
+| brca_tcga_gdc | 89012 | 23.228s | 7.19s | 31.0% | 8025 |
+| chol_tcga_gdc | 3764 | 1.06s | 4.012s | 378.6% | 582 |
+| coad_tcga_gdc | 244552 | 42.547s | 10.916s | 25.7% | 11786 |
+| gbm_tcga_gdc | 54870 | 11.985s | 5.924s | 49.4% | 5518 |
+| luad_tcga_gdc | 190868 | 41.836s | 10.994s | 26.3% | 10938 |
+| skcm_tcga_gdc | 353450 | 1m2.537s | 15.184s | 24.3% | 13460 |
+| **Total** | **1052366** | **4m14.447s** | **1m3.378s** | **24.9%** | **9813** |

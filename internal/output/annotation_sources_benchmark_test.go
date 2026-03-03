@@ -13,10 +13,11 @@ import (
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/datasource/alphamissense"
+	"github.com/inodb/vibe-vep/internal/datasource/hotspots"
 	"github.com/inodb/vibe-vep/internal/maf"
 )
 
-// TestAnnotationSourcesBenchmark runs AlphaMissense coverage and performance benchmarks
+// TestAnnotationSourcesBenchmark runs annotation source coverage and performance benchmarks
 // against all TCGA MAF files and generates testdata/tcga/annotation_sources_report.md.
 //
 // Skipped with -short. Run with:
@@ -78,12 +79,25 @@ func TestAnnotationSourcesBenchmark(t *testing.T) {
 	}
 	t.Logf("AlphaMissense variants in database: %d", amCount)
 
-	var results []amStudyResult
+	// Load Hotspots.
+	hotspotsPath := "/home/ino/vibe-vep/genome-nexus-importer/data/common_input/hotspots_v2_and_3d.txt"
+	var hsStore *hotspots.Store
+	if _, err := os.Stat(hotspotsPath); err == nil {
+		hsStore, err = hotspots.Load(hotspotsPath)
+		if err != nil {
+			t.Fatalf("load hotspots: %v", err)
+		}
+		t.Logf("loaded hotspots: %d genes, %d positions", hsStore.GeneCount(), hsStore.HotspotCount())
+	} else {
+		t.Logf("hotspots file not found at %s, skipping hotspots benchmark", hotspotsPath)
+	}
+
+	var results []sourceStudyResult
 
 	for _, mafFile := range mafFiles {
 		name := studyName(mafFile)
 		t.Run(name, func(t *testing.T) {
-			r := benchmarkAMStudy(t, mafFile, c, amStore)
+			r := benchmarkStudy(t, mafFile, c, amStore, hsStore)
 			r.name = name
 			results = append(results, r)
 		})
@@ -91,13 +105,11 @@ func TestAnnotationSourcesBenchmark(t *testing.T) {
 
 	// Write report.
 	reportPath := filepath.Join(tcgaDir, "annotation_sources_report.md")
-	writeAnnotationSourcesReport(t, reportPath, results, c.TranscriptCount(), amCount)
+	writeAnnotationSourcesReport(t, reportPath, results, c.TranscriptCount(), amCount, hsStore)
 }
 
-// benchmarkAMStudy annotates a MAF file and benchmarks AlphaMissense lookups.
-// Uses a two-pass approach: first annotate to find missense variants, then batch
-// lookup all missense variants in a single DuckDB query.
-func benchmarkAMStudy(t *testing.T, mafFile string, c *cache.Cache, amStore *alphamissense.Store) amStudyResult {
+// benchmarkStudy annotates a MAF file and benchmarks all annotation source lookups.
+func benchmarkStudy(t *testing.T, mafFile string, c *cache.Cache, amStore *alphamissense.Store, hsStore *hotspots.Store) sourceStudyResult {
 	t.Helper()
 
 	parser, err := maf.NewParser(mafFile)
@@ -108,16 +120,14 @@ func benchmarkAMStudy(t *testing.T, mafFile string, c *cache.Cache, amStore *alp
 
 	ann := annotate.NewAnnotator(c)
 
-	// Pass 1: annotate all variants and collect missense lookup keys.
-	type missenseKey struct {
-		key alphamissense.LookupKey
-	}
 	var (
 		totalVariants int
 		missenseKeys  []alphamissense.LookupKey
 		baseTime      time.Duration
+		hsHits        int // hotspot hits
+		hsChecked     int // variants with gene+protein position (eligible for hotspot check)
+		hsTypeCounts  = make(map[string]int)
 	)
-	// Deduplicate keys for efficient batch lookup.
 	seen := make(map[alphamissense.LookupKey]bool)
 
 	for {
@@ -137,6 +147,7 @@ func benchmarkAMStudy(t *testing.T, mafFile string, c *cache.Cache, amStore *alp
 			continue
 		}
 
+		// Collect missense keys for AlphaMissense batch lookup.
 		for _, a := range vepAnns {
 			if !isMissenseConsequence(a.Consequence) {
 				continue
@@ -152,11 +163,25 @@ func benchmarkAMStudy(t *testing.T, mafFile string, c *cache.Cache, amStore *alp
 			}
 			break // one lookup per variant
 		}
+
+		// Hotspot lookup: check canonical annotation's gene + protein position.
+		if hsStore != nil {
+			for _, a := range vepAnns {
+				if a.ProteinPosition > 0 && a.GeneName != "" {
+					hsChecked++
+					if h, ok := hsStore.Lookup(a.GeneName, a.ProteinPosition); ok {
+						hsHits++
+						hsTypeCounts[h.Type]++
+					}
+					break // one hotspot check per variant (canonical/best)
+				}
+			}
+		}
 	}
 
 	missenseCount := len(missenseKeys)
 
-	// Pass 2: batch lookup all missense variants.
+	// AlphaMissense batch lookup.
 	lookupStart := time.Now()
 	amResults, err := amStore.BatchLookup(missenseKeys)
 	amLookupTime := time.Since(lookupStart)
@@ -170,24 +195,30 @@ func benchmarkAMStudy(t *testing.T, mafFile string, c *cache.Cache, amStore *alp
 		classCounts[r.Class]++
 	}
 
-	coverage := 0.0
+	amCoverage := 0.0
 	if missenseCount > 0 {
-		coverage = float64(amHits) / float64(missenseCount) * 100
+		amCoverage = float64(amHits) / float64(missenseCount) * 100
 	}
 	t.Logf("%d variants, %d missense, %d AM hits (%.1f%%), batch lookup %s",
-		totalVariants, missenseCount, amHits, coverage, amLookupTime.Round(time.Millisecond))
+		totalVariants, missenseCount, amHits, amCoverage, amLookupTime.Round(time.Millisecond))
+	if hsStore != nil {
+		t.Logf("  hotspots: %d checked, %d hits (types: %v)", hsChecked, hsHits, hsTypeCounts)
+	}
 
-	return amStudyResult{
+	return sourceStudyResult{
 		variants:     totalVariants,
 		missense:     missenseCount,
 		amHits:       amHits,
 		classCounts:  classCounts,
 		baseTime:     baseTime,
 		amLookupTime: amLookupTime,
+		hsChecked:    hsChecked,
+		hsHits:       hsHits,
+		hsTypeCounts: hsTypeCounts,
 	}
 }
 
-type amStudyResult struct {
+type sourceStudyResult struct {
 	name         string
 	variants     int
 	missense     int
@@ -195,6 +226,9 @@ type amStudyResult struct {
 	classCounts  map[string]int
 	baseTime     time.Duration
 	amLookupTime time.Duration
+	hsChecked    int
+	hsHits       int
+	hsTypeCounts map[string]int
 }
 
 // isMissenseConsequence returns true if the consequence includes missense_variant.
@@ -214,7 +248,7 @@ func isMissenseConsequence(consequence string) bool {
 	return false
 }
 
-func writeAnnotationSourcesReport(t *testing.T, path string, results []amStudyResult, transcriptCount int, amCount int64) {
+func writeAnnotationSourcesReport(t *testing.T, path string, results []sourceStudyResult, transcriptCount int, amCount int64, hsStore *hotspots.Store) {
 	t.Helper()
 
 	var sb strings.Builder
@@ -222,6 +256,9 @@ func writeAnnotationSourcesReport(t *testing.T, path string, results []amStudyRe
 	sb.WriteString(fmt.Sprintf("Generated: %s  \n", time.Now().UTC().Format("2006-01-02 15:04 UTC")))
 	sb.WriteString(fmt.Sprintf("GENCODE transcripts: %d  \n", transcriptCount))
 	sb.WriteString(fmt.Sprintf("AlphaMissense variants in database: %d  \n", amCount))
+	if hsStore != nil {
+		sb.WriteString(fmt.Sprintf("Cancer Hotspots: %d genes, %d positions  \n", hsStore.GeneCount(), hsStore.HotspotCount()))
+	}
 	sb.WriteString(fmt.Sprintf("Workers: %d (GOMAXPROCS)\n\n", runtime.NumCPU()))
 
 	// --- AlphaMissense Coverage ---
@@ -257,6 +294,43 @@ func writeAnnotationSourcesReport(t *testing.T, path string, results []amStudyRe
 		totClass["likely_benign"],
 		totClass["ambiguous"],
 		totClass["likely_pathogenic"]))
+
+	// --- Cancer Hotspots Coverage ---
+	if hsStore != nil {
+		sb.WriteString("## Cancer Hotspots Coverage\n\n")
+		sb.WriteString("| Study | Variants | Checked | Hotspot Hits | Hit Rate | single residue | in-frame indel | 3d | splice site |\n")
+		sb.WriteString("|-------|----------|---------|--------------|----------|----------------|----------------|----|--------|\n")
+
+		var totChecked, totHsHits int
+		totHsType := make(map[string]int)
+		for _, r := range results {
+			hitRate := 0.0
+			if r.hsChecked > 0 {
+				hitRate = float64(r.hsHits) / float64(r.hsChecked) * 100
+			}
+			sb.WriteString(fmt.Sprintf("| %s | %d | %d | %d | %.2f%% | %d | %d | %d | %d |\n",
+				r.name, r.variants, r.hsChecked, r.hsHits, hitRate,
+				r.hsTypeCounts["single residue"],
+				r.hsTypeCounts["in-frame indel"],
+				r.hsTypeCounts["3d"],
+				r.hsTypeCounts["splice site"]))
+			totChecked += r.hsChecked
+			totHsHits += r.hsHits
+			for typ, n := range r.hsTypeCounts {
+				totHsType[typ] += n
+			}
+		}
+		totHsRate := 0.0
+		if totChecked > 0 {
+			totHsRate = float64(totHsHits) / float64(totChecked) * 100
+		}
+		sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%d** | **%.2f%%** | **%d** | **%d** | **%d** | **%d** |\n\n",
+			totVariants, totChecked, totHsHits, totHsRate,
+			totHsType["single residue"],
+			totHsType["in-frame indel"],
+			totHsType["3d"],
+			totHsType["splice"]))
+	}
 
 	// --- AlphaMissense Performance ---
 	sb.WriteString("## AlphaMissense Performance\n\n")

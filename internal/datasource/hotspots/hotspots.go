@@ -120,7 +120,25 @@ func (s *Store) HotspotCount() int {
 	return n
 }
 
-// dedup removes duplicate positions, keeping the entry with the lowest q-value.
+// typePriority returns a priority for hotspot types (lower = preferred).
+// "single residue" is direct evidence, preferred over structural prediction ("3d").
+func typePriority(t string) int {
+	switch t {
+	case "single residue":
+		return 0
+	case "in-frame indel":
+		return 1
+	case "splice":
+		return 2
+	case "3d":
+		return 3
+	default:
+		return 4
+	}
+}
+
+// dedup removes duplicate positions, keeping the entry with the best evidence.
+// Prefers lower q-value, then "single residue" type over "3d".
 func dedup(spots []Hotspot) []Hotspot {
 	if len(spots) <= 1 {
 		return spots
@@ -128,9 +146,11 @@ func dedup(spots []Hotspot) []Hotspot {
 	result := spots[:1]
 	for i := 1; i < len(spots); i++ {
 		if spots[i].Position == result[len(result)-1].Position {
-			// Keep the one with the lower q-value (more significant)
-			if spots[i].QValue < result[len(result)-1].QValue {
-				result[len(result)-1] = spots[i]
+			cur := &result[len(result)-1]
+			// Prefer lower q-value, then higher-priority type
+			if spots[i].QValue < cur.QValue ||
+				(spots[i].QValue == cur.QValue && typePriority(spots[i].Type) < typePriority(cur.Type)) {
+				*cur = spots[i]
 			}
 		} else {
 			result = append(result, spots[i])
