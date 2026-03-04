@@ -1,8 +1,9 @@
 /* terminal.css — styles for the vibe-vep interactive tutorial */
 
-/* Hide the Docsy right-sidebar TOC on the tutorial page */
-.hide-toc .td-sidebar-toc {
-  display: none;
+/* Hide the Docsy right-sidebar TOC and page-meta links on the tutorial page */
+.hide-toc .td-sidebar-toc,
+.hide-toc .td-page-meta {
+  display: none !important;
 }
 
 .hide-toc main {
