@@ -107,7 +107,7 @@
 <div class="pq-container">
   <div class="pq-url">
     <label>Parquet URL:</label>
-    <input type="text" id="pq-url-input" placeholder="https://example.com/annotations.parquet" />
+    <input type="text" id="pq-url-input" value="{{ "data/chol_example.parquet" | absURL }}" placeholder="https://example.com/annotations.parquet" />
     <button id="pq-connect-btn" onclick="pqConnect()">Connect</button>
   </div>
 
@@ -240,4 +240,9 @@
   document.getElementById('pq-url-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') pqConnect();
   });
+
+  // Auto-connect if a default URL is set
+  if (document.getElementById('pq-url-input').value) {
+    pqConnect();
+  }
 </script>

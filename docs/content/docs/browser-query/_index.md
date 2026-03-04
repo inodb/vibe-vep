@@ -19,6 +19,8 @@ vibe-vep export parquet → annotations.parquet → S3/static hosting → DuckDB
 
 ## Try It
 
+The demo below auto-loads a bundled TCGA CHOL example (3,764 variants, 152 KB). You can also point it at your own Parquet file.
+
 {{< parquet-query >}}
 
 ## Generating a Parquet File
