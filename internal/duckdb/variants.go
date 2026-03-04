@@ -77,6 +77,15 @@ func (s *Store) WriteVariantResults(results []VariantResult) error {
 			a.IsCanonical, a.Allele, a.Biotype, a.ExonNumber, a.IntronNumber,
 			a.CDNAPosition, a.HGVSp, a.HGVSc, geneType,
 			amScoreF, amClass,
+			a.GetExtra("clinvar", "clnsig"),
+			a.GetExtra("clinvar", "clnrevstat"),
+			a.GetExtra("clinvar", "clndn"),
+			a.GetExtra("hotspots", "hotspot"),
+			a.GetExtra("hotspots", "type"),
+			a.GetExtra("hotspots", "qvalue"),
+			a.GetExtra("signal", "mutation_status"),
+			a.GetExtra("signal", "count_carriers"),
+			a.GetExtra("signal", "frequency"),
 		); err != nil {
 			return fmt.Errorf("append variant result: %w", err)
 		}
@@ -98,7 +107,10 @@ func (s *Store) LookupVariant(chrom string, pos int64, ref, alt string) ([]*anno
 		cds_position, protein_position, amino_acid_change, codon_change,
 		is_canonical, allele, biotype, exon_number, intron_number,
 		cdna_position, hgvsp, hgvsc, gene_type,
-		am_score, am_class
+		am_score, am_class,
+		clinvar_clnsig, clinvar_clnrevstat, clinvar_clndn,
+		hotspots_hotspot, hotspots_type, hotspots_qvalue,
+		signal_mutation_status, signal_count_carriers, signal_frequency
 		FROM variant_results
 		WHERE chrom=? AND pos=? AND ref=? AND alt=?`,
 		chrom, pos, ref, alt)
@@ -112,24 +124,25 @@ func (s *Store) LookupVariant(chrom string, pos int64, ref, alt string) ([]*anno
 		var ann annotate.Annotation
 		var geneType, amClass string
 		var amScore float32
+		var clinvarClnSig, clinvarClnRevStat, clinvarClnDN string
+		var hotspotsHotspot, hotspotsType, hotspotsQValue string
+		var signalMutStatus, signalCountCarriers, signalFreq string
 		if err := rows.Scan(
 			&ann.TranscriptID, &ann.GeneName, &ann.GeneID, &ann.Consequence, &ann.Impact,
 			&ann.CDSPosition, &ann.ProteinPosition, &ann.AminoAcidChange, &ann.CodonChange,
 			&ann.IsCanonical, &ann.Allele, &ann.Biotype, &ann.ExonNumber, &ann.IntronNumber,
 			&ann.CDNAPosition, &ann.HGVSp, &ann.HGVSc, &geneType,
 			&amScore, &amClass,
+			&clinvarClnSig, &clinvarClnRevStat, &clinvarClnDN,
+			&hotspotsHotspot, &hotspotsType, &hotspotsQValue,
+			&signalMutStatus, &signalCountCarriers, &signalFreq,
 		); err != nil {
 			return nil, fmt.Errorf("scan variant: %w", err)
 		}
-		if geneType != "" {
-			ann.SetExtra("oncokb", "gene_type", geneType)
-		}
-		if amScore > 0 {
-			ann.SetExtra("alphamissense", "score", fmt.Sprintf("%.4f", amScore))
-		}
-		if amClass != "" {
-			ann.SetExtra("alphamissense", "class", amClass)
-		}
+		setExtras(&ann, geneType, amScore, amClass,
+			clinvarClnSig, clinvarClnRevStat, clinvarClnDN,
+			hotspotsHotspot, hotspotsType, hotspotsQValue,
+			signalMutStatus, signalCountCarriers, signalFreq)
 		ann.VariantID = annotate.FormatVariantID(chrom, pos, ref, alt)
 		anns = append(anns, &ann)
 	}
@@ -141,14 +154,7 @@ func (s *Store) LookupVariant(chrom string, pos int64, ref, alt string) ([]*anno
 
 // SearchByGene queries DuckDB for all cached variant results for a gene.
 func (s *Store) SearchByGene(geneName string) ([]VariantResult, error) {
-	rows, err := s.db.Query(`SELECT
-		chrom, pos, ref, alt, transcript_id,
-		gene_name, gene_id, consequence, impact,
-		cds_position, protein_position, amino_acid_change, codon_change,
-		is_canonical, allele, biotype, exon_number, intron_number,
-		cdna_position, hgvsp, hgvsc, gene_type,
-		am_score, am_class
-		FROM variant_results
+	rows, err := s.db.Query(selectAllColumns+`
 		WHERE gene_name=?`, geneName)
 	if err != nil {
 		return nil, fmt.Errorf("query by gene: %w", err)
@@ -161,14 +167,7 @@ func (s *Store) SearchByGene(geneName string) ([]VariantResult, error) {
 // SearchByProteinChange queries DuckDB for cached results matching a specific
 // gene and amino acid change (e.g. "G12C").
 func (s *Store) SearchByProteinChange(geneName, aaChange string) ([]VariantResult, error) {
-	rows, err := s.db.Query(`SELECT
-		chrom, pos, ref, alt, transcript_id,
-		gene_name, gene_id, consequence, impact,
-		cds_position, protein_position, amino_acid_change, codon_change,
-		is_canonical, allele, biotype, exon_number, intron_number,
-		cdna_position, hgvsp, hgvsc, gene_type,
-		am_score, am_class
-		FROM variant_results
+	rows, err := s.db.Query(selectAllColumns+`
 		WHERE gene_name=? AND amino_acid_change=?`, geneName, aaChange)
 	if err != nil {
 		return nil, fmt.Errorf("query by protein change: %w", err)
@@ -176,6 +175,63 @@ func (s *Store) SearchByProteinChange(geneName, aaChange string) ([]VariantResul
 	defer rows.Close()
 
 	return scanVariantResults(rows)
+}
+
+// selectAllColumns is the shared SELECT prefix for queries returning full variant rows.
+const selectAllColumns = `SELECT
+		chrom, pos, ref, alt, transcript_id,
+		gene_name, gene_id, consequence, impact,
+		cds_position, protein_position, amino_acid_change, codon_change,
+		is_canonical, allele, biotype, exon_number, intron_number,
+		cdna_position, hgvsp, hgvsc, gene_type,
+		am_score, am_class,
+		clinvar_clnsig, clinvar_clnrevstat, clinvar_clndn,
+		hotspots_hotspot, hotspots_type, hotspots_qvalue,
+		signal_mutation_status, signal_count_carriers, signal_frequency
+		FROM variant_results `
+
+// setExtras populates annotation source Extra fields from scanned column values.
+func setExtras(ann *annotate.Annotation, geneType string, amScore float32, amClass string,
+	clinvarClnSig, clinvarClnRevStat, clinvarClnDN string,
+	hotspotsHotspot, hotspotsType, hotspotsQValue string,
+	signalMutStatus, signalCountCarriers, signalFreq string,
+) {
+	if geneType != "" {
+		ann.SetExtra("oncokb", "gene_type", geneType)
+	}
+	if amScore > 0 {
+		ann.SetExtra("alphamissense", "score", fmt.Sprintf("%.4f", amScore))
+	}
+	if amClass != "" {
+		ann.SetExtra("alphamissense", "class", amClass)
+	}
+	if clinvarClnSig != "" {
+		ann.SetExtra("clinvar", "clnsig", clinvarClnSig)
+	}
+	if clinvarClnRevStat != "" {
+		ann.SetExtra("clinvar", "clnrevstat", clinvarClnRevStat)
+	}
+	if clinvarClnDN != "" {
+		ann.SetExtra("clinvar", "clndn", clinvarClnDN)
+	}
+	if hotspotsHotspot != "" {
+		ann.SetExtra("hotspots", "hotspot", hotspotsHotspot)
+	}
+	if hotspotsType != "" {
+		ann.SetExtra("hotspots", "type", hotspotsType)
+	}
+	if hotspotsQValue != "" {
+		ann.SetExtra("hotspots", "qvalue", hotspotsQValue)
+	}
+	if signalMutStatus != "" {
+		ann.SetExtra("signal", "mutation_status", signalMutStatus)
+	}
+	if signalCountCarriers != "" {
+		ann.SetExtra("signal", "count_carriers", signalCountCarriers)
+	}
+	if signalFreq != "" {
+		ann.SetExtra("signal", "frequency", signalFreq)
+	}
 }
 
 // scanVariantResults scans rows into VariantResult slices.
@@ -191,6 +247,9 @@ func scanVariantResults(rows interface {
 		var ann annotate.Annotation
 		var geneType, amClass string
 		var amScore float32
+		var clinvarClnSig, clinvarClnRevStat, clinvarClnDN string
+		var hotspotsHotspot, hotspotsType, hotspotsQValue string
+		var signalMutStatus, signalCountCarriers, signalFreq string
 
 		if err := rows.Scan(
 			&chrom, &pos, &ref, &alt, &ann.TranscriptID,
@@ -199,19 +258,17 @@ func scanVariantResults(rows interface {
 			&ann.IsCanonical, &ann.Allele, &ann.Biotype, &ann.ExonNumber, &ann.IntronNumber,
 			&ann.CDNAPosition, &ann.HGVSp, &ann.HGVSc, &geneType,
 			&amScore, &amClass,
+			&clinvarClnSig, &clinvarClnRevStat, &clinvarClnDN,
+			&hotspotsHotspot, &hotspotsType, &hotspotsQValue,
+			&signalMutStatus, &signalCountCarriers, &signalFreq,
 		); err != nil {
 			return nil, fmt.Errorf("scan variant result: %w", err)
 		}
 
-		if geneType != "" {
-			ann.SetExtra("oncokb", "gene_type", geneType)
-		}
-		if amScore > 0 {
-			ann.SetExtra("alphamissense", "score", fmt.Sprintf("%.4f", amScore))
-		}
-		if amClass != "" {
-			ann.SetExtra("alphamissense", "class", amClass)
-		}
+		setExtras(&ann, geneType, amScore, amClass,
+			clinvarClnSig, clinvarClnRevStat, clinvarClnDN,
+			hotspotsHotspot, hotspotsType, hotspotsQValue,
+			signalMutStatus, signalCountCarriers, signalFreq)
 
 		ann.VariantID = annotate.FormatVariantID(chrom, pos, ref, alt)
 		a := ann
@@ -223,4 +280,16 @@ func scanVariantResults(rows interface {
 		return nil, fmt.Errorf("iterate variant results: %w", err)
 	}
 	return results, nil
+}
+
+// ExportAllRows returns all cached variant results sorted for Parquet export.
+func (s *Store) ExportAllRows() ([]VariantResult, error) {
+	rows, err := s.db.Query(selectAllColumns +
+		`ORDER BY chrom, pos, ref, alt, transcript_id`)
+	if err != nil {
+		return nil, fmt.Errorf("export all rows: %w", err)
+	}
+	defer rows.Close()
+
+	return scanVariantResults(rows)
 }

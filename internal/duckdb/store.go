@@ -79,15 +79,20 @@ func (s *Store) ensureSchema() error {
 		gene_type VARCHAR,
 		am_score FLOAT DEFAULT 0,
 		am_class VARCHAR DEFAULT '',
+		clinvar_clnsig VARCHAR DEFAULT '',
+		clinvar_clnrevstat VARCHAR DEFAULT '',
+		clinvar_clndn VARCHAR DEFAULT '',
+		hotspots_hotspot VARCHAR DEFAULT '',
+		hotspots_type VARCHAR DEFAULT '',
+		hotspots_qvalue VARCHAR DEFAULT '',
+		signal_mutation_status VARCHAR DEFAULT '',
+		signal_count_carriers VARCHAR DEFAULT '',
+		signal_frequency VARCHAR DEFAULT '',
 		PRIMARY KEY (chrom, pos, ref, alt, transcript_id)
 	)`)
 	if err != nil {
 		return err
 	}
-
-	// Add AM columns to existing databases (backward compat)
-	s.db.Exec("ALTER TABLE variant_results ADD COLUMN IF NOT EXISTS am_score FLOAT DEFAULT 0")
-	s.db.Exec("ALTER TABLE variant_results ADD COLUMN IF NOT EXISTS am_class VARCHAR DEFAULT ''")
 
 	return nil
 }
