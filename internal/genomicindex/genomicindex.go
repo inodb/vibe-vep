@@ -59,12 +59,19 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// Ready returns true if dbPath exists and is newer than all source files.
+// Ready returns true if dbPath exists, is newer than all source files, and
+// passes a quick integrity check (table exists and is readable).
 func Ready(dbPath string, sources BuildSources) bool {
 	dbInfo, err := os.Stat(dbPath)
 	if err != nil {
 		return false
 	}
+
+	// Reject empty files (e.g. leftover from a failed build).
+	if dbInfo.Size() == 0 {
+		return false
+	}
+
 	dbMod := dbInfo.ModTime()
 
 	for _, src := range []string{sources.AlphaMissenseTSV, sources.ClinVarVCF, sources.SignalTSV} {
@@ -79,7 +86,27 @@ func Ready(dbPath string, sources BuildSources) bool {
 			return false
 		}
 	}
+
+	// Quick integrity check: open DB and verify the table is readable.
+	if err := quickCheck(dbPath); err != nil {
+		return false
+	}
 	return true
+}
+
+// quickCheck opens the database and verifies the genomic_annotations table
+// exists and can return a row. This catches corruption, truncation, and
+// schema mismatches without scanning the full table.
+func quickCheck(dbPath string) error {
+	db, err := sql.Open("sqlite", dbPath+"?mode=ro")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Verify table exists and is readable.
+	var n int
+	return db.QueryRow("SELECT 1 FROM genomic_annotations LIMIT 1").Scan(&n)
 }
 
 // Build creates the SQLite database from source files. Each source is loaded

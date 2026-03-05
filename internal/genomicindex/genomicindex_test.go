@@ -380,15 +380,41 @@ func TestReady(t *testing.T) {
 		t.Error("Ready should return false when DB doesn't exist")
 	}
 
-	// Create the DB.
+	// Empty file — not a valid SQLite database.
 	f, err := os.Create(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.Close()
+	if Ready(dbPath, sources) {
+		t.Error("Ready should return false for empty file")
+	}
 
-	// Source file doesn't exist — Ready should return true (can't be stale).
-	if !Ready(dbPath, sources) {
-		t.Error("Ready should return true when source file doesn't exist")
+	// Corrupted file (non-SQLite content).
+	if err := os.WriteFile(dbPath, []byte("not a sqlite database"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if Ready(dbPath, sources) {
+		t.Error("Ready should return false for corrupted file")
+	}
+
+	// Valid SQLite but wrong schema (missing genomic_annotations table).
+	os.Remove(dbPath)
+	wrongDB, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongDB.Exec("CREATE TABLE wrong_table (id INTEGER)")
+	wrongDB.Close()
+	if Ready(dbPath, sources) {
+		t.Error("Ready should return false for wrong schema")
+	}
+
+	// Valid database — use setupTestDB.
+	os.Remove(dbPath)
+	goodPath := setupTestDB(t)
+	goodSources := BuildSources{AlphaMissenseTSV: "/nonexistent"}
+	if !Ready(goodPath, goodSources) {
+		t.Error("Ready should return true for valid database")
 	}
 }
