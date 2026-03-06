@@ -3,148 +3,186 @@ package main
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
-	"time"
 
-	"go.uber.org/zap"
-
-	"github.com/inodb/vibe-vep/internal/annotate"
-	"github.com/inodb/vibe-vep/internal/maf"
 	"github.com/inodb/vibe-vep/internal/output"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
-func newCompareCmd(verbose *bool) *cobra.Command {
-	var (
-		assembly string
-		columns  string
-		all      bool
-	)
-
+func newCompareCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "compare <maf-file>",
-		Short: "Compare MAF annotations against VEP predictions",
-		Long:  "Compare MAF annotations against VEP predictions with categorized mismatch analysis.",
-		Example: `  vibe-vep compare data_mutations.txt
-  vibe-vep compare --columns consequence,hgvsp data_mutations.txt
-  vibe-vep compare --all data_mutations.txt`,
-		Args: cobra.ExactArgs(1),
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			return viper.BindPFlags(cmd.Flags())
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			logger, err := newLogger(*verbose)
-			if err != nil {
-				return fmt.Errorf("creating logger: %w", err)
-			}
-			defer logger.Sync()
+		Use:   "compare",
+		Short: "Compare variant annotations",
+		Long: `Compare variant annotations between two files.
 
-			// Parse columns
-			colMap := make(map[string]bool)
-			for _, c := range strings.Split(viper.GetString("columns"), ",") {
-				c = strings.TrimSpace(strings.ToLower(c))
-				if c != "" {
-					colMap[c] = true
-				}
-			}
-
-			return runCompare(logger, args[0],
-				viper.GetString("assembly"),
-				colMap,
-				viper.GetBool("all"),
-				viper.GetBool("no-cache"),
-				viper.GetBool("clear-cache"),
-			)
-		},
+Subcommands:
+  maf   Compare two MAF files side by side
+  vcf   Compare two VCF files side by side`,
+		Example: `  vibe-vep compare maf file1.maf file2.maf
+  vibe-vep compare maf --categorize --columns Consequence,HGVSp_Short,HGVSc file1.maf file2.maf
+  vibe-vep compare vcf file1.vcf file2.vcf`,
 	}
 
-	cmd.Flags().StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
-	cmd.Flags().StringVar(&columns, "columns", "consequence,hgvsp,hgvsc", "Columns to compare (comma-separated)")
-	cmd.Flags().BoolVar(&all, "all", false, "Show all rows, not just non-matches")
-	addCacheFlags(cmd)
+	cmd.AddCommand(newCompareMAFCmd())
+	cmd.AddCommand(newCompareVCFCmd())
 
 	return cmd
 }
 
-func runCompare(logger *zap.Logger, inputPath, assembly string, columns map[string]bool, showAll bool, noCache, clearCache bool) error {
-	parser, err := maf.NewParser(inputPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("%w (check that the file path is correct)", err)
-		}
-		return err
-	}
-	defer parser.Close()
+// newCompareMAFCmd creates the "compare maf" subcommand for two-file MAF diff.
+func newCompareMAFCmd() *cobra.Command {
+	var (
+		columns    string
+		colMap     string
+		all        bool
+		maxDiffs   int
+		categorize bool
+	)
 
-	// Load transcript cache
-	cr, err := loadCache(logger, assembly, noCache, clearCache)
-	if err != nil {
-		return err
-	}
-	if cr.store != nil {
-		defer cr.store.Close()
-	}
-	defer cr.closeSources()
+	cmd := &cobra.Command{
+		Use:   "maf <left.maf> <right.maf>",
+		Short: "Compare two MAF files side by side",
+		Long: `Compare two MAF files column by column, showing differences and concordance rates.
 
-	ann := annotate.NewAnnotator(cr.cache)
-	ann.SetLogger(logger)
+Variants are matched by genomic position (Chromosome, Start_Position, Reference_Allele, Tumor_Seq_Allele2).
+By default, all columns present in both files are compared.
 
-	cmpWriter := output.NewCompareWriter(os.Stdout, columns, showAll)
-	if err := cmpWriter.WriteHeader(); err != nil {
-		return fmt.Errorf("writing header: %w", err)
+With --categorize, known annotation columns (Consequence, HGVSp, HGVSc) get semantic
+categorization (match, position_shift, transcript_model_change, etc.) instead of
+simple string equality.`,
+		Example: `  vibe-vep compare maf file1.maf file2.maf
+  vibe-vep compare maf --columns Hugo_Symbol,Variant_Classification,HGVSp_Short file1.maf file2.maf
+  vibe-vep compare maf --categorize --columns Consequence,HGVSp_Short,HGVSc file1.maf file2.maf
+  vibe-vep compare maf --map 'Protein_Change=HGVSp_Short' file1.maf file2.maf
+  vibe-vep compare maf --all file1.maf file2.maf
+  vibe-vep compare maf --max-diffs 100 file1.maf file2.maf`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCompareMAF(args[0], args[1], columns, colMap, all, maxDiffs, categorize)
+		},
 	}
 
-	// Parse variants in a goroutine, send to worker pool.
-	items := make(chan annotate.WorkItem, 2*runtime.NumCPU())
-	var parseErr error
-	go func() {
-		defer close(items)
-		seq := 0
-		for {
-			v, mafAnn, err := parser.NextWithAnnotation()
-			if err != nil {
-				parseErr = fmt.Errorf("reading variant: %w", err)
-				return
+	cmd.Flags().StringVar(&columns, "columns", "", "Columns to compare (comma-separated; default: all shared columns)")
+	cmd.Flags().StringVar(&colMap, "map", "", "Map columns with different names: 'left_name=right_name,...'")
+	cmd.Flags().BoolVar(&all, "all", false, "Show all rows, not just differences")
+	cmd.Flags().IntVar(&maxDiffs, "max-diffs", 0, "Limit output to first N diffs (0 = unlimited)")
+	cmd.Flags().BoolVar(&categorize, "categorize", false, "Use semantic categorization for annotation columns")
+
+	return cmd
+}
+
+// newCompareVCFCmd creates the "compare vcf" subcommand for two-file VCF diff.
+func newCompareVCFCmd() *cobra.Command {
+	var (
+		columns  string
+		colMap   string
+		all      bool
+		maxDiffs int
+	)
+
+	cmd := &cobra.Command{
+		Use:   "vcf <left.vcf> <right.vcf>",
+		Short: "Compare two VCF files side by side",
+		Long: `Compare two VCF files by INFO fields, showing differences and concordance rates.
+
+Variants are matched by genomic position (CHROM, POS, REF, ALT).
+By default, all shared INFO field keys are compared.`,
+		Example: `  vibe-vep compare vcf file1.vcf file2.vcf
+  vibe-vep compare vcf --columns CSQ,AF,DP file1.vcf file2.vcf
+  vibe-vep compare vcf --all file1.vcf file2.vcf`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCompareVCF(args[0], args[1], columns, colMap, all, maxDiffs)
+		},
+	}
+
+	cmd.Flags().StringVar(&columns, "columns", "", "INFO keys to compare (comma-separated; default: all shared keys)")
+	cmd.Flags().StringVar(&colMap, "map", "", "Map columns with different names: 'left_name=right_name,...'")
+	cmd.Flags().BoolVar(&all, "all", false, "Show all rows, not just differences")
+	cmd.Flags().IntVar(&maxDiffs, "max-diffs", 0, "Limit output to first N diffs (0 = unlimited)")
+
+	return cmd
+}
+
+func runCompareMAF(leftPath, rightPath, columnsStr, mapStr string, showAll bool, maxDiffs int, categorize bool) error {
+	// Parse --columns
+	var columns []string
+	if columnsStr != "" {
+		for _, c := range strings.Split(columnsStr, ",") {
+			c = strings.TrimSpace(c)
+			if c != "" {
+				columns = append(columns, c)
 			}
-			if v == nil {
-				return
+		}
+	}
+
+	// Parse --map
+	colMap, err := output.ParseColumnMap(mapStr)
+	if err != nil {
+		return fmt.Errorf("parsing --map: %w", err)
+	}
+
+	leftHeader, leftVariants, leftKeys, err := output.ReadMAFFile(leftPath)
+	if err != nil {
+		return fmt.Errorf("reading left file: %w", err)
+	}
+
+	rightHeader, rightVariants, rightKeys, err := output.ReadMAFFile(rightPath)
+	if err != nil {
+		return fmt.Errorf("reading right file: %w", err)
+	}
+
+	var cat *output.Categorizer
+	if categorize {
+		cat = &output.Categorizer{}
+	}
+
+	return output.CompareFiles(
+		leftHeader, rightHeader,
+		leftVariants, rightVariants,
+		leftKeys, rightKeys,
+		leftPath, rightPath,
+		columns, colMap, showAll, maxDiffs,
+		cat,
+		os.Stdout, os.Stderr,
+	)
+}
+
+func runCompareVCF(leftPath, rightPath, columnsStr, mapStr string, showAll bool, maxDiffs int) error {
+	// Parse --columns
+	var columns []string
+	if columnsStr != "" {
+		for _, c := range strings.Split(columnsStr, ",") {
+			c = strings.TrimSpace(c)
+			if c != "" {
+				columns = append(columns, c)
 			}
-			items <- annotate.WorkItem{Seq: seq, Variant: v, Extra: mafAnn}
-			seq++
 		}
-	}()
-
-	results := ann.ParallelAnnotate(items, 0)
-
-	progress := func(n int) {
-		logger.Info("progress", zap.Int("variants_processed", n))
 	}
 
-	if err := annotate.OrderedCollectWithProgress(results, 2*time.Second, progress, func(r annotate.WorkResult) error {
-		mafAnn := r.Extra.(*maf.MAFAnnotation)
-		if r.Err != nil {
-			logger.Warn("failed to annotate variant",
-				zap.String("chrom", r.Variant.Chrom),
-				zap.Int64("pos", r.Variant.Pos),
-				zap.Error(r.Err))
-			return nil
-		}
-		return cmpWriter.WriteComparison(r.Variant, mafAnn, r.Anns)
-	}); err != nil {
-		return err
+	// Parse --map
+	colMap, err := output.ParseColumnMap(mapStr)
+	if err != nil {
+		return fmt.Errorf("parsing --map: %w", err)
 	}
 
-	if parseErr != nil {
-		return parseErr
+	leftHeader, leftVariants, leftKeys, err := output.ReadVCFFile(leftPath)
+	if err != nil {
+		return fmt.Errorf("reading left file: %w", err)
 	}
 
-	if err := cmpWriter.Flush(); err != nil {
-		return fmt.Errorf("flushing output: %w", err)
+	rightHeader, rightVariants, rightKeys, err := output.ReadVCFFile(rightPath)
+	if err != nil {
+		return fmt.Errorf("reading right file: %w", err)
 	}
 
-	cmpWriter.WriteSummary(os.Stderr)
-
-	return nil
+	return output.CompareFiles(
+		leftHeader, rightHeader,
+		leftVariants, rightVariants,
+		leftKeys, rightKeys,
+		leftPath, rightPath,
+		columns, colMap, showAll, maxDiffs,
+		nil,
+		os.Stdout, os.Stderr,
+	)
 }

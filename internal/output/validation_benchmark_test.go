@@ -61,7 +61,8 @@ func TestValidationBenchmark(t *testing.T) {
 	// Load cancer gene list
 	cgl := loadCancerGeneList(t)
 
-	allCols := map[string]bool{"consequence": true, "hgvsp": true, "hgvsc": true}
+	categorizer := &output.Categorizer{}
+	comparedColumns := []string{"Consequence", "HGVSp_Short", "HGVSc"}
 	var results []studyResult
 
 	for _, mafFile := range mafFiles {
@@ -75,11 +76,15 @@ func TestValidationBenchmark(t *testing.T) {
 			defer parser.Close()
 
 			ann := annotate.NewAnnotator(c)
-			cmpWriter := output.NewCompareWriter(os.Stderr, allCols, false)
 
-			// Track per-gene mismatches for cancer genes
-			geneMismatches := make(map[string]map[string]int) // gene → column → mismatch count
-			geneTotal := make(map[string]int)                 // gene → total count
+			// Track category counts and cancer gene mismatches
+			catCounts := make(map[string]map[output.Category]int)
+			for _, col := range comparedColumns {
+				catCounts[col] = make(map[output.Category]int)
+			}
+			geneMismatches := make(map[string]map[string]int)
+			geneTotal := make(map[string]int)
+			total := 0
 
 			start := time.Now()
 			for {
@@ -94,16 +99,40 @@ func TestValidationBenchmark(t *testing.T) {
 				if err != nil {
 					continue
 				}
-				if err := cmpWriter.WriteComparison(v, mafAnn, vepAnns); err != nil {
-					t.Fatalf("write comparison: %v", err)
+				total++
+
+				bestAnn := output.SelectBestAnnotation(mafAnn, vepAnns)
+
+				// Build left (original MAF) and right (prediction) maps
+				left := map[string]string{
+					"Consequence": mafAnn.Consequence,
+					"HGVSp_Short": mafAnn.HGVSpShort,
+					"HGVSc":       mafAnn.HGVSc,
+				}
+				right := map[string]string{
+					"Consequence": "",
+					"HGVSp_Short": "",
+					"HGVSc":       "",
+				}
+				if bestAnn != nil {
+					right["Consequence"] = bestAnn.Consequence
+					right["HGVSp_Short"] = output.HGVSpToShort(bestAnn.HGVSp)
+					right["HGVSc"] = bestAnn.HGVSc
+				}
+
+				cats := categorizer.CategorizeRow(comparedColumns, left, right,
+					comparedColumns, comparedColumns)
+
+				// Update category counts
+				for _, col := range comparedColumns {
+					catCounts[col][cats[col]]++
 				}
 
 				// Track cancer gene mismatches
 				if cgl != nil && cgl.IsCancerGene(mafAnn.HugoSymbol) {
 					gene := mafAnn.HugoSymbol
 					geneTotal[gene]++
-					counts := cmpWriter.LastCategories()
-					for col, cat := range counts {
+					for col, cat := range cats {
 						if cat == output.CatMismatch {
 							if geneMismatches[gene] == nil {
 								geneMismatches[gene] = make(map[string]int)
@@ -115,12 +144,9 @@ func TestValidationBenchmark(t *testing.T) {
 			}
 			seqDuration := time.Since(start)
 
-			counts := cmpWriter.Counts()
-			total := cmpWriter.Total()
-
 			// Extract consequence counts
-			conseqMatch := counts["consequence"][output.CatMatch] + counts["consequence"][output.CatUpstreamReclass]
-			conseqMismatch := counts["consequence"][output.CatMismatch]
+			conseqMatch := catCounts["Consequence"][output.CatMatch] + catCounts["Consequence"][output.CatUpstreamReclass]
+			conseqMismatch := catCounts["Consequence"][output.CatMismatch]
 
 			// --- Parallel pass (throughput measurement) ---
 			parDuration := benchmarkParallel(t, mafFile, ann, runtime.NumCPU())
@@ -137,7 +163,7 @@ func TestValidationBenchmark(t *testing.T) {
 			results = append(results, studyResult{
 				name:           name,
 				variants:       total,
-				categoryCounts: counts,
+				categoryCounts: catCounts,
 				seqDuration:    seqDuration,
 				parDuration:    parDuration,
 				conseqMatch:    conseqMatch,
@@ -236,11 +262,11 @@ func writeReport(t *testing.T, path string, results []studyResult, transcriptCou
 	var totHGVSpMatch, totHGVSpMismatch, totHGVScMatch, totHGVScMismatch int
 	for _, r := range results {
 		conseqRate := float64(r.conseqMatch) / float64(r.variants) * 100
-		hgvspMatch := r.categoryCounts["hgvsp"][output.CatMatch]
-		hgvspMismatch := r.categoryCounts["hgvsp"][output.CatMismatch]
+		hgvspMatch := r.categoryCounts["HGVSp_Short"][output.CatMatch]
+		hgvspMismatch := r.categoryCounts["HGVSp_Short"][output.CatMismatch]
 		hgvspRate := float64(hgvspMatch) / float64(r.variants) * 100
-		hgvscMatch := r.categoryCounts["hgvsc"][output.CatMatch]
-		hgvscMismatch := r.categoryCounts["hgvsc"][output.CatMismatch]
+		hgvscMatch := r.categoryCounts["HGVSc"][output.CatMatch]
+		hgvscMismatch := r.categoryCounts["HGVSc"][output.CatMismatch]
 		hgvscRate := float64(hgvscMatch) / float64(r.variants) * 100
 		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %d | %.1f%% | %d | %d | %.1f%% | %d | %d | %.1f%% |\n",
 			r.name, r.variants,
@@ -265,11 +291,11 @@ func writeReport(t *testing.T, path string, results []studyResult, transcriptCou
 		totHGVScMatch, totHGVScMismatch, totHGVScRate))
 
 	// Per-column category breakdown
-	colOrder := []string{"consequence", "hgvsp", "hgvsc"}
+	colOrder := []string{"Consequence", "HGVSp_Short", "HGVSc"}
 	colNames := map[string]string{
-		"consequence": "Consequence",
-		"hgvsp":       "HGVSp",
-		"hgvsc":       "HGVSc",
+		"Consequence": "Consequence",
+		"HGVSp_Short": "HGVSp",
+		"HGVSc":       "HGVSc",
 	}
 
 	for _, col := range colOrder {
@@ -359,7 +385,7 @@ func writeReport(t *testing.T, path string, results []studyResult, transcriptCou
 			}
 			var genes []geneEntry
 			for gene, counts := range aggGeneMismatches {
-				total := counts["consequence"] + counts["hgvsp"] + counts["hgvsc"]
+				total := counts["Consequence"] + counts["HGVSp_Short"] + counts["HGVSc"]
 				genes = append(genes, geneEntry{gene, total})
 			}
 			sort.Slice(genes, func(i, j int) bool {
@@ -373,7 +399,7 @@ func writeReport(t *testing.T, path string, results []studyResult, transcriptCou
 				counts := aggGeneMismatches[ge.gene]
 				sb.WriteString(fmt.Sprintf("| %s | %d | %d | %d | %d |\n",
 					ge.gene, aggGeneTotal[ge.gene],
-					counts["consequence"], counts["hgvsp"], counts["hgvsc"]))
+					counts["Consequence"], counts["HGVSp_Short"], counts["HGVSc"]))
 			}
 			sb.WriteString("\n")
 		}

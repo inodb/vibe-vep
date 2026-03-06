@@ -144,7 +144,7 @@ func (m *VCF2MAFWriter) WriteRow(v *vcf.Variant, ann *annotate.Annotation) error
 	if ann != nil {
 		writeField(ann.HGVSc)              // HGVSc
 		writeField(ann.HGVSp)              // HGVSp
-		writeField(hgvspToShort(ann.HGVSp)) // HGVSp_Short
+		writeField(HGVSpToShort(ann.HGVSp)) // HGVSp_Short
 		writeField(ann.TranscriptID)        // Transcript_ID
 		writeField(ann.ExonNumber)          // Exon_Number
 		writeField(ann.Consequence)         // Consequence

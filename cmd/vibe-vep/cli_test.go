@@ -142,6 +142,53 @@ func TestNormalizeAssembly(t *testing.T) {
 	}
 }
 
+func TestCompareSubcommandHelp(t *testing.T) {
+	for _, sub := range []string{"maf", "vcf"} {
+		t.Run(sub, func(t *testing.T) {
+			out, _, err := executeCommand("compare", sub, "--help")
+			if err != nil {
+				t.Fatalf("compare %s --help failed: %v", sub, err)
+			}
+			if out == "" {
+				t.Errorf("compare %s --help produced no output", sub)
+			}
+		})
+	}
+}
+
+func TestCompareMAFSubcommandFlags(t *testing.T) {
+	out, _, err := executeCommand("compare", "maf", "--help")
+	if err != nil {
+		t.Fatalf("compare maf --help failed: %v", err)
+	}
+	for _, flag := range []string{"--columns", "--map", "--all", "--max-diffs"} {
+		if !strings.Contains(out, flag) {
+			t.Errorf("compare maf --help should mention %s flag", flag)
+		}
+	}
+}
+
+func TestCompareMAFMissingFiles(t *testing.T) {
+	_, _, err := executeCommand("compare", "maf", "nonexistent1.maf", "nonexistent2.maf")
+	if err == nil {
+		t.Fatal("expected error for missing MAF files")
+	}
+}
+
+func TestCompareVCFMissingFiles(t *testing.T) {
+	_, _, err := executeCommand("compare", "vcf", "nonexistent1.vcf", "nonexistent2.vcf")
+	if err == nil {
+		t.Fatal("expected error for missing VCF files")
+	}
+}
+
+func TestCompareMAFWrongArgCount(t *testing.T) {
+	_, _, err := executeCommand("compare", "maf", "only_one_file.maf")
+	if err == nil {
+		t.Fatal("expected error for wrong number of args")
+	}
+}
+
 func TestPickAndMostSevereMutualExclusion(t *testing.T) {
 	// --pick and --most-severe together should fail
 	_, _, err := executeCommand("annotate", "maf", "--pick", "--most-severe", "input.maf")

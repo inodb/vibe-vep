@@ -94,7 +94,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "Config file (default: $HOME/.vibe-vep.yaml)")
 
 	rootCmd.AddCommand(newAnnotateCmd(&verbose))
-	rootCmd.AddCommand(newCompareCmd(&verbose))
+	rootCmd.AddCommand(newCompareCmd())
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newConvertCmd(&verbose))
 	rootCmd.AddCommand(newDownloadCmd(&verbose))

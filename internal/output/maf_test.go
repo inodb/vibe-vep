@@ -281,6 +281,201 @@ func TestSOToMAFClassification(t *testing.T) {
 	}
 }
 
+func TestMAFWriter_Replace(t *testing.T) {
+	fields := []string{
+		"OLD_GENE",   // 0: Hugo_Symbol
+		"old_conseq", // 1: Consequence
+		"p.O1X",      // 2: HGVSp_Short
+		"ENST0001",   // 3: Transcript_ID
+		"12",         // 4: Chromosome
+		"100",        // 5: Start_Position
+		"100",        // 6: End_Position
+		"C",          // 7: Reference_Allele
+		"T",          // 8: Tumor_Seq_Allele2
+		"c.1A>T",     // 9: HGVSc
+		"Silent",     // 10: Variant_Classification
+		"p.Old1New",  // 11: HGVSp
+	}
+
+	ann := &annotate.Annotation{
+		GeneName:     "KRAS",
+		Consequence:  "missense_variant",
+		TranscriptID: "ENST00000311936",
+		HGVSp:        "p.Gly12Cys",
+		HGVSc:        "c.34G>T",
+	}
+	v := &vcf.Variant{Ref: "C", Alt: "T"}
+
+	var buf bytes.Buffer
+	header := "Hugo_Symbol\tConsequence\tHGVSp_Short\tTranscript_ID\tChromosome\tStart_Position\tEnd_Position\tReference_Allele\tTumor_Seq_Allele2\tHGVSc\tVariant_Classification\tHGVSp"
+	cols := maf.ColumnIndices{
+		Chromosome:            4,
+		StartPosition:         5,
+		EndPosition:           6,
+		ReferenceAllele:       7,
+		TumorSeqAllele2:       8,
+		HugoSymbol:            0,
+		Consequence:           1,
+		HGVSpShort:            2,
+		TranscriptID:          3,
+		VariantType:           -1,
+		NCBIBuild:             -1,
+		HGVSc:                 9,
+		VariantClassification: 10,
+		HGVSp:                 11,
+	}
+	w := NewMAFWriter(&buf, header, cols)
+	w.SetReplace(true)
+
+	if err := w.WriteHeader(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteRow(fields, ann, v); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines (header + 1 row), got %d", len(lines))
+	}
+
+	// Header should be unchanged (no vibe.* core columns)
+	if lines[0] != header {
+		t.Errorf("header changed in replace mode:\n  got:  %s\n  want: %s", lines[0], header)
+	}
+
+	parts := strings.Split(lines[1], "\t")
+	if len(parts) != 12 {
+		t.Fatalf("expected 12 columns (same as input), got %d", len(parts))
+	}
+
+	// Core columns should be OVERWRITTEN
+	checks := map[int]string{
+		0:  "KRAS",              // Hugo_Symbol
+		1:  "missense_variant",  // Consequence
+		2:  "p.G12C",            // HGVSp_Short
+		3:  "ENST00000311936",   // Transcript_ID
+		9:  "c.34G>T",           // HGVSc
+		10: "Missense_Mutation", // Variant_Classification
+		11: "p.Gly12Cys",        // HGVSp
+	}
+	for idx, want := range checks {
+		if parts[idx] != want {
+			t.Errorf("column %d = %q, want %q (overwritten)", idx, parts[idx], want)
+		}
+	}
+
+	// Non-core columns should be preserved
+	if parts[4] != "12" {
+		t.Errorf("Chromosome = %q, want 12 (preserved)", parts[4])
+	}
+}
+
+func TestMAFWriter_ReplaceWithSources(t *testing.T) {
+	fields := []string{"GENE", "conseq"}
+
+	ann := &annotate.Annotation{
+		GeneName:    "KRAS",
+		Consequence: "missense_variant",
+	}
+	ann.SetExtra("oncokb", "gene_type", "ONCOGENE")
+
+	var buf bytes.Buffer
+	header := "Hugo_Symbol\tConsequence"
+	cols := maf.ColumnIndices{
+		HugoSymbol:            0,
+		Consequence:           1,
+		HGVSpShort:            -1,
+		TranscriptID:          -1,
+		HGVSc:                 -1,
+		VariantClassification: -1,
+		HGVSp:                 -1,
+		Chromosome:            -1,
+		StartPosition:         -1,
+		EndPosition:           -1,
+		ReferenceAllele:       -1,
+		TumorSeqAllele2:       -1,
+		VariantType:           -1,
+		NCBIBuild:             -1,
+	}
+	w := NewMAFWriter(&buf, header, cols)
+	w.SetReplace(true)
+	w.SetSources([]annotate.AnnotationSource{&testSource{
+		name:    "oncokb",
+		version: "v1",
+		columns: []annotate.ColumnDef{{Name: "gene_type", Description: "Gene type"}},
+	}})
+
+	if err := w.WriteHeader(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteRow(fields, ann, &vcf.Variant{Ref: "C", Alt: "T"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+
+	// Header: original + source columns (no vibe. prefix in replace mode)
+	if lines[0] != "Hugo_Symbol\tConsequence\toncokb.gene_type" {
+		t.Errorf("header = %q, want Hugo_Symbol\\tConsequence\\toncokb.gene_type", lines[0])
+	}
+
+	// Row: overwritten core + source columns
+	parts := strings.Split(lines[1], "\t")
+	if parts[0] != "KRAS" {
+		t.Errorf("Hugo_Symbol = %q, want KRAS (overwritten)", parts[0])
+	}
+	if parts[1] != "missense_variant" {
+		t.Errorf("Consequence = %q, want missense_variant (overwritten)", parts[1])
+	}
+	if parts[2] != "ONCOGENE" {
+		t.Errorf("oncokb.gene_type = %q, want ONCOGENE", parts[2])
+	}
+}
+
+func TestMAFWriter_ReplaceNilAnnotation(t *testing.T) {
+	fields := []string{"GENE", "conseq"}
+
+	var buf bytes.Buffer
+	cols := maf.ColumnIndices{
+		HugoSymbol:            0,
+		Consequence:           1,
+		HGVSpShort:            -1,
+		TranscriptID:          -1,
+		HGVSc:                 -1,
+		VariantClassification: -1,
+		HGVSp:                 -1,
+		Chromosome:            -1,
+		StartPosition:         -1,
+		EndPosition:           -1,
+		ReferenceAllele:       -1,
+		TumorSeqAllele2:       -1,
+		VariantType:           -1,
+		NCBIBuild:             -1,
+	}
+	w := NewMAFWriter(&buf, "Hugo_Symbol\tConsequence", cols)
+	w.SetReplace(true)
+
+	if err := w.WriteRow(fields, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	parts := strings.Split(strings.TrimRight(buf.String(), "\n"), "\t")
+	// Original values should be preserved when annotation is nil
+	if parts[0] != "GENE" {
+		t.Errorf("Hugo_Symbol = %q, want GENE (unchanged with nil annotation)", parts[0])
+	}
+}
+
 // testSource is a minimal AnnotationSource for testing.
 type testSource struct {
 	name    string

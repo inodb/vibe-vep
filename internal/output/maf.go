@@ -11,14 +11,15 @@ import (
 )
 
 // MAFWriter writes annotated variants in MAF format, preserving all original columns.
-// All vibe-vep output is appended as namespaced vibe.* columns — original columns
-// are never overwritten.
+// When replace=false (default), all vibe-vep output is appended as namespaced vibe.* columns.
+// When replace=true, core columns are overwritten in-place.
 type MAFWriter struct {
 	w          *bufio.Writer
 	headerLine string
 	columns    maf.ColumnIndices
 	sources    []annotate.AnnotationSource
 	sourceKeys []string // pre-built Extra map keys for source columns
+	replace    bool
 }
 
 // NewMAFWriter creates a new MAF writer that preserves all original columns.
@@ -36,19 +37,35 @@ func (m *MAFWriter) SetSources(sources []annotate.AnnotationSource) {
 	m.sourceKeys = buildSourceKeys(sources)
 }
 
-// WriteHeader writes the original MAF header line plus vibe.* columns.
+// SetReplace enables in-place overwrite mode. When true, core columns
+// (Hugo_Symbol, Consequence, Variant_Classification, Transcript_ID, HGVSc,
+// HGVSp, HGVSp_Short) are overwritten at their original positions instead of
+// being appended as vibe.* columns.
+func (m *MAFWriter) SetReplace(replace bool) {
+	m.replace = replace
+}
+
+// WriteHeader writes the MAF header line.
+// In default mode, appends vibe.* core columns + source columns.
+// In replace mode, keeps original header unchanged and appends only source columns.
 func (m *MAFWriter) WriteHeader() error {
 	header := m.headerLine
 
-	// Core prediction columns
-	for _, col := range annotate.CoreColumns {
-		header += "\tvibe." + col.Name
+	if !m.replace {
+		// Core prediction columns with vibe. prefix
+		for _, col := range annotate.CoreColumns {
+			header += "\tvibe." + col.Name
+		}
 	}
 
 	// Annotation source columns
 	for _, src := range m.sources {
 		for _, col := range src.Columns() {
-			header += "\tvibe." + src.Name() + "." + col.Name
+			if m.replace {
+				header += "\t" + src.Name() + "." + col.Name
+			} else {
+				header += "\tvibe." + src.Name() + "." + col.Name
+			}
 		}
 	}
 
@@ -56,28 +73,37 @@ func (m *MAFWriter) WriteHeader() error {
 	return err
 }
 
-// WriteRow writes a MAF row with vibe.* namespaced columns appended.
-// Original MAF columns are preserved exactly as-is.
+// WriteRow writes a MAF row.
+// In default mode, original columns are preserved and vibe.* columns appended.
+// In replace mode, core columns are overwritten at their original indices.
 func (m *MAFWriter) WriteRow(rawFields []string, ann *annotate.Annotation, v *vcf.Variant) error {
+	if m.replace {
+		return m.writeRowReplace(rawFields, ann, v)
+	}
+	return m.writeRowAppend(rawFields, ann, v)
+}
+
+// writeRowAppend writes a row in default (append) mode.
+func (m *MAFWriter) writeRowAppend(rawFields []string, ann *annotate.Annotation, v *vcf.Variant) error {
 	row := make([]string, len(rawFields), len(rawFields)+7+len(m.sources)*3)
 	copy(row, rawFields)
 
 	// Core prediction columns
 	if ann != nil {
 		row = append(row,
-			ann.GeneName,    // vibe.hugo_symbol
-			ann.Consequence, // vibe.consequence
+			ann.GeneName,                              // vibe.hugo_symbol
+			ann.Consequence,                           // vibe.consequence
 			SOToMAFClassification(ann.Consequence, v), // vibe.variant_classification
-			ann.TranscriptID,        // vibe.transcript_id
-			ann.HGVSc,               // vibe.hgvsc
-			ann.HGVSp,               // vibe.hgvsp
-			hgvspToShort(ann.HGVSp), // vibe.hgvsp_short
+			ann.TranscriptID,                          // vibe.transcript_id
+			ann.HGVSc,                                 // vibe.hgvsc
+			ann.HGVSp,                                 // vibe.hgvsp
+			HGVSpToShort(ann.HGVSp),                   // vibe.hgvsp_short
 		)
 	} else {
 		row = append(row, "", "", "", "", "", "", "")
 	}
 
-	// Annotation source columns using pre-built keys
+	// Annotation source columns
 	for _, key := range m.sourceKeys {
 		val := ""
 		if ann != nil {
@@ -88,6 +114,42 @@ func (m *MAFWriter) WriteRow(rawFields []string, ann *annotate.Annotation, v *vc
 
 	_, err := m.w.WriteString(strings.Join(row, "\t") + "\n")
 	return err
+}
+
+// writeRowReplace writes a row in replace mode, overwriting core columns in-place.
+func (m *MAFWriter) writeRowReplace(rawFields []string, ann *annotate.Annotation, v *vcf.Variant) error {
+	row := make([]string, len(rawFields), len(rawFields)+len(m.sources)*3)
+	copy(row, rawFields)
+
+	if ann != nil {
+		// Overwrite core columns at their original positions
+		setIfPresent(row, m.columns.HugoSymbol, ann.GeneName)
+		setIfPresent(row, m.columns.Consequence, ann.Consequence)
+		setIfPresent(row, m.columns.VariantClassification, SOToMAFClassification(ann.Consequence, v))
+		setIfPresent(row, m.columns.TranscriptID, ann.TranscriptID)
+		setIfPresent(row, m.columns.HGVSc, ann.HGVSc)
+		setIfPresent(row, m.columns.HGVSp, ann.HGVSp)
+		setIfPresent(row, m.columns.HGVSpShort, HGVSpToShort(ann.HGVSp))
+	}
+
+	// Annotation source columns appended at end
+	for _, key := range m.sourceKeys {
+		val := ""
+		if ann != nil {
+			val = ann.GetExtraKey(key)
+		}
+		row = append(row, val)
+	}
+
+	_, err := m.w.WriteString(strings.Join(row, "\t") + "\n")
+	return err
+}
+
+// setIfPresent sets row[idx] = val if idx >= 0 and within bounds.
+func setIfPresent(row []string, idx int, val string) {
+	if idx >= 0 && idx < len(row) {
+		row[idx] = val
+	}
 }
 
 // Flush flushes any buffered data to the underlying writer.

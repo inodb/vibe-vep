@@ -1,16 +1,12 @@
 package output
 
 import (
-	"bytes"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
-	"github.com/inodb/vibe-vep/internal/maf"
-	"github.com/inodb/vibe-vep/internal/vcf"
 )
 
 func TestCategorizeConsequence(t *testing.T) {
@@ -316,263 +312,75 @@ func TestPickMostSevere(t *testing.T) {
 	}
 }
 
-func TestCompareWriter_AllColumns(t *testing.T) {
-	var buf bytes.Buffer
-	cols := map[string]bool{"consequence": true, "hgvsp": true, "hgvsc": true}
-	w := NewCompareWriter(&buf, cols, true)
+func TestCategorizer_CategorizeRow(t *testing.T) {
+	cat := &Categorizer{}
 
-	require.NoError(t, w.WriteHeader())
+	t.Run("cross-column position_shift reclassifies consequence", func(t *testing.T) {
+		columns := []string{"Consequence", "HGVSc"}
+		left := map[string]string{
+			"Consequence": "synonymous_variant",
+			"HGVSc":       "ENST00000333418.4:c.390T>G",
+		}
+		right := map[string]string{
+			"Consequence": "missense_variant",
+			"HGVSc":       "c.388T>G",
+		}
+		cats := cat.CategorizeRow(columns, left, right,
+			[]string{"Consequence", "HGVSc"}, []string{"Consequence", "HGVSc"})
 
-	variant := &vcf.Variant{Chrom: "12", Pos: 25398284, Ref: "C", Alt: "A"}
-	mafAnn := &maf.MAFAnnotation{
-		HugoSymbol:   "KRAS",
-		Consequence:  "missense_variant",
-		HGVSpShort:   "p.G12C",
-		TranscriptID: "ENST00000256078",
-	}
-	vepAnns := []*annotate.Annotation{{
-		TranscriptID: "ENST00000256078",
-		GeneName:     "KRAS",
-		Consequence:  "missense_variant",
-		HGVSp:        "p.Gly12Cys",
-		IsCanonical:  true,
-	}}
+		assert.Equal(t, CatPositionShift, cats["Consequence"])
+		assert.Equal(t, CatPositionShift, cats["HGVSc"])
+	})
 
-	require.NoError(t, w.WriteComparison(variant, mafAnn, vepAnns))
-	require.NoError(t, w.Flush())
+	t.Run("cross-column delins_normalized reclassifies consequence", func(t *testing.T) {
+		columns := []string{"Consequence", "HGVSc"}
+		left := map[string]string{
+			"Consequence": "Missense_Mutation",
+			"HGVSc":       "ENST00000123456.1:c.100_102delinsGTA",
+		}
+		right := map[string]string{
+			"Consequence": "synonymous_variant",
+			"HGVSc":       "c.102G>A",
+		}
+		cats := cat.CategorizeRow(columns, left, right,
+			[]string{"Consequence", "HGVSc"}, []string{"Consequence", "HGVSc"})
 
-	out := buf.String()
-	assert.Contains(t, out, "KRAS")
-	assert.Contains(t, out, "match")
-	assert.Equal(t, 1, w.Total())
-	assert.Equal(t, 1, w.Counts()["consequence"][CatMatch])
-}
+		assert.Equal(t, CatDelinsNorm, cats["Consequence"])
+	})
 
-func TestCompareWriter_DefaultHideMatches(t *testing.T) {
-	var buf bytes.Buffer
-	cols := map[string]bool{"consequence": true, "hgvsp": true, "hgvsc": true}
-	w := NewCompareWriter(&buf, cols, false) // showAll = false
+	t.Run("cross-column dup_vs_ins reclassifies hgvsp", func(t *testing.T) {
+		columns := []string{"HGVSp_Short", "HGVSc"}
+		left := map[string]string{
+			"HGVSp_Short": "p.V78dup",
+			"HGVSc":       "ENST00000123456.1:c.232_233dup",
+		}
+		right := map[string]string{
+			"HGVSp_Short": "p.V79_80insG",
+			"HGVSc":       "c.233_234insGT",
+		}
+		cats := cat.CategorizeRow(columns, left, right,
+			[]string{"HGVSp_Short", "HGVSc"}, []string{"HGVSp_Short", "HGVSc"})
 
-	w.WriteHeader()
+		assert.Equal(t, CatDupVsIns, cats["HGVSp_Short"])
+	})
 
-	variant := &vcf.Variant{Chrom: "12", Pos: 100, Ref: "A", Alt: "T"}
+	t.Run("simple string equality for unknown columns", func(t *testing.T) {
+		columns := []string{"Hugo_Symbol"}
+		left := map[string]string{"Hugo_Symbol": "KRAS"}
+		right := map[string]string{"Hugo_Symbol": "BRAF"}
+		cats := cat.CategorizeRow(columns, left, right,
+			[]string{"Hugo_Symbol"}, []string{"Hugo_Symbol"})
 
-	// Match row — should be hidden
-	mafAnn := &maf.MAFAnnotation{Consequence: "missense_variant"}
-	vepAnns := []*annotate.Annotation{{Consequence: "missense_variant"}}
-	w.WriteComparison(variant, mafAnn, vepAnns)
+		assert.Equal(t, CatMismatch, cats["Hugo_Symbol"])
+	})
 
-	// Mismatch row — should be shown
-	mafAnn2 := &maf.MAFAnnotation{Consequence: "stop_gained", HugoSymbol: "TP53"}
-	vepAnns2 := []*annotate.Annotation{{Consequence: "missense_variant"}}
-	w.WriteComparison(variant, mafAnn2, vepAnns2)
+	t.Run("simple match for unknown columns", func(t *testing.T) {
+		columns := []string{"Hugo_Symbol"}
+		left := map[string]string{"Hugo_Symbol": "KRAS"}
+		right := map[string]string{"Hugo_Symbol": "KRAS"}
+		cats := cat.CategorizeRow(columns, left, right,
+			[]string{"Hugo_Symbol"}, []string{"Hugo_Symbol"})
 
-	w.Flush()
-
-	out := buf.String()
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	// Header + 1 mismatch line
-	assert.Len(t, lines, 2)
-	assert.Contains(t, out, "TP53")
-}
-
-func TestCompareWriter_Summary(t *testing.T) {
-	var buf, summary bytes.Buffer
-	cols := map[string]bool{"consequence": true}
-	w := NewCompareWriter(&buf, cols, true)
-
-	variant := &vcf.Variant{Chrom: "1", Pos: 1, Ref: "A", Alt: "T"}
-	w.WriteComparison(variant, &maf.MAFAnnotation{Consequence: "missense_variant"},
-		[]*annotate.Annotation{{Consequence: "missense_variant"}})
-	w.WriteComparison(variant, &maf.MAFAnnotation{Consequence: "stop_gained"},
-		[]*annotate.Annotation{{Consequence: "missense_variant"}})
-
-	w.WriteSummary(&summary)
-
-	out := summary.String()
-	assert.Contains(t, out, "Comparison Summary (2 variants)")
-	assert.Contains(t, out, "Consequence:")
-	assert.Contains(t, out, "match")
-	assert.Contains(t, out, "mismatch")
-}
-
-func TestCompareWriter_CrossColumnPositionShift(t *testing.T) {
-	// When HGVSc shows a position shift, a consequence mismatch should be
-	// reclassified as position_shift since different CDS positions explain
-	// the consequence difference (GENCODE version change).
-	var buf bytes.Buffer
-	cols := map[string]bool{"consequence": true, "hgvsc": true}
-	w := NewCompareWriter(&buf, cols, true)
-
-	variant := &vcf.Variant{Chrom: "22", Pos: 38026136, Ref: "T", Alt: "G"}
-
-	// MAF says synonymous at c.390, VEP says missense at c.388 (position shift)
-	mafAnn := &maf.MAFAnnotation{
-		Consequence:  "synonymous_variant",
-		HGVSc:        "ENST00000333418.4:c.390T>G",
-		TranscriptID: "ENST00000333418",
-	}
-	vepAnns := []*annotate.Annotation{{
-		TranscriptID: "ENST00000333418",
-		Consequence:  "missense_variant",
-		HGVSc:        "c.388T>G",
-	}}
-
-	w.WriteComparison(variant, mafAnn, vepAnns)
-
-	counts := w.Counts()
-	assert.Equal(t, 1, counts["consequence"][CatPositionShift],
-		"consequence mismatch with HGVSc position_shift should be reclassified")
-	assert.Equal(t, 0, counts["consequence"][CatMismatch],
-		"should have no consequence mismatches")
-}
-
-func TestCompareWriter_CrossColumnHGVSpPositionShift(t *testing.T) {
-	// When HGVSc shows a position shift, an HGVSp mismatch should be
-	// reclassified as position_shift since different CDS positions explain
-	// the amino acid difference.
-	var buf bytes.Buffer
-	cols := map[string]bool{"hgvsp": true, "hgvsc": true}
-	w := NewCompareWriter(&buf, cols, true)
-
-	variant := &vcf.Variant{Chrom: "22", Pos: 38026136, Ref: "T", Alt: "G"}
-
-	mafAnn := &maf.MAFAnnotation{
-		HGVSpShort:   "p.P130=",
-		HGVSc:        "ENST00000333418.4:c.390T>G",
-		TranscriptID: "ENST00000333418",
-	}
-	vepAnns := []*annotate.Annotation{{
-		TranscriptID: "ENST00000333418",
-		HGVSp:        "p.F130V",
-		HGVSc:        "c.388T>G",
-	}}
-
-	w.WriteComparison(variant, mafAnn, vepAnns)
-
-	counts := w.Counts()
-	assert.Equal(t, 1, counts["hgvsp"][CatPositionShift],
-		"hgvsp mismatch with HGVSc position_shift should be reclassified")
-	assert.Equal(t, 0, counts["hgvsp"][CatMismatch],
-		"should have no hgvsp mismatches")
-}
-
-func TestCompareWriter_CrossColumnConseqDelinsNorm(t *testing.T) {
-	// When HGVSc is delins_normalized, a consequence mismatch should be
-	// reclassified as delins_normalized (MNV missense→synonymous).
-	var buf bytes.Buffer
-	cols := map[string]bool{"consequence": true, "hgvsc": true}
-	w := NewCompareWriter(&buf, cols, true)
-
-	variant := &vcf.Variant{Chrom: "1", Pos: 100, Ref: "ACG", Alt: "GTA"}
-
-	mafAnn := &maf.MAFAnnotation{
-		Consequence:  "Missense_Mutation",
-		HGVSc:        "ENST00000123456.1:c.100_102delinsGTA",
-		TranscriptID: "ENST00000123456",
-	}
-	vepAnns := []*annotate.Annotation{{
-		TranscriptID: "ENST00000123456",
-		Consequence:  "synonymous_variant",
-		HGVSc:        "c.102G>A",
-	}}
-
-	w.WriteComparison(variant, mafAnn, vepAnns)
-
-	counts := w.Counts()
-	assert.Equal(t, 1, counts["consequence"][CatDelinsNorm],
-		"consequence mismatch with HGVSc delins_normalized should be reclassified")
-	assert.Equal(t, 0, counts["consequence"][CatMismatch],
-		"should have no consequence mismatches")
-}
-
-func TestCompareWriter_CrossColumnHGVSpDupVsIns(t *testing.T) {
-	// When HGVSc is dup_vs_ins, an HGVSp mismatch should be reclassified.
-	var buf bytes.Buffer
-	cols := map[string]bool{"hgvsp": true, "hgvsc": true}
-	w := NewCompareWriter(&buf, cols, true)
-
-	variant := &vcf.Variant{Chrom: "1", Pos: 100, Ref: "A", Alt: "AG"}
-
-	mafAnn := &maf.MAFAnnotation{
-		HGVSpShort:   "p.V78dup",
-		HGVSc:        "ENST00000123456.1:c.232_233dup",
-		TranscriptID: "ENST00000123456",
-	}
-	vepAnns := []*annotate.Annotation{{
-		TranscriptID: "ENST00000123456",
-		HGVSp:        "p.Val79_80insGly",
-		HGVSc:        "c.233_234insGT",
-	}}
-
-	w.WriteComparison(variant, mafAnn, vepAnns)
-
-	counts := w.Counts()
-	assert.Equal(t, 1, counts["hgvsp"][CatDupVsIns],
-		"hgvsp mismatch with HGVSc dup_vs_ins should be reclassified")
-	assert.Equal(t, 0, counts["hgvsp"][CatMismatch],
-		"should have no hgvsp mismatches")
-}
-
-func TestCompareWriter_CrossColumnTranscriptModelChange(t *testing.T) {
-	// When HGVSc is transcript_model_change (n. vs c.), consequence and
-	// HGVSp mismatches should be reclassified.
-	var buf bytes.Buffer
-	cols := map[string]bool{"consequence": true, "hgvsp": true, "hgvsc": true}
-	w := NewCompareWriter(&buf, cols, true)
-
-	variant := &vcf.Variant{Chrom: "1", Pos: 100, Ref: "A", Alt: "T"}
-
-	mafAnn := &maf.MAFAnnotation{
-		Consequence:  "missense_variant",
-		HGVSpShort:   "p.G12C",
-		HGVSc:        "ENST00000123456.1:n.100A>T",
-		TranscriptID: "ENST00000123456",
-	}
-	vepAnns := []*annotate.Annotation{{
-		TranscriptID: "ENST00000123456",
-		Consequence:  "synonymous_variant",
-		HGVSp:        "p.Ala15=",
-		HGVSc:        "c.50A>T",
-	}}
-
-	w.WriteComparison(variant, mafAnn, vepAnns)
-
-	counts := w.Counts()
-	assert.Equal(t, 1, counts["hgvsc"][CatTranscriptModelChange])
-	assert.Equal(t, 1, counts["consequence"][CatTranscriptModelChange],
-		"consequence mismatch with HGVSc transcript_model_change should be reclassified")
-	assert.Equal(t, 1, counts["hgvsp"][CatTranscriptModelChange],
-		"hgvsp mismatch with HGVSc transcript_model_change should be reclassified")
-	assert.Equal(t, 0, counts["consequence"][CatMismatch])
-	assert.Equal(t, 0, counts["hgvsp"][CatMismatch])
-}
-
-func TestCompareWriter_CrossColumnHGVSpDelinsNorm(t *testing.T) {
-	// When HGVSc is delins_normalized, an HGVSp mismatch should be
-	// reclassified as delins_normalized.
-	var buf bytes.Buffer
-	cols := map[string]bool{"hgvsp": true, "hgvsc": true}
-	w := NewCompareWriter(&buf, cols, true)
-
-	variant := &vcf.Variant{Chrom: "5", Pos: 140558745, Ref: "CGCAGGCGG", Alt: "GCC"}
-
-	mafAnn := &maf.MAFAnnotation{
-		HGVSpShort:   "p.R432_R434delinsA",
-		HGVSc:        "ENST00000357560.9:c.1293_1301delinsGGC",
-		TranscriptID: "ENST00000357560",
-	}
-	vepAnns := []*annotate.Annotation{{
-		TranscriptID: "ENST00000357560",
-		HGVSp:        "p.L435_K436del",
-		HGVSc:        "c.1293_1300delinsGG",
-	}}
-
-	w.WriteComparison(variant, mafAnn, vepAnns)
-
-	counts := w.Counts()
-	assert.Equal(t, 1, counts["hgvsp"][CatDelinsNorm],
-		"hgvsp mismatch with HGVSc delins_normalized should be reclassified")
-	assert.Equal(t, 0, counts["hgvsp"][CatMismatch],
-		"should have no hgvsp mismatches")
+		assert.Equal(t, CatMatch, cats["Hugo_Symbol"])
+	})
 }
