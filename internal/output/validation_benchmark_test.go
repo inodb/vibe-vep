@@ -13,6 +13,7 @@ import (
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
+	"github.com/inodb/vibe-vep/internal/duckdb"
 	"github.com/inodb/vibe-vep/internal/maf"
 	"github.com/inodb/vibe-vep/internal/output"
 )
@@ -39,24 +40,46 @@ func TestValidationBenchmark(t *testing.T) {
 	}
 	sort.Strings(mafFiles)
 
-	// Load GENCODE cache once, timing it separately.
-	cacheStart := time.Now()
+	// Load GENCODE transcripts, preferring gob cache over raw GTF/FASTA.
 	gtfPath, fastaPath, canonicalPath := findGENCODEFiles(t)
+	cacheDir := filepath.Dir(gtfPath)
 	c := cache.New()
-	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
+
+	var loadSource string
+	cacheStart := time.Now()
+
+	tc := duckdb.NewTranscriptCache(cacheDir)
+	gtfFP, err1 := duckdb.StatFile(gtfPath)
+	fastaFP, err2 := duckdb.StatFile(fastaPath)
+	canonicalFP := duckdb.FileFingerprint{}
 	if canonicalPath != "" {
-		overrides, err := cache.LoadCanonicalOverrides(canonicalPath)
-		if err != nil {
-			t.Logf("warning: could not load canonical overrides: %v", err)
-		} else {
-			loader.SetCanonicalOverrides(overrides)
+		canonicalFP, _ = duckdb.StatFile(canonicalPath)
+	}
+
+	if err1 == nil && err2 == nil && tc.Valid(gtfFP, fastaFP, canonicalFP) {
+		if err := tc.Load(c); err != nil {
+			t.Fatalf("load transcript cache: %v", err)
 		}
+		loadSource = "gob cache"
+	} else {
+		loader := cache.NewGENCODELoader(gtfPath, fastaPath)
+		if canonicalPath != "" {
+			overrides, err := cache.LoadCanonicalOverrides(canonicalPath)
+			if err != nil {
+				t.Logf("warning: could not load canonical overrides: %v", err)
+			} else {
+				loader.SetCanonicalOverrides(overrides)
+			}
+		}
+		if err := loader.Load(c); err != nil {
+			t.Fatalf("load GENCODE: %v", err)
+		}
+		loadSource = "GTF/FASTA"
 	}
-	if err := loader.Load(c); err != nil {
-		t.Fatalf("load GENCODE cache: %v", err)
-	}
+
+	c.BuildIndex()
 	cacheDuration := time.Since(cacheStart)
-	t.Logf("loaded %d transcripts in %s", c.TranscriptCount(), cacheDuration.Round(time.Millisecond))
+	t.Logf("loaded %d transcripts from %s in %s", c.TranscriptCount(), loadSource, cacheDuration.Round(time.Millisecond))
 
 	// Load cancer gene list
 	cgl := loadCancerGeneList(t)
@@ -176,7 +199,7 @@ func TestValidationBenchmark(t *testing.T) {
 
 	// Write markdown report
 	reportPath := filepath.Join(tcgaDir, "validation_report.md")
-	writeReport(t, reportPath, results, c.TranscriptCount(), cacheDuration, cgl)
+	writeReport(t, reportPath, results, c.TranscriptCount(), cacheDuration, loadSource, cgl)
 }
 
 // studyName extracts the study name from a MAF file path.
@@ -243,14 +266,13 @@ func benchmarkParallel(t *testing.T, mafFile string, ann *annotate.Annotator, wo
 }
 
 // writeReport generates a markdown validation report.
-func writeReport(t *testing.T, path string, results []studyResult, transcriptCount int, cacheDuration time.Duration, cgl oncokb.CancerGeneList) {
+func writeReport(t *testing.T, path string, results []studyResult, transcriptCount int, cacheDuration time.Duration, loadSource string, cgl oncokb.CancerGeneList) {
 	t.Helper()
 
 	var sb strings.Builder
 	sb.WriteString("# TCGA Validation Report\n\n")
 	sb.WriteString(fmt.Sprintf("Generated: %s  \n", time.Now().UTC().Format("2006-01-02 15:04 UTC")))
-	sb.WriteString(fmt.Sprintf("GENCODE transcripts loaded: %d  \n", transcriptCount))
-	sb.WriteString(fmt.Sprintf("Cache load time: %s  \n", cacheDuration.Round(time.Millisecond)))
+	sb.WriteString(fmt.Sprintf("GENCODE transcripts: %d (loaded from %s in %s)  \n", transcriptCount, loadSource, cacheDuration.Round(time.Millisecond)))
 	sb.WriteString(fmt.Sprintf("Workers: %d (GOMAXPROCS)\n\n", runtime.NumCPU()))
 
 	// Match rates table (consequence + HGVSp + HGVSc)
@@ -407,7 +429,7 @@ func writeReport(t *testing.T, path string, results []studyResult, transcriptCou
 
 	// Performance table
 	sb.WriteString("## Performance\n\n")
-	sb.WriteString(fmt.Sprintf("Cache load time: %s\n\n", cacheDuration.Round(time.Millisecond)))
+	sb.WriteString(fmt.Sprintf("Transcript load: %s from %s\n\n", cacheDuration.Round(time.Millisecond), loadSource))
 	sb.WriteString("| Study | Variants | Sequential | Seq v/s | Parallel | Par v/s | Speedup |\n")
 	sb.WriteString("|-------|----------|-----------|---------|----------|---------|--------|\n")
 
