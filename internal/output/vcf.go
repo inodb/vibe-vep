@@ -69,8 +69,13 @@ func (vw *VCFWriter) WriteHeader() error {
 	allFields := make([]string, len(csqFields))
 	copy(allFields, csqFields)
 	for _, src := range vw.sources {
+		name := src.Name()
 		for _, col := range src.Columns() {
-			allFields = append(allFields, src.Name()+"_"+col.Name)
+			if name == "" {
+				allFields = append(allFields, col.Name)
+			} else {
+				allFields = append(allFields, name+"_"+col.Name)
+			}
 		}
 	}
 
@@ -305,12 +310,17 @@ func (vw *VCFWriter) writeCSQEntry(b *strings.Builder, ann *annotate.Annotation)
 }
 
 // buildSourceKeys pre-computes the Extra map keys for all source columns.
+// Sources with empty names use column names directly as keys.
 func buildSourceKeys(sources []annotate.AnnotationSource) []string {
 	var keys []string
 	for _, src := range sources {
 		name := src.Name()
 		for _, col := range src.Columns() {
-			keys = append(keys, name+"."+col.Name)
+			if name == "" {
+				keys = append(keys, col.Name)
+			} else {
+				keys = append(keys, name+"."+col.Name)
+			}
 		}
 	}
 	return keys

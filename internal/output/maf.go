@@ -60,11 +60,20 @@ func (m *MAFWriter) WriteHeader() error {
 
 	// Annotation source columns
 	for _, src := range m.sources {
+		name := src.Name()
 		for _, col := range src.Columns() {
-			if m.replace {
-				header += "\t" + src.Name() + "." + col.Name
+			if name == "" {
+				if m.replace {
+					header += "\t" + col.Name
+				} else {
+					header += "\tvibe." + col.Name
+				}
 			} else {
-				header += "\tvibe." + src.Name() + "." + col.Name
+				if m.replace {
+					header += "\t" + name + "." + col.Name
+				} else {
+					header += "\tvibe." + name + "." + col.Name
+				}
 			}
 		}
 	}

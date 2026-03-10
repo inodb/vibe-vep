@@ -421,8 +421,13 @@ func runAnnotateVariant(logger *zap.Logger, specInput, assembly, specType string
 			// Build dynamic header from sources
 			header := "Gene\tTranscript\tCanon\tConsequence\tImpact\tHGVSc\tHGVSp"
 			for _, src := range cr.sources {
+				name := src.Name()
 				for _, col := range src.Columns() {
-					header += "\t" + src.Name() + "_" + col.Name
+					if name == "" {
+						header += "\t" + col.Name
+					} else {
+						header += "\t" + name + "_" + col.Name
+					}
 				}
 			}
 			fmt.Fprintln(w, header)
@@ -435,8 +440,13 @@ func runAnnotateVariant(logger *zap.Logger, specInput, assembly, specType string
 					a.GeneName, a.TranscriptID, canon,
 					a.Consequence, a.Impact, a.HGVSc, a.HGVSp)
 				for _, src := range cr.sources {
+					name := src.Name()
 					for _, col := range src.Columns() {
-						line += "\t" + a.GetExtra(src.Name(), col.Name)
+						if name == "" {
+							line += "\t" + a.GetExtraKey(col.Name)
+						} else {
+							line += "\t" + a.GetExtra(name, col.Name)
+						}
 					}
 				}
 				fmt.Fprintln(w, line)

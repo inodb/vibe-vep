@@ -32,7 +32,7 @@ func NewSource(store *Store, version string) *GenomicSource {
 	return &GenomicSource{store: store, version: version}
 }
 
-func (s *GenomicSource) Name() string                   { return "genomic_index" }
+func (s *GenomicSource) Name() string                   { return "" }
 func (s *GenomicSource) Version() string                 { return s.version }
 func (s *GenomicSource) MatchLevel() annotate.MatchLevel { return annotate.MatchGenomic }
 

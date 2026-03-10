@@ -75,8 +75,13 @@ func (m *VCF2MAFWriter) WriteHeader() error {
 
 	// Append source columns
 	for _, src := range m.sources {
+		name := src.Name()
 		for _, col := range src.Columns() {
-			cols = append(cols, src.Name()+"_"+col.Name)
+			if name == "" {
+				cols = append(cols, col.Name)
+			} else {
+				cols = append(cols, name+"_"+col.Name)
+			}
 		}
 	}
 
