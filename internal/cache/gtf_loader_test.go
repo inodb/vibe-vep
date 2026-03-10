@@ -28,7 +28,15 @@ func TestParseAttributes(t *testing.T) {
 			input: `gene_id "ENSG00000133703"; tag "Ensembl_canonical"; tag "MANE_Select";`,
 			expected: map[string]string{
 				"gene_id": "ENSG00000133703",
-				"tag":     "MANE_Select", // Last value wins
+				"tag":     "Ensembl_canonical MANE_Select", // all tag values concatenated
+			},
+		},
+		{
+			name:  "multiple tags including Ensembl_canonical last",
+			input: `gene_id "ENSG00000183765"; tag "basic"; tag "GENCODE_Primary"; tag "Ensembl_canonical"; tag "MANE_Select"; tag "CCDS";`,
+			expected: map[string]string{
+				"gene_id": "ENSG00000183765",
+				"tag":     "basic GENCODE_Primary Ensembl_canonical MANE_Select CCDS",
 			},
 		},
 	}
