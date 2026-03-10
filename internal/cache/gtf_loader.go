@@ -315,7 +315,13 @@ func parseAttributes(attrStr string) map[string]string {
 		// Remove quotes
 		value = strings.Trim(value, "\"")
 
-		attrs[key] = value
+		// Concatenate repeated keys (e.g. multiple "tag" entries in GENCODE GTF)
+		// with a space so that strings.Contains checks work across all values.
+		if existing, ok := attrs[key]; ok {
+			attrs[key] = existing + " " + value
+		} else {
+			attrs[key] = value
+		}
 	}
 
 	return attrs
