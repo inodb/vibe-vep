@@ -2,6 +2,7 @@
 package output
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
@@ -158,6 +159,32 @@ func FormatAllEffects(anns []*annotate.Annotation) string {
 		b.WriteString(canonMSK)
 	}
 	return b.String()
+}
+
+// ValidOutputColumns returns the set of excludable output column names.
+func ValidOutputColumns() map[string]bool {
+	m := make(map[string]bool, len(annotate.CoreColumns)+1)
+	for _, col := range annotate.CoreColumns {
+		m[col.Name] = true
+	}
+	m["all_effects"] = true
+	return m
+}
+
+// ValidateExcludeColumns returns an error if any column name is not a valid excludable column.
+func ValidateExcludeColumns(cols []string) error {
+	valid := ValidOutputColumns()
+	for _, col := range cols {
+		if !valid[col] {
+			var names []string
+			for _, c := range annotate.CoreColumns {
+				names = append(names, c.Name)
+			}
+			names = append(names, "all_effects")
+			return fmt.Errorf("unknown column %q; valid columns: %s", col, strings.Join(names, ", "))
+		}
+	}
+	return nil
 }
 
 // HGVSpToShort converts 3-letter HGVSp notation to single-letter.

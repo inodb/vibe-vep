@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
@@ -129,14 +130,42 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 			}
 
 			if mafColumns {
+				// Parse excluded columns from config
+				var excludedCols map[string]bool
+				if excl := viper.GetString("exclude-columns"); excl != "" {
+					excludedCols = make(map[string]bool)
+					for _, s := range strings.Split(excl, ",") {
+						s = strings.TrimSpace(s)
+						if s != "" {
+							excludedCols[s] = true
+						}
+					}
+				}
+
 				fmt.Println()
 				fmt.Println("MAF Output Columns:")
+				if len(excludedCols) > 0 {
+					var names []string
+					for k := range excludedCols {
+						names = append(names, k)
+					}
+					fmt.Printf("  Excluded: %s\n", strings.Join(names, ", "))
+				}
 				fmt.Println()
 				tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 				fmt.Fprintln(tw, "COLUMN\tSOURCE\tDESCRIPTION")
 				for _, col := range annotate.CoreColumns {
-					fmt.Fprintf(tw, "vibe.%s\tvibe-vep\t%s\n", col.Name, col.Description)
+					status := ""
+					if excludedCols[col.Name] {
+						status = " (excluded)"
+					}
+					fmt.Fprintf(tw, "vibe.%s\tvibe-vep\t%s%s\n", col.Name, col.Description, status)
 				}
+				allEffectsStatus := ""
+				if excludedCols["all_effects"] {
+					allEffectsStatus = " (excluded)"
+				}
+				fmt.Fprintf(tw, "vibe.all_effects\tvibe-vep\tAll transcript consequences%s\n", allEffectsStatus)
 				for _, info := range infos {
 					for _, col := range info.columns {
 						fmt.Fprintf(tw, "vibe.%s.%s\t%s\t%s\n", info.name, col.Name, info.name, col.Description)

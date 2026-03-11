@@ -20,7 +20,7 @@ type MAFWriter struct {
 	sources    []annotate.AnnotationSource
 	sourceKeys []string // pre-built Extra map keys for source columns
 	replace    bool
-	allEffects bool // include vibe.all_effects column (default true)
+	excludeCols map[string]bool // columns to exclude from output
 }
 
 // NewMAFWriter creates a new MAF writer that preserves all original columns.
@@ -29,13 +29,15 @@ func NewMAFWriter(w io.Writer, headerLine string, columns maf.ColumnIndices) *MA
 		w:          bufio.NewWriter(w),
 		headerLine: headerLine,
 		columns:    columns,
-		allEffects: true,
 	}
 }
 
-// SetAllEffects enables or disables the vibe.all_effects column.
-func (m *MAFWriter) SetAllEffects(enabled bool) {
-	m.allEffects = enabled
+// SetExcludeColumns sets which columns to exclude from output.
+func (m *MAFWriter) SetExcludeColumns(cols []string) {
+	m.excludeCols = make(map[string]bool, len(cols))
+	for _, col := range cols {
+		m.excludeCols[col] = true
+	}
 }
 
 // SetSources registers annotation sources whose columns will be appended.
@@ -61,12 +63,15 @@ func (m *MAFWriter) WriteHeader() error {
 	if !m.replace {
 		// Core prediction columns with vibe. prefix
 		for _, col := range annotate.CoreColumns {
+			if m.excludeCols[col.Name] {
+				continue
+			}
 			header += "\tvibe." + col.Name
 		}
 	}
 
 	// all_effects column (before source columns)
-	if m.allEffects {
+	if !m.excludeCols["all_effects"] {
 		if m.replace {
 			header += "\tall_effects"
 		} else {
@@ -113,33 +118,17 @@ func (m *MAFWriter) writeRowAppend(rawFields []string, ann *annotate.Annotation,
 	row := make([]string, len(rawFields), len(rawFields)+10+len(m.sources)*3)
 	copy(row, rawFields)
 
-	// Core prediction columns
-	if ann != nil {
-		canonMSK := ""
-		if ann.IsCanonicalMSK {
-			canonMSK = "YES"
+	// Core prediction columns — each guarded by excludeCols
+	coreValues := m.coreValues(ann, v)
+	for i, col := range annotate.CoreColumns {
+		if m.excludeCols[col.Name] {
+			continue
 		}
-		canonEns := ""
-		if ann.IsCanonicalEnsembl {
-			canonEns = "YES"
-		}
-		row = append(row,
-			ann.GeneName,                              // vibe.hugo_symbol
-			ann.Consequence,                           // vibe.consequence
-			SOToMAFClassification(ann.Consequence, v), // vibe.variant_classification
-			ann.TranscriptID,                          // vibe.transcript_id
-			ann.HGVSc,                                 // vibe.hgvsc
-			ann.HGVSp,                                 // vibe.hgvsp
-			HGVSpToShort(ann.HGVSp),                   // vibe.hgvsp_short
-			canonMSK,                                   // vibe.canonical_mskcc
-			canonEns,                                   // vibe.canonical_ensembl
-		)
-	} else {
-		row = append(row, "", "", "", "", "", "", "", "", "")
+		row = append(row, coreValues[i])
 	}
 
 	// all_effects column
-	if m.allEffects {
+	if !m.excludeCols["all_effects"] {
 		row = append(row, FormatAllEffects(allAnns))
 	}
 
@@ -162,18 +151,32 @@ func (m *MAFWriter) writeRowReplace(rawFields []string, ann *annotate.Annotation
 	copy(row, rawFields)
 
 	if ann != nil {
-		// Overwrite core columns at their original positions
-		setIfPresent(row, m.columns.HugoSymbol, ann.GeneName)
-		setIfPresent(row, m.columns.Consequence, ann.Consequence)
-		setIfPresent(row, m.columns.VariantClassification, SOToMAFClassification(ann.Consequence, v))
-		setIfPresent(row, m.columns.TranscriptID, ann.TranscriptID)
-		setIfPresent(row, m.columns.HGVSc, ann.HGVSc)
-		setIfPresent(row, m.columns.HGVSp, ann.HGVSp)
-		setIfPresent(row, m.columns.HGVSpShort, HGVSpToShort(ann.HGVSp))
+		// Overwrite core columns at their original positions (skip excluded)
+		if !m.excludeCols["hugo_symbol"] {
+			setIfPresent(row, m.columns.HugoSymbol, ann.GeneName)
+		}
+		if !m.excludeCols["consequence"] {
+			setIfPresent(row, m.columns.Consequence, ann.Consequence)
+		}
+		if !m.excludeCols["variant_classification"] {
+			setIfPresent(row, m.columns.VariantClassification, SOToMAFClassification(ann.Consequence, v))
+		}
+		if !m.excludeCols["transcript_id"] {
+			setIfPresent(row, m.columns.TranscriptID, ann.TranscriptID)
+		}
+		if !m.excludeCols["hgvsc"] {
+			setIfPresent(row, m.columns.HGVSc, ann.HGVSc)
+		}
+		if !m.excludeCols["hgvsp"] {
+			setIfPresent(row, m.columns.HGVSp, ann.HGVSp)
+		}
+		if !m.excludeCols["hgvsp_short"] {
+			setIfPresent(row, m.columns.HGVSpShort, HGVSpToShort(ann.HGVSp))
+		}
 	}
 
 	// all_effects column
-	if m.allEffects {
+	if !m.excludeCols["all_effects"] {
 		row = append(row, FormatAllEffects(allAnns))
 	}
 
@@ -188,6 +191,33 @@ func (m *MAFWriter) writeRowReplace(rawFields []string, ann *annotate.Annotation
 
 	_, err := m.w.WriteString(strings.Join(row, "\t") + "\n")
 	return err
+}
+
+// coreValues returns the 9 core column values for an annotation.
+// The order matches annotate.CoreColumns.
+func (m *MAFWriter) coreValues(ann *annotate.Annotation, v *vcf.Variant) [9]string {
+	if ann == nil {
+		return [9]string{}
+	}
+	canonMSK := ""
+	if ann.IsCanonicalMSK {
+		canonMSK = "YES"
+	}
+	canonEns := ""
+	if ann.IsCanonicalEnsembl {
+		canonEns = "YES"
+	}
+	return [9]string{
+		ann.GeneName,                              // hugo_symbol
+		ann.Consequence,                           // consequence
+		SOToMAFClassification(ann.Consequence, v), // variant_classification
+		ann.TranscriptID,                          // transcript_id
+		ann.HGVSc,                                 // hgvsc
+		ann.HGVSp,                                 // hgvsp
+		HGVSpToShort(ann.HGVSp),                   // hgvsp_short
+		canonMSK,                                   // canonical_mskcc
+		canonEns,                                   // canonical_ensembl
+	}
 }
 
 // setIfPresent sets row[idx] = val if idx >= 0 and within bounds.

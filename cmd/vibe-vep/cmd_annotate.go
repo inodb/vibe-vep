@@ -35,14 +35,14 @@ func newAnnotateCmd(verbose *bool) *cobra.Command {
 
 func newAnnotateMAFCmd(verbose *bool) *cobra.Command {
 	var (
-		assembly      string
-		outputFile    string
-		canonicalOnly bool
-		saveResults   bool
-		pick          bool
-		mostSevere    bool
-		replace       bool
-		noAllEffects  bool
+		assembly       string
+		outputFile     string
+		canonicalOnly  bool
+		saveResults    bool
+		pick           bool
+		mostSevere     bool
+		replace        bool
+		excludeColumns string
 	)
 
 	cmd := &cobra.Command{
@@ -65,6 +65,20 @@ Transcript_ID, HGVSc, HGVSp, HGVSp_Short) are overwritten in-place.`,
 			if viper.GetBool("pick") && viper.GetBool("most-severe") {
 				return fmt.Errorf("--pick and --most-severe are mutually exclusive")
 			}
+			// Parse --exclude-columns (CLI overrides config)
+			excl := viper.GetString("exclude-columns")
+			var excludeCols []string
+			if excl != "" {
+				for _, s := range strings.Split(excl, ",") {
+					s = strings.TrimSpace(s)
+					if s != "" {
+						excludeCols = append(excludeCols, s)
+					}
+				}
+				if err := output.ValidateExcludeColumns(excludeCols); err != nil {
+					return err
+				}
+			}
 			logger, err := newLogger(*verbose)
 			if err != nil {
 				return fmt.Errorf("creating logger: %w", err)
@@ -79,7 +93,7 @@ Transcript_ID, HGVSc, HGVSp, HGVSp_Short) are overwritten in-place.`,
 				viper.GetBool("clear-cache"),
 				viper.GetBool("most-severe"),
 				viper.GetBool("replace"),
-				viper.GetBool("no-all-effects"),
+				excludeCols,
 			)
 		},
 	}
@@ -91,7 +105,7 @@ Transcript_ID, HGVSc, HGVSp, HGVSp_Short) are overwritten in-place.`,
 	cmd.Flags().BoolVar(&pick, "pick", false, "One annotation per variant (best transcript)")
 	cmd.Flags().BoolVar(&mostSevere, "most-severe", false, "One annotation per variant (highest impact)")
 	cmd.Flags().BoolVar(&replace, "replace", false, "Overwrite core MAF columns in-place instead of appending vibe.* columns")
-	cmd.Flags().BoolVar(&noAllEffects, "no-all-effects", false, "Disable the all_effects column (all transcript consequences)")
+	cmd.Flags().StringVar(&excludeColumns, "exclude-columns", "", "Comma-separated list of output columns to exclude (e.g. canonical_ensembl,all_effects)")
 	addCacheFlags(cmd)
 
 	return cmd
@@ -197,7 +211,7 @@ Supported formats:
 	return cmd
 }
 
-func runAnnotateMAF(logger *zap.Logger, inputPath, assembly, outputFile string, canonicalOnly, saveResults, noCache, clearCache, mostSevere, replace, noAllEffects bool) error {
+func runAnnotateMAF(logger *zap.Logger, inputPath, assembly, outputFile string, canonicalOnly, saveResults, noCache, clearCache, mostSevere, replace bool, excludeCols []string) error {
 	parser, err := maf.NewParser(inputPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -237,7 +251,7 @@ func runAnnotateMAF(logger *zap.Logger, inputPath, assembly, outputFile string, 
 		collectResults = &variantResults
 	}
 
-	if err := runMAFOutput(logger, parser, ann, out, cr.sources, collectResults, mostSevere, replace, !noAllEffects); err != nil {
+	if err := runMAFOutput(logger, parser, ann, out, cr.sources, collectResults, mostSevere, replace, excludeCols); err != nil {
 		return err
 	}
 
@@ -500,11 +514,13 @@ func runAnnotateVariant(logger *zap.Logger, specInput, assembly, specType string
 }
 
 // runMAFOutput runs MAF annotation mode, preserving all original columns.
-func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotator, out *os.File, sources []annotate.AnnotationSource, newResults *[]duckdb.VariantResult, mostSevere, replace, allEffects bool) error {
+func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotator, out *os.File, sources []annotate.AnnotationSource, newResults *[]duckdb.VariantResult, mostSevere, replace bool, excludeCols []string) error {
 	mafWriter := output.NewMAFWriter(out, parser.Header(), parser.Columns())
 	mafWriter.SetSources(sources)
 	mafWriter.SetReplace(replace)
-	mafWriter.SetAllEffects(allEffects)
+	if len(excludeCols) > 0 {
+		mafWriter.SetExcludeColumns(excludeCols)
+	}
 
 	if err := mafWriter.WriteHeader(); err != nil {
 		return fmt.Errorf("writing header: %w", err)

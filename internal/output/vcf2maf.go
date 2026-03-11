@@ -52,6 +52,7 @@ type VCF2MAFWriter struct {
 	tumorSampleID string
 	sources       []annotate.AnnotationSource
 	sourceKeys    []string // pre-built Extra map keys for source columns
+	excludeCols   map[string]bool // columns to exclude from output
 	headerWritten bool
 }
 
@@ -70,10 +71,23 @@ func (m *VCF2MAFWriter) SetSources(sources []annotate.AnnotationSource) {
 	m.sourceKeys = buildSourceKeys(sources)
 }
 
+// SetExcludeColumns sets which columns to exclude from output.
+func (m *VCF2MAFWriter) SetExcludeColumns(cols []string) {
+	m.excludeCols = make(map[string]bool, len(cols))
+	for _, col := range cols {
+		m.excludeCols[col] = true
+	}
+}
+
 // WriteHeader writes the MAF header line.
 func (m *VCF2MAFWriter) WriteHeader() error {
-	cols := make([]string, len(vcf2mafColumns))
-	copy(cols, vcf2mafColumns)
+	cols := make([]string, 0, len(vcf2mafColumns))
+	for _, c := range vcf2mafColumns {
+		if c == "all_effects" && m.excludeCols["all_effects"] {
+			continue
+		}
+		cols = append(cols, c)
+	}
 
 	// Append source columns
 	for _, src := range m.sources {
@@ -173,14 +187,18 @@ func (m *VCF2MAFWriter) WriteRow(v *vcf.Variant, ann *annotate.Annotation, allAn
 		} else {
 			writeField("")
 		}
-		writeField(ann.AminoAcidChange)       // Amino_acids
-		writeField(ann.CodonChange)           // Codons
-		writeField(FormatAllEffects(allAnns)) // all_effects
+		writeField(ann.AminoAcidChange) // Amino_acids
+		writeField(ann.CodonChange)     // Codons
+		if !m.excludeCols["all_effects"] {
+			writeField(FormatAllEffects(allAnns)) // all_effects
+		}
 	} else {
 		for range 13 {
 			writeField("")
 		}
-		writeField(FormatAllEffects(allAnns)) // all_effects
+		if !m.excludeCols["all_effects"] {
+			writeField(FormatAllEffects(allAnns)) // all_effects
+		}
 	}
 
 	// Append source columns using pre-built keys

@@ -473,7 +473,7 @@ func TestMAFWriter_AllEffects_Disabled(t *testing.T) {
 		NCBIBuild: -1, HGVSc: -1, VariantClassification: -1, HGVSp: -1,
 	}
 	w := NewMAFWriter(&buf, "Hugo_Symbol", cols)
-	w.SetAllEffects(false)
+	w.SetExcludeColumns([]string{"all_effects"})
 
 	if err := w.WriteHeader(); err != nil {
 		t.Fatal(err)
@@ -583,7 +583,7 @@ func TestMAFWriter_Replace(t *testing.T) {
 	}
 	w := NewMAFWriter(&buf, header, cols)
 	w.SetReplace(true)
-	w.SetAllEffects(false)
+	w.SetExcludeColumns([]string{"all_effects"})
 
 	if err := w.WriteHeader(); err != nil {
 		t.Fatal(err)
@@ -661,7 +661,7 @@ func TestMAFWriter_ReplaceWithSources(t *testing.T) {
 	}
 	w := NewMAFWriter(&buf, header, cols)
 	w.SetReplace(true)
-	w.SetAllEffects(false)
+	w.SetExcludeColumns([]string{"all_effects"})
 	w.SetSources([]annotate.AnnotationSource{&testSource{
 		name:    "oncokb",
 		version: "v1",
@@ -720,7 +720,7 @@ func TestMAFWriter_ReplaceNilAnnotation(t *testing.T) {
 	}
 	w := NewMAFWriter(&buf, "Hugo_Symbol\tConsequence", cols)
 	w.SetReplace(true)
-	w.SetAllEffects(false)
+	w.SetExcludeColumns([]string{"all_effects"})
 
 	if err := w.WriteRow(fields, nil, nil, nil); err != nil {
 		t.Fatal(err)
@@ -733,6 +733,63 @@ func TestMAFWriter_ReplaceNilAnnotation(t *testing.T) {
 	// Original values should be preserved when annotation is nil
 	if parts[0] != "GENE" {
 		t.Errorf("Hugo_Symbol = %q, want GENE (unchanged with nil annotation)", parts[0])
+	}
+}
+
+func TestMAFWriter_ExcludeMultipleColumns(t *testing.T) {
+	var buf bytes.Buffer
+	cols := maf.ColumnIndices{
+		HugoSymbol: 0, Consequence: -1,
+		Chromosome: -1, StartPosition: -1, EndPosition: -1,
+		ReferenceAllele: -1, TumorSeqAllele2: -1,
+		HGVSpShort: -1, TranscriptID: -1, VariantType: -1,
+		NCBIBuild: -1, HGVSc: -1, VariantClassification: -1, HGVSp: -1,
+	}
+	w := NewMAFWriter(&buf, "Hugo_Symbol", cols)
+	w.SetExcludeColumns([]string{"canonical_ensembl", "hgvsp"})
+
+	if err := w.WriteHeader(); err != nil {
+		t.Fatal(err)
+	}
+
+	ann := &annotate.Annotation{
+		GeneName:    "KRAS",
+		Consequence: "missense_variant",
+		HGVSp:       "p.Gly12Cys",
+		HGVSc:       "c.34G>T",
+		TranscriptID: "ENST00000311936",
+	}
+	if err := w.WriteRow([]string{"KRAS"}, ann, []*annotate.Annotation{ann}, &vcf.Variant{Ref: "C", Alt: "T"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	got := buf.String()
+	// Header: should NOT contain vibe.canonical_ensembl or vibe.hgvsp
+	if strings.Contains(got, "vibe.hgvsp\t") || strings.Contains(got, "\tvibe.hgvsp\n") {
+		t.Error("excluded column vibe.hgvsp should not appear in header")
+	}
+	if strings.Contains(got, "vibe.canonical_ensembl") {
+		t.Error("excluded column vibe.canonical_ensembl should not appear in header")
+	}
+	// Should still contain other columns
+	if !strings.Contains(got, "vibe.hugo_symbol") {
+		t.Error("vibe.hugo_symbol should appear in header")
+	}
+	if !strings.Contains(got, "vibe.hgvsp_short") {
+		t.Error("vibe.hgvsp_short should appear in header")
+	}
+	if !strings.Contains(got, "vibe.all_effects") {
+		t.Error("vibe.all_effects should appear in header")
+	}
+
+	// Row: 1 orig + 7 core (9 - 2 excluded) + 1 all_effects = 9 columns
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	parts := strings.Split(lines[1], "\t")
+	if len(parts) != 9 {
+		t.Errorf("expected 9 columns (1 orig + 7 core + 1 all_effects), got %d", len(parts))
 	}
 }
 

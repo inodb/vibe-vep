@@ -442,3 +442,40 @@ func TestCategorizer_CategorizeRow(t *testing.T) {
 		assert.Equal(t, CatMatch, cats["Hugo_Symbol"])
 	})
 }
+
+func TestValidateExcludeColumns(t *testing.T) {
+	t.Run("valid columns", func(t *testing.T) {
+		err := ValidateExcludeColumns([]string{"hugo_symbol", "all_effects", "canonical_ensembl"})
+		assert.NoError(t, err)
+	})
+
+	t.Run("all valid core columns", func(t *testing.T) {
+		err := ValidateExcludeColumns([]string{
+			"hugo_symbol", "consequence", "variant_classification", "transcript_id",
+			"hgvsc", "hgvsp", "hgvsp_short", "canonical_mskcc", "canonical_ensembl",
+			"all_effects",
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("invalid column", func(t *testing.T) {
+		err := ValidateExcludeColumns([]string{"hugo_symbol", "not_a_column"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not_a_column")
+		assert.Contains(t, err.Error(), "valid columns")
+	})
+
+	t.Run("empty list", func(t *testing.T) {
+		err := ValidateExcludeColumns(nil)
+		assert.NoError(t, err)
+	})
+}
+
+func TestValidOutputColumns(t *testing.T) {
+	cols := ValidOutputColumns()
+	// 9 core + all_effects = 10
+	assert.Len(t, cols, 10)
+	assert.True(t, cols["hugo_symbol"])
+	assert.True(t, cols["all_effects"])
+	assert.False(t, cols["not_a_column"])
+}
