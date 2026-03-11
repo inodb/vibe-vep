@@ -1,8 +1,8 @@
 # GRCh38 Validation Report
 
-Generated: 2026-03-11 15:15 UTC  
+Generated: 2026-03-11 16:10 UTC  
 Assembly: GRCh38  
-GENCODE transcripts: 254070 (loaded from gob cache in 2.911s)  
+GENCODE transcripts: 254070 (loaded from gob cache in 2.72s)  
 Workers: 4 (GOMAXPROCS)
 
 ## Match Rates
@@ -63,15 +63,15 @@ No mismatches across all 1207 cancer genes tested.
 
 ## Performance
 
-Transcript load: 2.911s from gob cache
+Transcript load: 2.72s from gob cache
 
 | Study | Variants | Sequential | Seq v/s | Parallel | Par v/s | Speedup |
 |-------|----------|-----------|---------|----------|---------|--------|
-| blca_tcga_gdc | 115850 | 7.742s | 14964 | 4.999s | 23176 | 1.55x |
-| brca_tcga_gdc | 89012 | 5.854s | 15205 | 4.924s | 18077 | 1.19x |
-| chol_tcga_gdc | 3764 | 256ms | 14693 | 333ms | 11305 | 0.77x |
-| coad_tcga_gdc | 244552 | 14.729s | 16604 | 10.066s | 24295 | 1.46x |
-| gbm_tcga_gdc | 54870 | 3.034s | 18085 | 1.84s | 29814 | 1.65x |
-| luad_tcga_gdc | 190868 | 11.449s | 16670 | 7.425s | 25707 | 1.54x |
-| skcm_tcga_gdc | 353450 | 18.987s | 18615 | 11.872s | 29773 | 1.60x |
-| **Total** | **1052366** | **1m2.052s** | **16960** | **41.458s** | **25384** | **1.50x** |
+| blca_tcga_gdc | 115850 | 7.949s | 14574 | 4.344s | 26670 | 1.83x |
+| brca_tcga_gdc | 89012 | 5.806s | 15332 | 3.123s | 28506 | 1.86x |
+| chol_tcga_gdc | 3764 | 205ms | 18405 | 126ms | 29765 | 1.62x |
+| coad_tcga_gdc | 244552 | 15.821s | 15457 | 10.093s | 24231 | 1.57x |
+| gbm_tcga_gdc | 54870 | 3.079s | 17818 | 1.797s | 30528 | 1.71x |
+| luad_tcga_gdc | 190868 | 10.832s | 17622 | 6.882s | 27735 | 1.57x |
+| skcm_tcga_gdc | 353450 | 20.229s | 17473 | 13.523s | 26136 | 1.50x |
+| **Total** | **1052366** | **1m3.92s** | **16464** | **39.888s** | **26383** | **1.60x** |

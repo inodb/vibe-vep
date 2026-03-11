@@ -1,8 +1,8 @@
 # GRCh37 Validation Report
 
-Generated: 2026-03-11 15:16 UTC  
+Generated: 2026-03-11 16:10 UTC  
 Assembly: GRCh37  
-GENCODE transcripts: 196520 (loaded from gob cache in 1.706s)  
+GENCODE transcripts: 196520 (loaded from gob cache in 1.75s)  
 Workers: 4 (GOMAXPROCS)
 
 ## Match Rates
@@ -158,9 +158,9 @@ Workers: 4 (GOMAXPROCS)
 
 ## Performance
 
-Transcript load: 1.706s from gob cache
+Transcript load: 1.75s from gob cache
 
 | Study | Variants | Sequential | Seq v/s | Parallel | Par v/s | Speedup |
 |-------|----------|-----------|---------|----------|---------|--------|
-| msk_impact_50k_2026 | 479096 | 21.083s | 22725 | 12.37s | 38731 | 1.70x |
-| **Total** | **479096** | **21.083s** | **22725** | **12.37s** | **38731** | **1.70x** |
+| msk_impact_50k_2026 | 479096 | 20.984s | 22832 | 11.948s | 40098 | 1.76x |
+| **Total** | **479096** | **20.984s** | **22832** | **11.948s** | **40098** | **1.76x** |
