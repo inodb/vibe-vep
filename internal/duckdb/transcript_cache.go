@@ -1,16 +1,32 @@
 package duckdb
 
 import (
+	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/inodb/vibe-vep/internal/cache"
 )
+
+// transcriptSchemaHash returns a short hash derived from the field names and
+// types of cache.Transcript. Any rename, addition, or removal of a field
+// changes the hash, which causes Valid to reject a stale gob cache.
+func transcriptSchemaHash() string {
+	var t cache.Transcript
+	typ := reflect.TypeOf(t)
+	h := sha256.New()
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		fmt.Fprintf(h, "%s:%s\n", f.Name, f.Type.String())
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))[:16]
+}
 
 // TranscriptCache manages gob-serialized transcript data on disk.
 // Files are stored alongside the GENCODE source files:
@@ -48,6 +64,7 @@ func (tc *TranscriptCache) Valid(gtf, fasta, canonical FileFingerprint) bool {
 		{"fasta_modtime", fasta.ModTime.UTC().Format(time.RFC3339Nano)},
 		{"canonical_size", strconv.FormatInt(canonical.Size, 10)},
 		{"canonical_modtime", canonical.ModTime.UTC().Format(time.RFC3339Nano)},
+		{"schema_hash", transcriptSchemaHash()},
 	}
 
 	for _, c := range checks {
@@ -124,6 +141,7 @@ func (tc *TranscriptCache) writeMeta(gtf, fasta, canonical FileFingerprint) erro
 		"fasta_modtime=" + fasta.ModTime.UTC().Format(time.RFC3339Nano),
 		"canonical_size=" + strconv.FormatInt(canonical.Size, 10),
 		"canonical_modtime=" + canonical.ModTime.UTC().Format(time.RFC3339Nano),
+		"schema_hash=" + transcriptSchemaHash(),
 		"created_at=" + time.Now().UTC().Format(time.RFC3339),
 		"",
 	}
