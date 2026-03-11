@@ -154,7 +154,7 @@ func runConvertVCF2MAF(logger *zap.Logger, inputPath, assembly, outputFile strin
 				zap.String("chrom", r.Variant.Chrom),
 				zap.Int64("pos", r.Variant.Pos),
 				zap.Error(r.Err))
-			return writer.WriteRow(r.Variant, nil)
+			return writer.WriteRow(r.Variant, nil, nil)
 		}
 
 		for _, src := range cr.sources {
@@ -162,7 +162,7 @@ func runConvertVCF2MAF(logger *zap.Logger, inputPath, assembly, outputFile strin
 		}
 
 		best := output.PickBestAnnotation(r.Anns)
-		return writer.WriteRow(r.Variant, best)
+		return writer.WriteRow(r.Variant, best, r.Anns)
 	}); err != nil {
 		return err
 	}

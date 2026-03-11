@@ -42,6 +42,7 @@ func newAnnotateMAFCmd(verbose *bool) *cobra.Command {
 		pick          bool
 		mostSevere    bool
 		replace       bool
+		noAllEffects  bool
 	)
 
 	cmd := &cobra.Command{
@@ -78,6 +79,7 @@ Transcript_ID, HGVSc, HGVSp, HGVSp_Short) are overwritten in-place.`,
 				viper.GetBool("clear-cache"),
 				viper.GetBool("most-severe"),
 				viper.GetBool("replace"),
+				viper.GetBool("no-all-effects"),
 			)
 		},
 	}
@@ -89,6 +91,7 @@ Transcript_ID, HGVSc, HGVSp, HGVSp_Short) are overwritten in-place.`,
 	cmd.Flags().BoolVar(&pick, "pick", false, "One annotation per variant (best transcript)")
 	cmd.Flags().BoolVar(&mostSevere, "most-severe", false, "One annotation per variant (highest impact)")
 	cmd.Flags().BoolVar(&replace, "replace", false, "Overwrite core MAF columns in-place instead of appending vibe.* columns")
+	cmd.Flags().BoolVar(&noAllEffects, "no-all-effects", false, "Disable the all_effects column (all transcript consequences)")
 	addCacheFlags(cmd)
 
 	return cmd
@@ -194,7 +197,7 @@ Supported formats:
 	return cmd
 }
 
-func runAnnotateMAF(logger *zap.Logger, inputPath, assembly, outputFile string, canonicalOnly, saveResults, noCache, clearCache, mostSevere, replace bool) error {
+func runAnnotateMAF(logger *zap.Logger, inputPath, assembly, outputFile string, canonicalOnly, saveResults, noCache, clearCache, mostSevere, replace, noAllEffects bool) error {
 	parser, err := maf.NewParser(inputPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -234,7 +237,7 @@ func runAnnotateMAF(logger *zap.Logger, inputPath, assembly, outputFile string, 
 		collectResults = &variantResults
 	}
 
-	if err := runMAFOutput(logger, parser, ann, out, cr.sources, collectResults, mostSevere, replace); err != nil {
+	if err := runMAFOutput(logger, parser, ann, out, cr.sources, collectResults, mostSevere, replace, !noAllEffects); err != nil {
 		return err
 	}
 
@@ -497,10 +500,11 @@ func runAnnotateVariant(logger *zap.Logger, specInput, assembly, specType string
 }
 
 // runMAFOutput runs MAF annotation mode, preserving all original columns.
-func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotator, out *os.File, sources []annotate.AnnotationSource, newResults *[]duckdb.VariantResult, mostSevere, replace bool) error {
+func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotator, out *os.File, sources []annotate.AnnotationSource, newResults *[]duckdb.VariantResult, mostSevere, replace, allEffects bool) error {
 	mafWriter := output.NewMAFWriter(out, parser.Header(), parser.Columns())
 	mafWriter.SetSources(sources)
 	mafWriter.SetReplace(replace)
+	mafWriter.SetAllEffects(allEffects)
 
 	if err := mafWriter.WriteHeader(); err != nil {
 		return fmt.Errorf("writing header: %w", err)
@@ -539,7 +543,7 @@ func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotato
 				zap.String("chrom", r.Variant.Chrom),
 				zap.Int64("pos", r.Variant.Pos),
 				zap.Error(r.Err))
-			return mafWriter.WriteRow(mafAnn.RawFields, nil, r.Variant)
+			return mafWriter.WriteRow(mafAnn.RawFields, nil, nil, r.Variant)
 		}
 
 		// Collect all results for DuckDB persistence
@@ -564,7 +568,7 @@ func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotato
 				src.Annotate(r.Variant, []*annotate.Annotation{best})
 			}
 		}
-		return mafWriter.WriteRow(mafAnn.RawFields, best, r.Variant)
+		return mafWriter.WriteRow(mafAnn.RawFields, best, r.Anns, r.Variant)
 	}); err != nil {
 		return err
 	}

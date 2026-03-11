@@ -20,6 +20,7 @@ type MAFWriter struct {
 	sources    []annotate.AnnotationSource
 	sourceKeys []string // pre-built Extra map keys for source columns
 	replace    bool
+	allEffects bool // include vibe.all_effects column (default true)
 }
 
 // NewMAFWriter creates a new MAF writer that preserves all original columns.
@@ -28,7 +29,13 @@ func NewMAFWriter(w io.Writer, headerLine string, columns maf.ColumnIndices) *MA
 		w:          bufio.NewWriter(w),
 		headerLine: headerLine,
 		columns:    columns,
+		allEffects: true,
 	}
+}
+
+// SetAllEffects enables or disables the vibe.all_effects column.
+func (m *MAFWriter) SetAllEffects(enabled bool) {
+	m.allEffects = enabled
 }
 
 // SetSources registers annotation sources whose columns will be appended.
@@ -55,6 +62,15 @@ func (m *MAFWriter) WriteHeader() error {
 		// Core prediction columns with vibe. prefix
 		for _, col := range annotate.CoreColumns {
 			header += "\tvibe." + col.Name
+		}
+	}
+
+	// all_effects column (before source columns)
+	if m.allEffects {
+		if m.replace {
+			header += "\tall_effects"
+		} else {
+			header += "\tvibe.all_effects"
 		}
 	}
 
@@ -85,16 +101,16 @@ func (m *MAFWriter) WriteHeader() error {
 // WriteRow writes a MAF row.
 // In default mode, original columns are preserved and vibe.* columns appended.
 // In replace mode, core columns are overwritten at their original indices.
-func (m *MAFWriter) WriteRow(rawFields []string, ann *annotate.Annotation, v *vcf.Variant) error {
+func (m *MAFWriter) WriteRow(rawFields []string, ann *annotate.Annotation, allAnns []*annotate.Annotation, v *vcf.Variant) error {
 	if m.replace {
-		return m.writeRowReplace(rawFields, ann, v)
+		return m.writeRowReplace(rawFields, ann, allAnns, v)
 	}
-	return m.writeRowAppend(rawFields, ann, v)
+	return m.writeRowAppend(rawFields, ann, allAnns, v)
 }
 
 // writeRowAppend writes a row in default (append) mode.
-func (m *MAFWriter) writeRowAppend(rawFields []string, ann *annotate.Annotation, v *vcf.Variant) error {
-	row := make([]string, len(rawFields), len(rawFields)+7+len(m.sources)*3)
+func (m *MAFWriter) writeRowAppend(rawFields []string, ann *annotate.Annotation, allAnns []*annotate.Annotation, v *vcf.Variant) error {
+	row := make([]string, len(rawFields), len(rawFields)+10+len(m.sources)*3)
 	copy(row, rawFields)
 
 	// Core prediction columns
@@ -122,6 +138,11 @@ func (m *MAFWriter) writeRowAppend(rawFields []string, ann *annotate.Annotation,
 		row = append(row, "", "", "", "", "", "", "", "", "")
 	}
 
+	// all_effects column
+	if m.allEffects {
+		row = append(row, FormatAllEffects(allAnns))
+	}
+
 	// Annotation source columns
 	for _, key := range m.sourceKeys {
 		val := ""
@@ -136,8 +157,8 @@ func (m *MAFWriter) writeRowAppend(rawFields []string, ann *annotate.Annotation,
 }
 
 // writeRowReplace writes a row in replace mode, overwriting core columns in-place.
-func (m *MAFWriter) writeRowReplace(rawFields []string, ann *annotate.Annotation, v *vcf.Variant) error {
-	row := make([]string, len(rawFields), len(rawFields)+len(m.sources)*3)
+func (m *MAFWriter) writeRowReplace(rawFields []string, ann *annotate.Annotation, allAnns []*annotate.Annotation, v *vcf.Variant) error {
+	row := make([]string, len(rawFields), len(rawFields)+1+len(m.sources)*3)
 	copy(row, rawFields)
 
 	if ann != nil {
@@ -149,6 +170,11 @@ func (m *MAFWriter) writeRowReplace(rawFields []string, ann *annotate.Annotation
 		setIfPresent(row, m.columns.HGVSc, ann.HGVSc)
 		setIfPresent(row, m.columns.HGVSp, ann.HGVSp)
 		setIfPresent(row, m.columns.HGVSpShort, HGVSpToShort(ann.HGVSp))
+	}
+
+	// all_effects column
+	if m.allEffects {
+		row = append(row, FormatAllEffects(allAnns))
 	}
 
 	// Annotation source columns appended at end

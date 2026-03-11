@@ -42,6 +42,7 @@ var vcf2mafColumns = []string{
 	"Protein_position",
 	"Amino_acids",
 	"Codons",
+	"all_effects",
 }
 
 // VCF2MAFWriter converts annotated VCF variants to MAF format.
@@ -92,7 +93,8 @@ func (m *VCF2MAFWriter) WriteHeader() error {
 }
 
 // WriteRow writes a single MAF row from a VCF variant and its best annotation.
-func (m *VCF2MAFWriter) WriteRow(v *vcf.Variant, ann *annotate.Annotation) error {
+// allAnns contains all transcript annotations for the all_effects column.
+func (m *VCF2MAFWriter) WriteRow(v *vcf.Variant, ann *annotate.Annotation, allAnns []*annotate.Annotation) error {
 	ref, alt, start, end := VCFToMAFAlleles(v.Pos, v.Ref, v.Alt)
 	variantType := VariantType(ref, alt)
 
@@ -171,12 +173,14 @@ func (m *VCF2MAFWriter) WriteRow(v *vcf.Variant, ann *annotate.Annotation) error
 		} else {
 			writeField("")
 		}
-		writeField(ann.AminoAcidChange) // Amino_acids
-		writeField(ann.CodonChange)     // Codons
+		writeField(ann.AminoAcidChange)       // Amino_acids
+		writeField(ann.CodonChange)           // Codons
+		writeField(FormatAllEffects(allAnns)) // all_effects
 	} else {
 		for range 13 {
 			writeField("")
 		}
+		writeField(FormatAllEffects(allAnns)) // all_effects
 	}
 
 	// Append source columns using pre-built keys

@@ -312,6 +312,64 @@ func TestPickMostSevere(t *testing.T) {
 	}
 }
 
+func TestFormatAllEffects(t *testing.T) {
+	tests := []struct {
+		name string
+		anns []*annotate.Annotation
+		want string
+	}{
+		{
+			name: "nil",
+			anns: nil,
+			want: "",
+		},
+		{
+			name: "empty",
+			anns: []*annotate.Annotation{},
+			want: "",
+		},
+		{
+			name: "single annotation",
+			anns: []*annotate.Annotation{{
+				GeneName:       "KRAS",
+				Consequence:    "missense_variant",
+				HGVSp:          "p.Gly12Cys",
+				TranscriptID:   "ENST00000311936",
+				HGVSc:          "c.34G>T",
+				Impact:         "MODERATE",
+				IsCanonicalMSK: true,
+			}},
+			want: "KRAS,missense_variant,p.G12C,ENST00000311936,c.34G>T,MODERATE,YES",
+		},
+		{
+			name: "multiple annotations",
+			anns: []*annotate.Annotation{
+				{
+					GeneName:       "KRAS",
+					Consequence:    "missense_variant",
+					HGVSp:          "p.Gly12Cys",
+					TranscriptID:   "ENST00000311936",
+					HGVSc:          "c.34G>T",
+					Impact:         "MODERATE",
+					IsCanonicalMSK: true,
+				},
+				{
+					GeneName:     "KRAS",
+					Consequence:  "intron_variant",
+					TranscriptID: "ENST00000556131",
+					Impact:       "MODIFIER",
+				},
+			},
+			want: "KRAS,missense_variant,p.G12C,ENST00000311936,c.34G>T,MODERATE,YES;KRAS,intron_variant,,ENST00000556131,,MODIFIER,",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, FormatAllEffects(tt.anns))
+		})
+	}
+}
+
 func TestCategorizer_CategorizeRow(t *testing.T) {
 	cat := &Categorizer{}
 

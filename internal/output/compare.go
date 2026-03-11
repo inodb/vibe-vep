@@ -128,6 +128,38 @@ func isProteinCodingBiotype(biotype string) bool {
 	return false
 }
 
+// FormatAllEffects packs all annotations into a semicolon-delimited string.
+// Format per entry: gene,consequence,HGVSp_Short,transcript,HGVSc,impact,canonical_msk
+func FormatAllEffects(anns []*annotate.Annotation) string {
+	if len(anns) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, ann := range anns {
+		if i > 0 {
+			b.WriteByte(';')
+		}
+		canonMSK := ""
+		if ann.IsCanonicalMSK {
+			canonMSK = "YES"
+		}
+		b.WriteString(ann.GeneName)
+		b.WriteByte(',')
+		b.WriteString(ann.Consequence)
+		b.WriteByte(',')
+		b.WriteString(HGVSpToShort(ann.HGVSp))
+		b.WriteByte(',')
+		b.WriteString(ann.TranscriptID)
+		b.WriteByte(',')
+		b.WriteString(ann.HGVSc)
+		b.WriteByte(',')
+		b.WriteString(ann.Impact)
+		b.WriteByte(',')
+		b.WriteString(canonMSK)
+	}
+	return b.String()
+}
+
 // HGVSpToShort converts 3-letter HGVSp notation to single-letter.
 func HGVSpToShort(hgvsp string) string {
 	if len(hgvsp) == 0 {

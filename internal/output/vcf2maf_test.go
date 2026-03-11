@@ -120,7 +120,7 @@ func TestVCF2MAFWriter_FullRow(t *testing.T) {
 		Allele:          "A",
 	}
 
-	require.NoError(t, w.WriteRow(v, ann))
+	require.NoError(t, w.WriteRow(v, ann, []*annotate.Annotation{ann}))
 	require.NoError(t, w.Flush())
 
 	out := buf.String()
@@ -173,7 +173,7 @@ func TestVCF2MAFWriter_Deletion(t *testing.T) {
 		Impact:      "HIGH",
 	}
 
-	require.NoError(t, w.WriteRow(v, ann))
+	require.NoError(t, w.WriteRow(v, ann, []*annotate.Annotation{ann}))
 	require.NoError(t, w.Flush())
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
@@ -201,7 +201,7 @@ func TestVCF2MAFWriter_Insertion(t *testing.T) {
 		Impact:      "HIGH",
 	}
 
-	require.NoError(t, w.WriteRow(v, ann))
+	require.NoError(t, w.WriteRow(v, ann, []*annotate.Annotation{ann}))
 	require.NoError(t, w.Flush())
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
@@ -224,7 +224,7 @@ func TestVCF2MAFWriter_NilAnnotation(t *testing.T) {
 		Info: map[string]interface{}{},
 	}
 
-	require.NoError(t, w.WriteRow(v, nil))
+	require.NoError(t, w.WriteRow(v, nil, nil))
 	require.NoError(t, w.Flush())
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
