@@ -413,6 +413,13 @@ func runAnnotateVariant(logger *zap.Logger, specInput, assembly, specType string
 			return err
 		}
 		fmt.Fprintf(os.Stderr, "Query: %s c.%s\n\n", spec.TranscriptID, spec.CDSChange)
+		if len(variants) > 1 {
+			fmt.Fprintf(os.Stderr, "Note: c.%s maps to %d equivalent genomic positions.\n", spec.CDSChange, len(variants))
+			fmt.Fprintf(os.Stderr, "The cDNA notation alone is not enough to determine a unique genomic change\n")
+			fmt.Fprintf(os.Stderr, "because the deletion falls in a repeat region. The actual genomic position\n")
+			fmt.Fprintf(os.Stderr, "depends on alignment convention (most tools use left-aligned) and the\n")
+			fmt.Fprintf(os.Stderr, "specific transcript version. Each position is annotated separately below.\n\n")
+		}
 		fmt.Fprintf(os.Stderr, "Found %d genomic variant(s):\n", len(variants))
 		for _, v := range variants {
 			fmt.Fprintf(os.Stderr, "  %s:%d %s>%s\n", v.Chrom, v.Pos, v.Ref, v.Alt)

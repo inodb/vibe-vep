@@ -205,6 +205,8 @@ func reverseMapHGVScSubstitution(c *cache.Cache, geneOrTranscript string, m []st
 }
 
 // reverseMapHGVScDeletion handles CDS deletions like "923del" or "100_102del".
+// It returns all equivalent genomic variants — in repeat regions, multiple
+// genomic positions produce the same CDS deletion after normalization.
 func reverseMapHGVScDeletion(c *cache.Cache, geneOrTranscript string, m []string) ([]*vcf.Variant, error) {
 	cdsStart, _ := strconv.ParseInt(m[1], 10, 64)
 	cdsEnd := cdsStart
@@ -220,71 +222,97 @@ func reverseMapHGVScDeletion(c *cache.Cache, geneOrTranscript string, m []string
 		return nil, err
 	}
 
-	// Extract deleted CDS bases
 	if cdsEnd > int64(len(transcript.CDSSequence)) {
 		return nil, fmt.Errorf("CDS position %d out of range for transcript %s (CDS length %d)",
 			cdsEnd, transcript.ID, len(transcript.CDSSequence))
 	}
-	deletedBases := transcript.CDSSequence[cdsStart-1 : cdsEnd]
 
-	// Map CDS positions to genomic
-	genomicStart := CDSToGenomic(cdsStart, transcript)
-	genomicEnd := CDSToGenomic(cdsEnd, transcript)
-	if genomicStart == 0 || genomicEnd == 0 {
+	// Find all equivalent CDS positions (repeat-aware)
+	positions := equivalentCDSDeletionPositions(transcript.CDSSequence, cdsStart, cdsEnd)
+
+	var variants []*vcf.Variant
+	for _, pos := range positions {
+		end := pos + (cdsEnd - cdsStart)
+		v, err := buildCDSDeletionVariant(transcript, pos, end)
+		if err != nil {
+			continue // skip positions where padding is out of range
+		}
+		variants = append(variants, v)
+	}
+
+	if len(variants) == 0 {
 		return nil, fmt.Errorf("CDS positions %d-%d could not be mapped to genomic coordinates in transcript %s",
 			cdsStart, cdsEnd, transcript.ID)
 	}
+	return variants, nil
+}
 
-	// Build VCF-convention deletion (padding base + deleted bases)
-	if transcript.IsReverseStrand() {
-		// Reverse strand: genomicStart > genomicEnd (reversed coords)
-		// Deleted bases on genomic strand are reverse-complemented
-		// Padding base is after the deletion in genomic coords (genomicEnd+1 is upstream)
-		// but VCF convention uses the base before the deletion in genomic order
-		// genomicEnd is the lower coordinate, so pad at genomicEnd-1
+// equivalentCDSDeletionPositions finds all CDS start positions where deleting
+// the same number of bases produces an identical CDS sequence. In a repeat
+// region, a deletion can be placed at any position within the repeat.
+// Returns 1-based CDS start positions in ascending order.
+func equivalentCDSDeletionPositions(cdsSeq string, cdsStart, cdsEnd int64) []int64 {
+	L := int(cdsEnd - cdsStart + 1)
+	i := int(cdsStart - 1) // 0-indexed
+
+	// Shift left: deleting [i-1, i-1+L) ≡ [i, i+L) when cdsSeq[i-1] == cdsSeq[i+L-1]
+	left := i
+	for left > 0 && cdsSeq[left-1] == cdsSeq[left+L-1] {
+		left--
+	}
+
+	// Shift right: deleting [i+1, i+1+L) ≡ [i, i+L) when cdsSeq[i] == cdsSeq[i+L]
+	right := i
+	for right+L < len(cdsSeq) && cdsSeq[right] == cdsSeq[right+L] {
+		right++
+	}
+
+	positions := make([]int64, 0, right-left+1)
+	for pos := left; pos <= right; pos++ {
+		positions = append(positions, int64(pos+1)) // 1-based
+	}
+	return positions
+}
+
+// buildCDSDeletionVariant builds a single VCF-convention deletion variant
+// from a CDS deletion at the given positions.
+func buildCDSDeletionVariant(t *cache.Transcript, cdsStart, cdsEnd int64) (*vcf.Variant, error) {
+	deletedBases := t.CDSSequence[cdsStart-1 : cdsEnd]
+
+	genomicStart := CDSToGenomic(cdsStart, t)
+	genomicEnd := CDSToGenomic(cdsEnd, t)
+	if genomicStart == 0 || genomicEnd == 0 {
+		return nil, fmt.Errorf("CDS positions %d-%d unmapped", cdsStart, cdsEnd)
+	}
+
+	if t.IsReverseStrand() {
 		padPos := genomicEnd - 1
-		if padPos < 1 {
-			return nil, fmt.Errorf("cannot add padding base before genomic position %d", genomicEnd)
-		}
-		// Get padding base from the genomic strand
-		// On reverse strand, CDS pos before cdsStart maps to genomicStart+1
-		// But we need the genomic base at padPos, which is genomicEnd-1
-		// We can get it from CDS: the base after cdsEnd in CDS maps to genomicEnd-1 on reverse strand
 		padCDSPos := cdsEnd + 1
-		if padCDSPos > int64(len(transcript.CDSSequence)) {
-			return nil, fmt.Errorf("cannot determine padding base: CDS position %d out of range", padCDSPos)
+		if padPos < 1 || padCDSPos > int64(len(t.CDSSequence)) {
+			return nil, fmt.Errorf("padding base out of range")
 		}
-		padBase := string(Complement(transcript.CDSSequence[padCDSPos-1]))
-
-		// Deleted bases reverse-complemented for genomic strand
+		padBase := string(Complement(t.CDSSequence[padCDSPos-1]))
 		genomicDeleted := ReverseComplement(string(deletedBases))
-
-		return []*vcf.Variant{{
-			Chrom: transcript.Chrom,
+		return &vcf.Variant{
+			Chrom: t.Chrom,
 			Pos:   padPos,
 			Ref:   padBase + genomicDeleted,
 			Alt:   padBase,
-		}}, nil
+		}, nil
 	}
 
-	// Forward strand: padding base is at genomicStart-1
 	padPos := genomicStart - 1
-	if padPos < 1 {
-		return nil, fmt.Errorf("cannot add padding base before genomic position %d", genomicStart)
-	}
-	// Get padding base from CDS (base before cdsStart)
 	padCDSPos := cdsStart - 1
-	if padCDSPos < 1 {
-		return nil, fmt.Errorf("cannot determine padding base: CDS position %d out of range", padCDSPos)
+	if padPos < 1 || padCDSPos < 1 {
+		return nil, fmt.Errorf("padding base out of range")
 	}
-	padBase := string(transcript.CDSSequence[padCDSPos-1])
-
-	return []*vcf.Variant{{
-		Chrom: transcript.Chrom,
+	padBase := string(t.CDSSequence[padCDSPos-1])
+	return &vcf.Variant{
+		Chrom: t.Chrom,
 		Pos:   padPos,
 		Ref:   padBase + string(deletedBases),
 		Alt:   padBase,
-	}}, nil
+	}, nil
 }
 
 // reGenomicSubstitution parses a genomic substitution like "1293968C>T".

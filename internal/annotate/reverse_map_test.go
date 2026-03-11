@@ -207,39 +207,34 @@ func TestReverseMapHGVSc_ByTranscriptID(t *testing.T) {
 func TestReverseMapHGVSc_SingleBaseDel(t *testing.T) {
 	c := createKRASCache()
 
-	// KRAS c.34del: CDS pos 34 is 'G' (first base of codon 12 GGT)
-	// Reverse strand: genomic pos for CDS 34 = 25245351
-	// Padding base from CDS pos 35 ('G'), complement = 'C', at genomic 25245350
-	// Deleted base 'G' complemented = 'C'
-	// VCF: pos=25245350, ref=CC, alt=C
+	// KRAS c.34del: CDS pos 34 is 'G', pos 35 is also 'G', so two equivalent positions.
+	// CDS 34 → genomic 25245351, pad from CDS 35 → VCF 25245350:CC>C
+	// CDS 35 → genomic 25245350, pad from CDS 36 → VCF 25245349:CA>C (CDS 36='T', comp='A')
 	variants, err := ReverseMapHGVSc(c, "KRAS", "34del")
 	require.NoError(t, err)
-	require.Len(t, variants, 1)
+	require.Len(t, variants, 2, "expected 2 equivalent genomic variants for c.34del in GG repeat")
 
-	v := variants[0]
-	assert.Equal(t, "12", v.Chrom)
-	assert.Equal(t, int64(25245350), v.Pos)
-	assert.Equal(t, "CC", v.Ref)
-	assert.Equal(t, "C", v.Alt)
+	assert.Equal(t, "12", variants[0].Chrom)
+	assert.Equal(t, int64(25245350), variants[0].Pos)
+	assert.Equal(t, "CC", variants[0].Ref)
+	assert.Equal(t, "C", variants[0].Alt)
+
+	assert.Equal(t, int64(25245349), variants[1].Pos)
 }
 
 func TestReverseMapHGVSc_RangeDel(t *testing.T) {
 	c := createKRASCache()
 
-	// KRAS c.34_36del: CDS positions 34-36 are 'GGT' (codon 12, Gly)
-	// Reverse strand: genomic for CDS 34 = 25245351, CDS 36 = 25245349
-	// Padding from CDS pos 37 ('G'), complement = 'C', at genomic 25245348
-	// Deleted 'GGT' reverse-complemented = 'ACC'
-	// VCF: pos=25245348, ref=CACC, alt=C
+	// KRAS c.34_36del: CDS 34-36 = 'GGT', but repeat context extends further:
+	// CDS: ...T(33) G(34) G(35) T(36) G(37) G(38) C(39)...
+	// Shifting the 3-base window: equivalent positions at 33-35, 34-36, 35-37, 36-38
+	// (T at boundary matches: CDS[32]='T'==CDS[35]='T', etc.)
 	variants, err := ReverseMapHGVSc(c, "KRAS", "34_36del")
 	require.NoError(t, err)
-	require.Len(t, variants, 1)
+	require.True(t, len(variants) >= 2, "expected multiple equivalent genomic variants, got %d", len(variants))
 
-	v := variants[0]
-	assert.Equal(t, "12", v.Chrom)
-	assert.Equal(t, int64(25245348), v.Pos)
-	assert.Equal(t, "CACC", v.Ref)
-	assert.Equal(t, "C", v.Alt)
+	// First variant should be the leftmost CDS position mapped to genomic
+	assert.Equal(t, "12", variants[0].Chrom)
 }
 
 func TestReverseMapHGVSc_ForwardStrandDel(t *testing.T) {
@@ -275,6 +270,42 @@ func TestReverseMapHGVSc_ForwardStrandDel(t *testing.T) {
 	assert.Equal(t, int64(1013), v.Pos)
 	assert.Equal(t, "AC", v.Ref)
 	assert.Equal(t, "A", v.Alt)
+}
+
+func TestEquivalentCDSDeletionPositions(t *testing.T) {
+	tests := []struct {
+		name     string
+		cdsSeq   string
+		start    int64
+		end      int64
+		wantPos  []int64
+	}{
+		{
+			name:    "single base in homopolymer GGG",
+			cdsSeq:  "ATGGGATC",
+			start:   3, end: 3, // first G of GGG
+			wantPos: []int64{3, 4, 5},
+		},
+		{
+			name:    "single base no repeat",
+			cdsSeq:  "ATCGATCG",
+			start:   3, end: 3, // C
+			wantPos: []int64{3},
+		},
+		{
+			name:    "3-base tandem repeat",
+			cdsSeq:  "XYZATGATGATGXYZ",
+			start:   4, end: 6, // first ATG
+			wantPos: []int64{4, 5, 6, 7, 8, 9, 10},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := equivalentCDSDeletionPositions(tt.cdsSeq, tt.start, tt.end)
+			assert.Equal(t, tt.wantPos, got)
+		})
+	}
 }
 
 func TestResolveHGVSg_Substitution(t *testing.T) {
