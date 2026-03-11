@@ -170,7 +170,25 @@ annotation versions, with no biological impact.
 
 ## 5. Remaining Annotation Discrepancies — **Ongoing**
 
-After all fixes applied, the v3 annotation run against 401,195 matched variants shows:
+### Improvement from First All-SNPs Run to v3
+
+The table below shows the cumulative effect of both fixes (canonical tag parsing + gob schema
+hash) across 401,195 matched variants from the full 871,305-SNP dataset:
+
+| Field | First Run | v3 (post-fix) | Δ |
+|---|---|---|---|
+| hugo_symbol | 96.8% | 96.8% | ±0.0% |
+| consequence | 97.2% | 97.9% | **+0.7%** |
+| variant_classification | 97.8% | 98.1% | **+0.2%** |
+| transcript_id | 90.8% | 90.9% | +0.1% |
+| hgvsc | 94.6% | 96.4% | **+1.9%** |
+| hgvsp | 91.5% | 93.3% | **+1.8%** |
+| hgvsp_short | 94.3% | 96.2% | **+1.9%** |
+
+The HGVSc/p gains (+1.8–1.9%) are directly attributable to the canonical tag parsing fix
+correctly identifying Ensembl canonical transcripts and applying the MSK override logic.
+
+### Remaining discrepancies after v3
 
 | Field | Match Rate |
 |---|---|
