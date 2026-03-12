@@ -226,6 +226,14 @@ func TestPickBestAnnotation(t *testing.T) {
 			want: "T2",
 		},
 		{
+			name: "prefer protein-coding over canonical non-coding",
+			anns: []*annotate.Annotation{
+				{TranscriptID: "T1", Impact: "HIGH", Biotype: "retained_intron", IsCanonicalMSK: true},
+				{TranscriptID: "T2", Impact: "MODERATE", Biotype: "protein_coding"},
+			},
+			want: "T2",
+		},
+		{
 			name: "prefer protein-coding over non-coding",
 			anns: []*annotate.Annotation{
 				{TranscriptID: "T1", Impact: "HIGH", Biotype: "retained_intron"},

@@ -97,14 +97,15 @@ func PickMostSevere(anns []*annotate.Annotation) *annotate.Annotation {
 }
 
 // AnnotationBetter returns true if ann is a better pick than current for comparison.
+// Priority order: protein-coding biotype > canonical > impact > has HGVSp.
 func AnnotationBetter(ann, current *annotate.Annotation) bool {
-	if ann.IsCanonicalMSK != current.IsCanonicalMSK {
-		return ann.IsCanonicalMSK
-	}
 	annCoding := isProteinCodingBiotype(ann.Biotype)
 	curCoding := isProteinCodingBiotype(current.Biotype)
 	if annCoding != curCoding {
 		return annCoding
+	}
+	if ann.IsCanonicalMSK != current.IsCanonicalMSK {
+		return ann.IsCanonicalMSK
 	}
 	annImpact := annotate.ImpactRank(ann.Impact)
 	curImpact := annotate.ImpactRank(current.Impact)

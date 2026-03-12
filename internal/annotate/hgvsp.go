@@ -30,14 +30,21 @@ func formatAASequence(aas string) string {
 //
 // Uses a stack-allocated buffer for common short cases to minimize allocations.
 func FormatHGVSp(result *ConsequenceResult) string {
-	if result.ProteinPosition < 1 {
-		return ""
-	}
-
 	// Get the primary consequence (first term before comma)
 	conseq := result.Consequence
 	if idx := strings.IndexByte(conseq, ','); idx >= 0 {
 		conseq = conseq[:idx]
+	}
+
+	// start_lost is always p.Met1? regardless of position; handle before the
+	// ProteinPosition guard to be robust against early-return code paths that
+	// may not set ProteinPosition.
+	if conseq == ConsequenceStartLost {
+		return "p.Met1?"
+	}
+
+	if result.ProteinPosition < 1 {
+		return ""
 	}
 
 	pos := result.ProteinPosition
@@ -49,6 +56,22 @@ func FormatHGVSp(result *ConsequenceResult) string {
 
 	switch conseq {
 	case ConsequenceMissenseVariant:
+		if result.IsDelIns {
+			// Multi-codon MNV: p.AA1pos[_AA2endPos]delins[newAAs]
+			n += copy(buf[n:], "p.")
+			if result.RefAA != 0 {
+				n += copy(buf[n:], aaThree(result.RefAA))
+			}
+			n += putInt64(buf[n:], pos)
+			if result.ProteinEndPosition > result.ProteinPosition && result.EndAA != 0 {
+				buf[n] = '_'
+				n++
+				n += copy(buf[n:], aaThree(result.EndAA))
+				n += putInt64(buf[n:], result.ProteinEndPosition)
+			}
+			n += copy(buf[n:], "delins")
+			return string(buf[:n]) + formatAASequence(result.InsertedAAs)
+		}
 		// p.Xxx###Xxx (max ~15 chars)
 		n += copy(buf[n:], "p.")
 		n += copy(buf[n:], aaThree(result.RefAA))
@@ -85,9 +108,6 @@ func FormatHGVSp(result *ConsequenceResult) string {
 			n += copy(buf[n:], "ext*?")
 		}
 		return string(buf[:n])
-
-	case ConsequenceStartLost:
-		return "p.Met1?"
 
 	case ConsequenceStopRetained:
 		// p.Ter###=
@@ -135,6 +155,21 @@ func FormatHGVSp(result *ConsequenceResult) string {
 
 	case ConsequenceInframeInsertion:
 		n += copy(buf[n:], "p.")
+		if result.IsDelIns {
+			// Anchor codon(s) changed: p.AA1pos[_AA2endPos]delins[newAAs]
+			if result.RefAA != 0 {
+				n += copy(buf[n:], aaThree(result.RefAA))
+			}
+			n += putInt64(buf[n:], pos)
+			if result.ProteinEndPosition > result.ProteinPosition && result.EndAA != 0 {
+				buf[n] = '_'
+				n++
+				n += copy(buf[n:], aaThree(result.EndAA))
+				n += putInt64(buf[n:], result.ProteinEndPosition)
+			}
+			n += copy(buf[n:], "delins")
+			return string(buf[:n]) + formatAASequence(result.InsertedAAs)
+		}
 		if result.IsDup {
 			if result.RefAA != 0 {
 				n += copy(buf[n:], aaThree(result.RefAA))
@@ -155,6 +190,9 @@ func FormatHGVSp(result *ConsequenceResult) string {
 		n += putInt64(buf[n:], pos)
 		buf[n] = '_'
 		n++
+		if result.EndAA != 0 {
+			n += copy(buf[n:], aaThree(result.EndAA))
+		}
 		n += putInt64(buf[n:], pos+1)
 		n += copy(buf[n:], "ins")
 		return string(buf[:n]) + formatAASequence(result.InsertedAAs)

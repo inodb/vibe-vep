@@ -15,18 +15,18 @@ import (
 // Codon 12 is at genomic position 25245350
 func createKRASTranscript() *cache.Transcript {
 	return &cache.Transcript{
-		ID:          "ENST00000311936",
-		GeneID:      "ENSG00000133703",
-		GeneName:    "KRAS",
-		Chrom:       "12",
-		Start:       25205246,
-		End:         25250929,
-		Strand:      -1, // Reverse strand
-		Biotype:     "protein_coding",
+		ID:                 "ENST00000311936",
+		GeneID:             "ENSG00000133703",
+		GeneName:           "KRAS",
+		Chrom:              "12",
+		Start:              25205246,
+		End:                25250929,
+		Strand:             -1, // Reverse strand
+		Biotype:            "protein_coding",
 		IsCanonicalMSK:     true,
 		IsCanonicalEnsembl: true,
-		CDSStart:    25209798, // CDS end in genomic coords (start for reverse)
-		CDSEnd:      25245384, // CDS start in genomic coords (end for reverse)
+		CDSStart:           25209798, // CDS end in genomic coords (start for reverse)
+		CDSEnd:             25245384, // CDS start in genomic coords (end for reverse)
 		Exons: []cache.Exon{
 			// Sorted by ascending genomic position (matches GTF loader behavior)
 			{Number: 5, Start: 25209798, End: 25209911, CDSStart: 25209798, CDSEnd: 25209911, Frame: 0}, // Last coding exon
@@ -41,6 +41,28 @@ func createKRASTranscript() *cache.Transcript {
 		// Full CDS would be ~567 bp for KRAS
 		// For testing, we'll use a simplified sequence with codon 12 at the right position
 		CDSSequence: "ATGACTGAATATAAACTTGTGGTAGTTGGAGCTGGTGGCGTAGGCAAGAGTGCCTTGACGATACAGCTAATTCAGAATCATTTTGTGGACGAATATGATCCAACAATAGAGGATTCCTACAGGAAGCAAGTAGTAATTGATGGAGAAACCTGTCTCTTGGATATTCTCGACACAGCAGGTCAAGAGGAGTACAGTGCAATGAGGGACCAGTACATGAGGACTGGGGAGGGCTTTCTTTGTGTATTTGCCATAAATAATACTAAATCATTTGAAGATATTCACCATTATAGAGAACAAATTAAAAGAGTTAAGGACTCTGAAGATGTACCTATGGTCCTAGTAGGAAATAAATGTGATTTGCCTTCTAGAACAGTAGACACAAAACAGGCTCAGGACTTAGCAAGAAGTTATGGAATTCCTTTTATTGAAACATCAGCAAAGACAAGACAGAGAGTGGAGGATGCTTTTTATACATTGGTGAGAGAGATCCGACAATACAGATTGAAAAAAATCAGCAAAGAAGAAAAGACTCCTGGCTGTGTGAAAATTAAAAAATGCATTATAATGTAA",
+	}
+}
+
+func createForwardMNVTranscript() *cache.Transcript {
+	// CDS codons:
+	// 1: ATG (Met)
+	// 2: GGC (Gly)
+	// 3: TTT (Phe)
+	// 4: GAA (Glu)
+	return &cache.Transcript{
+		ID:          "ENST_MNV_FWD",
+		GeneID:      "ENSG_MNV_FWD",
+		GeneName:    "MNVFWD",
+		Chrom:       "1",
+		Start:       95,
+		End:         130,
+		Strand:      1,
+		Biotype:     "protein_coding",
+		CDSStart:    100,
+		CDSEnd:      111,
+		Exons:       []cache.Exon{{Number: 1, Start: 95, End: 130, CDSStart: 100, CDSEnd: 111, Frame: 0}},
+		CDSSequence: "ATGGGCTTTGAA",
 	}
 }
 
@@ -986,4 +1008,36 @@ func TestPredictConsequence_StopCodonInsertionRetained(t *testing.T) {
 		"insertion at last stop codon base should be stop_retained_variant")
 	assert.Contains(t, result.Consequence, ConsequenceInframeInsertion,
 		"should also be classified as inframe_insertion")
+}
+
+func TestPredictConsequence_MNVSingleCodonMissense(t *testing.T) {
+	transcript := createForwardMNVTranscript()
+
+	// CDS pos 4-6 (codon 2): GGC -> TGC (Gly -> Cys)
+	v := &vcf.Variant{Chrom: "1", Pos: 103, Ref: "GGC", Alt: "TGC"}
+	result := PredictConsequence(v, transcript)
+
+	assert.Equal(t, ConsequenceMissenseVariant, result.Consequence)
+	assert.Equal(t, int64(2), result.ProteinPosition)
+	assert.Equal(t, byte('G'), result.RefAA)
+	assert.Equal(t, byte('C'), result.AltAA)
+	assert.False(t, result.IsDelIns)
+	assert.Equal(t, "p.Gly2Cys", result.HGVSp)
+}
+
+func TestPredictConsequence_MNVMultiCodonDelIns(t *testing.T) {
+	transcript := createForwardMNVTranscript()
+
+	// CDS pos 4-9 (codon 2-3): GGCTTT -> AAAGAA (GlyPhe -> LysGlu)
+	v := &vcf.Variant{Chrom: "1", Pos: 103, Ref: "GGCTTT", Alt: "AAAGAA"}
+	result := PredictConsequence(v, transcript)
+
+	assert.Equal(t, ConsequenceMissenseVariant, result.Consequence)
+	assert.True(t, result.IsDelIns)
+	assert.Equal(t, int64(2), result.ProteinPosition)
+	assert.Equal(t, int64(3), result.ProteinEndPosition)
+	assert.Equal(t, byte('G'), result.RefAA)
+	assert.Equal(t, byte('F'), result.EndAA)
+	assert.Equal(t, "KE", result.InsertedAAs)
+	assert.Equal(t, "p.Gly2_Phe3delinsLysGlu", result.HGVSp)
 }

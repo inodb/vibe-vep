@@ -29,6 +29,7 @@ type ConsequenceResult struct {
 	StopLostExtDist    int    // Distance to next stop codon in stop-lost (0=unknown)
 	InsertedAAs        string // Inserted amino acids for inframe indels (single-letter codes)
 	IsDup              bool   // True if inframe insertion is a protein-level duplication
+	IsDelIns           bool   // True if insertion also modifies the anchor codon (delins format)
 }
 
 // PredictConsequence determines the effect of a variant on a transcript.
@@ -140,7 +141,9 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 			}
 			if indelEnd >= startCodonStart && v.Pos <= startCodonEnd {
 				result.Consequence = ConsequenceStartLost
+				result.ProteinPosition = 1
 				result.Impact = GetImpact(result.Consequence)
+				result.HGVSp = FormatHGVSp(result)
 				return result
 			}
 			// Check if deletion from 3'UTR spans into the stop codon
@@ -176,7 +179,9 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 		}
 		if indelEnd >= startCodonStart && v.Pos <= startCodonEnd {
 			result.Consequence = ConsequenceStartLost
+			result.ProteinPosition = 1
 			result.Impact = GetImpact(result.Consequence)
+			result.HGVSp = FormatHGVSp(result)
 			return result
 		}
 	}
@@ -211,6 +216,12 @@ func predictCodingConsequence(v *vcf.Variant, t *cache.Transcript, exon *cache.E
 	// Handle indels
 	if v.IsIndel() {
 		return predictIndelConsequence(v, t, result)
+	}
+
+	// Multi-nucleotide variants (len(ref)==len(alt)>1) may span multiple
+	// codons and need special handling.
+	if len(v.Ref) > 1 {
+		return predictMNVConsequence(v, t, result)
 	}
 
 	// SNV - calculate amino acid change
@@ -275,7 +286,58 @@ func predictCodingConsequence(v *vcf.Variant, t *cache.Transcript, exon *cache.E
 	return result
 }
 
-// predictIndelConsequence determines the effect of an insertion or deletion.
+// predictMNVConsequence handles multi-nucleotide variants (len(ref)==len(alt)>1)
+// that may affect multiple codons. Single-codon changes are classified as
+// missense/stop/synonymous; multi-codon changes are emitted as delins.
+func predictMNVConsequence(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult) *ConsequenceResult {
+	if len(t.CDSSequence) == 0 {
+		result.Consequence = ConsequenceCodingSequenceVariant
+		result.Impact = GetImpact(result.Consequence)
+		return result
+	}
+
+	startPos, _, deletedAAs, insertedAAs := computeInframeProteinChange(v, t, result.CDSPosition)
+
+	switch {
+	case startPos == 0 || (len(deletedAAs) == 0 && len(insertedAAs) == 0):
+		result.Consequence = ConsequenceSynonymousVariant
+
+	case len(deletedAAs) == 1 && len(insertedAAs) == 1:
+		result.ProteinPosition = startPos
+		result.RefAA = deletedAAs[0]
+		result.AltAA = insertedAAs[0]
+		switch {
+		case result.AltAA == '*':
+			result.Consequence = ConsequenceStopGained
+			result.AminoAcidChange = formatAAChange(result.RefAA, startPos, '*')
+		case result.RefAA == '*':
+			result.Consequence = ConsequenceStopLost
+		case result.RefAA == 'M' && startPos == 1:
+			result.Consequence = ConsequenceStartLost
+		default:
+			result.Consequence = ConsequenceMissenseVariant
+			result.AminoAcidChange = formatAAChange(result.RefAA, startPos, result.AltAA)
+		}
+
+	default:
+		// Multi-codon change: emit as delins.
+		result.Consequence = ConsequenceMissenseVariant
+		result.IsDelIns = true
+		result.ProteinPosition = startPos
+		result.RefAA = deletedAAs[0]
+		result.InsertedAAs = insertedAAs
+		if len(deletedAAs) > 1 {
+			result.ProteinEndPosition = startPos + int64(len(deletedAAs)) - 1
+			result.EndAA = deletedAAs[len(deletedAAs)-1]
+		}
+	}
+
+	result.Impact = GetImpact(result.Consequence)
+	result.HGVSp = FormatHGVSp(result)
+	return result
+}
+
+
 func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult) *ConsequenceResult {
 	refLen := len(v.Ref)
 	altLen := len(v.Alt)
@@ -344,41 +406,64 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 			}
 			// Compute inserted amino acids via protein comparison
 			if result.CDSPosition > 0 && result.Consequence == ConsequenceInframeInsertion {
-				startPos, _, _, insAAs := computeInframeProteinChange(v, t, result.CDSPosition)
+				startPos, endPos, delAAs, insAAs := computeInframeProteinChange(v, t, result.CDSPosition)
 				if len(insAAs) > 0 {
 					result.InsertedAAs = insAAs
-					// startPos is position of first new AA; flanking AA is at startPos-1
-					if startPos > 1 {
-						result.ProteinPosition = startPos - 1
+					if len(delAAs) > 0 {
+						// Anchor codon(s) modified — emit HGVS delins format.
+						result.IsDelIns = true
+						result.ProteinPosition = startPos
 						refCodon := GetCodon(t.CDSSequence, result.ProteinPosition)
 						if len(refCodon) == 3 {
 							result.RefAA = TranslateCodon(refCodon)
 						}
-					}
-					// Check for protein-level duplication
-					insLen := int64(len(insAAs))
-					dupStart := result.ProteinPosition - insLen + 1
-					if dupStart >= 1 {
-						isDup := true
-						for i := int64(0); i < insLen; i++ {
-							codon := GetCodon(t.CDSSequence, dupStart+i)
-							if len(codon) != 3 || TranslateCodon(codon) != insAAs[i] {
-								isDup = false
-								break
+						if endPos > startPos {
+							result.ProteinEndPosition = endPos
+							endCodon := GetCodon(t.CDSSequence, result.ProteinEndPosition)
+							if len(endCodon) == 3 {
+								result.EndAA = TranslateCodon(endCodon)
 							}
 						}
-						if isDup {
-							result.IsDup = true
-							result.ProteinPosition = dupStart
-							result.ProteinEndPosition = dupStart + insLen - 1
+					} else {
+						// Pure insertion: anchor AA unchanged; flanking AAs bracket the insert.
+						if startPos > 1 {
+							result.ProteinPosition = startPos - 1
 							refCodon := GetCodon(t.CDSSequence, result.ProteinPosition)
 							if len(refCodon) == 3 {
 								result.RefAA = TranslateCodon(refCodon)
 							}
-							if result.ProteinEndPosition > result.ProteinPosition {
-								endCodon := GetCodon(t.CDSSequence, result.ProteinEndPosition)
-								if len(endCodon) == 3 {
-									result.EndAA = TranslateCodon(endCodon)
+							// Downstream flanking AA for p.AA1pos_AA2(pos+1)ins format
+							endCodon := GetCodon(t.CDSSequence, result.ProteinPosition+1)
+							if len(endCodon) == 3 {
+								result.EndAA = TranslateCodon(endCodon)
+							}
+						}
+						// Check for protein-level duplication
+						insLen := int64(len(insAAs))
+						dupStart := result.ProteinPosition - insLen + 1
+						if dupStart >= 1 {
+							isDup := true
+							for i := int64(0); i < insLen; i++ {
+								codon := GetCodon(t.CDSSequence, dupStart+i)
+								if len(codon) != 3 || TranslateCodon(codon) != insAAs[i] {
+									isDup = false
+									break
+								}
+							}
+							if isDup {
+								result.IsDup = true
+								result.IsDelIns = false
+								result.ProteinPosition = dupStart
+								result.ProteinEndPosition = dupStart + insLen - 1
+								refCodon := GetCodon(t.CDSSequence, result.ProteinPosition)
+								if len(refCodon) == 3 {
+									result.RefAA = TranslateCodon(refCodon)
+								}
+								if result.ProteinEndPosition > result.ProteinPosition {
+									endCodon := GetCodon(t.CDSSequence, result.ProteinEndPosition)
+									if len(endCodon) == 3 {
+										result.EndAA = TranslateCodon(endCodon)
+									}
 								}
 							}
 						}
@@ -520,22 +605,38 @@ func computeFrameshiftDetails(v *vcf.Variant, t *cache.Transcript, cdsPos int64)
 		alt = ReverseComplement(alt)
 	}
 
-	endIdx := cdsIdx + len(ref)
+	// For reverse-strand variants, GenomicToCDS(v.Pos) maps the leftmost
+	// genomic position to the HIGHEST CDS index (the last ref base on the
+	// transcript).  Shift startIdx left by len(ref)-1 so that it points to
+	// the first ref base in CDS space.
+	startIdx := cdsIdx
+	if t.IsReverseStrand() && len(ref) > 1 {
+		startIdx -= len(ref) - 1
+		if startIdx < 0 {
+			startIdx = 0
+		}
+	}
+
+	endIdx := startIdx + len(ref)
 	if endIdx > len(t.CDSSequence) {
 		endIdx = len(t.CDSSequence)
 	}
 
 	// Virtual mutant sequence: CDS prefix + alt + CDS suffix + 3'UTR.
 	// Uses splicedReader to avoid allocating the entire concatenated string.
-	mut := newSplicedReader(t.CDSSequence[:cdsIdx], alt, t.CDSSequence[endIdx:], t.UTR3Sequence)
+	mut := newSplicedReader(t.CDSSequence[:startIdx], alt, t.CDSSequence[endIdx:], t.UTR3Sequence)
 
-	// Scan from the codon containing the variant position forward,
-	// comparing each mutant codon against the original to find the first change.
-	codonStart := (cdsIdx / 3) * 3
+	// Scan from the codon containing the variant start to find the first
+	// codon that actually changes amino acid identity in the mutant.
+	// This naturally aligns with the HGVS 3' rule: in homopolymer runs, the
+	// anchor's codon may appear unchanged (repeat fills the deletion), so the
+	// scan advances to the first codon that is truly altered — corresponding
+	// to the HGVS-canonicalised (3'-shifted) variant position.
+	codonStart := (startIdx / 3) * 3
 	for i := codonStart; i+3 <= mut.Len(); i += 3 {
 		mutAA := TranslateCodon(mut.Codon(i))
 		if proteinPos == 0 {
-			// Still looking for the first changed codon
+			// Still looking for the first changed codon.
 			var origAA byte
 			if i+3 <= len(t.CDSSequence) {
 				origAA = TranslateCodon(t.CDSSequence[i : i+3])
@@ -554,7 +655,7 @@ func computeFrameshiftDetails(v *vcf.Variant, t *cache.Transcript, cdsPos int64)
 		}
 	}
 
-	// No stop found
+	// No stop found.
 	stopDist = 0
 	return
 }
@@ -599,7 +700,19 @@ func computeInframeProteinChange(v *vcf.Variant, t *cache.Transcript, cdsPos int
 		alt = ReverseComplement(alt)
 	}
 
+	// For reverse-strand variants, GenomicToCDS(v.Pos) maps the leftmost
+	// genomic position to the HIGHEST CDS index (the last ref base on the
+	// transcript).  For any multi-base ref we must shift cdsIdx left by
+	// len(ref)-1 so that it points to the FIRST ref base.  This applies to
+	// insertions, deletions, and complex substitutions uniformly.
 	cdsIdx := int(cdsPos - 1)
+	if t.IsReverseStrand() && len(ref) > 1 {
+		cdsIdx -= len(ref) - 1
+		if cdsIdx < 0 {
+			cdsIdx = 0
+		}
+	}
+
 	refEndIdx := cdsIdx + len(ref)
 	if refEndIdx > len(t.CDSSequence) {
 		refEndIdx = len(t.CDSSequence)
