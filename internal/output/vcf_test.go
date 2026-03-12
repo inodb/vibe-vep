@@ -104,6 +104,7 @@ func TestVCFWriter_SingleAnnotation(t *testing.T) {
 		CodonChange:     "ggt/Tgt",
 		IsCanonicalMSK:     true,
 		IsCanonicalEnsembl: true,
+		IsMANESelect:       true,
 	}
 
 	if err := w.Write(v, ann); err != nil {
@@ -152,7 +153,9 @@ func TestVCFWriter_SingleAnnotation(t *testing.T) {
 		7:  "protein_coding",   // BIOTYPE
 		10: "c.34G>T",          // HGVSc
 		11: "p.Gly12Cys",       // HGVSp
-		17: "YES",              // CANONICAL
+		17: "YES",              // CANONICAL_MSK
+		18: "YES",              // CANONICAL_ENSEMBL
+		19: "YES",              // CANONICAL_MANE
 	}
 	for idx, want := range checks {
 		if parts[idx] != want {

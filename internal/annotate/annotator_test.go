@@ -67,6 +67,8 @@ func TestAnnotator_KRASG12C_Integration(t *testing.T) {
 		{"ProteinPosition", canonicalAnn.ProteinPosition, int64(12)},
 		{"AminoAcidChange", canonicalAnn.AminoAcidChange, "G12C"},
 		{"IsCanonicalMSK", canonicalAnn.IsCanonicalMSK, true},
+		{"IsCanonicalEnsembl", canonicalAnn.IsCanonicalEnsembl, true},
+		{"IsMANESelect", canonicalAnn.IsMANESelect, true},
 		{"Biotype", canonicalAnn.Biotype, "protein_coding"},
 	}
 

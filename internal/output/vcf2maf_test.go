@@ -111,6 +111,7 @@ func TestVCF2MAFWriter_FullRow(t *testing.T) {
 		Biotype:         "protein_coding",
 		IsCanonicalMSK:     true,
 		IsCanonicalEnsembl: true,
+		IsMANESelect:       true,
 		ExonNumber:      "2/5",
 		HGVSc:           "c.34G>T",
 		HGVSp:           "p.Gly12Cys",
@@ -155,7 +156,7 @@ func TestVCF2MAFWriter_FullRow(t *testing.T) {
 	assert.Equal(t, "protein_coding", fields[24])    // BIOTYPE
 	assert.Equal(t, "YES", fields[25])               // CANONICAL_MSK
 	assert.Equal(t, "YES", fields[26])               // CANONICAL_ENSEMBL
-	assert.Equal(t, "", fields[27])                  // CANONICAL_MANE
+	assert.Equal(t, "YES", fields[27])               // CANONICAL_MANE
 	assert.Equal(t, "12", fields[28])                // Protein_position
 }
 
