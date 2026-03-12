@@ -459,7 +459,7 @@ func runAnnotateVariant(logger *zap.Logger, specInput, assembly, specType string
 
 		if hasSources {
 			// Build dynamic header from sources
-			header := "Gene\tTranscript\tCanon\tConsequence\tImpact\tHGVSc\tHGVSp"
+			header := "Gene\tTranscript\tCanonical_MSK\tCanonical_Ensembl\tCanonical_MANE\tConsequence\tImpact\tHGVSc\tHGVSp"
 			for _, src := range cr.sources {
 				name := src.Name()
 				for _, col := range src.Columns() {
@@ -472,12 +472,9 @@ func runAnnotateVariant(logger *zap.Logger, specInput, assembly, specType string
 			}
 			fmt.Fprintln(w, header)
 			for _, a := range anns {
-				canon := "no"
-				if a.IsCanonicalMSK {
-					canon = "yes"
-				}
-				line := fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s",
-					a.GeneName, a.TranscriptID, canon,
+				line := fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s",
+					a.GeneName, a.TranscriptID,
+					yesNo(a.IsCanonicalMSK), yesNo(a.IsCanonicalEnsembl), yesNo(a.IsMANESelect),
 					a.Consequence, a.Impact, a.HGVSc, a.HGVSp)
 				for _, src := range cr.sources {
 					name := src.Name()
@@ -492,14 +489,11 @@ func runAnnotateVariant(logger *zap.Logger, specInput, assembly, specType string
 				fmt.Fprintln(w, line)
 			}
 		} else {
-			fmt.Fprintln(w, "Gene\tTranscript\tCanon\tConsequence\tImpact\tHGVSc\tHGVSp")
+			fmt.Fprintln(w, "Gene\tTranscript\tCanonical_MSK\tCanonical_Ensembl\tCanonical_MANE\tConsequence\tImpact\tHGVSc\tHGVSp")
 			for _, a := range anns {
-				canon := "no"
-				if a.IsCanonicalMSK {
-					canon = "yes"
-				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-					a.GeneName, a.TranscriptID, canon,
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					a.GeneName, a.TranscriptID,
+					yesNo(a.IsCanonicalMSK), yesNo(a.IsCanonicalEnsembl), yesNo(a.IsMANESelect),
 					a.Consequence, a.Impact, a.HGVSc, a.HGVSp)
 			}
 		}
@@ -518,14 +512,11 @@ func runAnnotateVariant(logger *zap.Logger, specInput, assembly, specType string
 			if len(prev) > 0 {
 				fmt.Fprintf(os.Stdout, "\nPreviously seen (%d cached annotations):\n", len(prev))
 				pw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-				fmt.Fprintln(pw, "Gene\tTranscript\tCanon\tConsequence\tImpact\tHGVSc\tHGVSp")
+				fmt.Fprintln(pw, "Gene\tTranscript\tCanonical_MSK\tCanonical_Ensembl\tCanonical_MANE\tConsequence\tImpact\tHGVSc\tHGVSp")
 				for _, a := range prev {
-					canon := "no"
-					if a.IsCanonicalMSK {
-						canon = "yes"
-					}
-					fmt.Fprintf(pw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-						a.GeneName, a.TranscriptID, canon,
+					fmt.Fprintf(pw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+						a.GeneName, a.TranscriptID,
+						yesNo(a.IsCanonicalMSK), yesNo(a.IsCanonicalEnsembl), yesNo(a.IsMANESelect),
 						a.Consequence, a.Impact, a.HGVSc, a.HGVSp)
 				}
 				pw.Flush()
@@ -617,4 +608,12 @@ func runMAFOutput(logger *zap.Logger, parser *maf.Parser, ann *annotate.Annotato
 	}
 
 	return mafWriter.Flush()
+}
+
+// yesNo returns "yes" if b is true, "no" otherwise.
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
 }
