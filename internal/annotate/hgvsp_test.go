@@ -66,6 +66,13 @@ func TestFormatHGVSp(t *testing.T) {
 			want: "p.Met1?",
 		},
 		{
+			name: "start_lost_without_position",
+			result: &ConsequenceResult{
+				Consequence: ConsequenceStartLost,
+			},
+			want: "p.Met1?",
+		},
+		{
 			name: "stop_retained",
 			result: &ConsequenceResult{
 				Consequence:     ConsequenceStopRetained,
@@ -125,6 +132,17 @@ func TestFormatHGVSp(t *testing.T) {
 			want: "p.Gly12_13insAlaLeu",
 		},
 		{
+			name: "inframe_insertion_with_endaa",
+			result: &ConsequenceResult{
+				Consequence:     ConsequenceInframeInsertion,
+				ProteinPosition: 12,
+				RefAA:           'G',
+				EndAA:           'A',
+				InsertedAAs:     "L",
+			},
+			want: "p.Gly12_Ala13insLeu",
+		},
+		{
 			name: "inframe_insertion_no_inserted_aas",
 			result: &ConsequenceResult{
 				Consequence:     ConsequenceInframeInsertion,
@@ -156,6 +174,19 @@ func TestFormatHGVSp(t *testing.T) {
 				IsDup:              true,
 			},
 			want: "p.Gly12_Gln14dup",
+		},
+		{
+			name: "missense_delins_multi_codon_mnv",
+			result: &ConsequenceResult{
+				Consequence:        ConsequenceMissenseVariant,
+				ProteinPosition:    2,
+				ProteinEndPosition: 3,
+				RefAA:              'G',
+				EndAA:              'F',
+				InsertedAAs:        "KE",
+				IsDelIns:           true,
+			},
+			want: "p.Gly2_Phe3delinsLysGlu",
 		},
 		{
 			name: "intronic_empty",
