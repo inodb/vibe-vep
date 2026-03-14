@@ -157,6 +157,16 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 		}
 	}
 
+	// Download gnomAD data if enabled in config
+	if viper.GetBool("annotations.gnomad") {
+		gnomadURL := getGnomadURL(assembly)
+		gnomadFile := filepath.Join(destDir, GnomadFileName(assembly))
+		fmt.Printf("\ngnomAD annotation enabled in config, downloading...\n")
+		if err := downloadFile(gnomadURL, gnomadFile); err != nil {
+			logger.Warn("could not download gnomAD data", zap.Error(err))
+		}
+	}
+
 	fmt.Printf("\nDownload complete!\n")
 	fmt.Printf("To annotate variants, run:\n")
 	fmt.Printf("  vibe-vep annotate input.vcf\n")
@@ -265,11 +275,16 @@ func formatSize(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// ClinVar and SIGNAL data file names.
+// Annotation source data file names.
 const (
 	ClinVarFileName = "clinvar.vcf.gz"
 	SignalFileName  = "signaldb_all_variants_frequencies.txt"
 )
+
+// GnomadFileName returns the expected filename for the given assembly.
+func GnomadFileName(assembly string) string {
+	return filepath.Base(getGnomadURL(assembly))
+}
 
 // getClinVarURL returns the download URL for ClinVar data.
 func getClinVarURL(assembly string) string {
@@ -294,6 +309,17 @@ func getAlphaMissenseURL(assembly string) string {
 // AlphaMissenseFileName returns the expected filename for the assembly.
 func AlphaMissenseFileName(assembly string) string {
 	return filepath.Base(getAlphaMissenseURL(assembly))
+}
+
+// getGnomadURL returns the download URL for gnomAD sites VCF.
+// GRCh38 uses gnomAD v4.1 (joint genomes+exomes), GRCh37 uses gnomAD v2.1.1 (genomes).
+func getGnomadURL(assembly string) string {
+	switch strings.ToUpper(assembly) {
+	case "GRCH37":
+		return "https://storage.googleapis.com/gcp-public-data--gnomad/release/2.1.1/vcf/genomes/gnomad.genomes.r2.1.1.sites.vcf.bgz"
+	default:
+		return "https://storage.googleapis.com/gcp-public-data--gnomad/release/4.1/vcf/joint/gnomad.joint.v4.1.sites.vcf.bgz"
+	}
 }
 
 // DefaultGENCODEPath returns the default path for GENCODE cache files.

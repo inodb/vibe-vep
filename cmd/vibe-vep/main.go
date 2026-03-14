@@ -13,6 +13,7 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/datasource/gnomad"
 	"github.com/inodb/vibe-vep/internal/datasource/hotspots"
 	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
 	"github.com/inodb/vibe-vep/internal/duckdb"
@@ -314,9 +315,9 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 		}
 	}
 
-	// Unified genomic index (AlphaMissense + ClinVar + SIGNAL)
+	// Unified genomic index (AlphaMissense + ClinVar + SIGNAL + gnomAD)
 	needGenomic := viper.GetBool("annotations.alphamissense") || viper.GetBool("annotations.clinvar") ||
-		(viper.GetBool("annotations.signal") && assembly == "grch37")
+		(viper.GetBool("annotations.signal") && assembly == "grch37") || viper.GetBool("annotations.gnomad")
 	if needGenomic {
 		gs, err := loadGenomicIndex(logger, cacheDir, assembly)
 		if err != nil {
@@ -375,8 +376,18 @@ func genomicIndexSources(cacheDir, assembly string) genomicindex.BuildSources {
 		AlphaMissenseTSV: filepath.Join(cacheDir, AlphaMissenseFileName(assembly)),
 		ClinVarVCF:       filepath.Join(cacheDir, ClinVarFileName),
 		SignalTSV:        filepath.Join(cacheDir, SignalFileName),
+		GnomadVCF:        filepath.Join(cacheDir, GnomadFileName(assembly)),
+		GnomadVersion:    gnomadVersionForAssembly(assembly),
 	}
 	return bs
+}
+
+// gnomadVersionForAssembly returns the gnomAD version for the given assembly.
+func gnomadVersionForAssembly(assembly string) string {
+	if strings.EqualFold(assembly, "GRCh37") {
+		return gnomad.VersionGRCh37
+	}
+	return gnomad.VersionGRCh38
 }
 
 // genomicIndexPath returns the path to the unified SQLite genomic index.

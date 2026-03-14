@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/inodb/vibe-vep/internal/annotate"
+	"github.com/inodb/vibe-vep/internal/vcf"
 	_ "modernc.org/sqlite"
 )
 
@@ -35,6 +37,11 @@ func setupTestDB(t *testing.T) string {
 		sig_mut_status TEXT NOT NULL DEFAULT '',
 		sig_count TEXT NOT NULL DEFAULT '',
 		sig_freq TEXT NOT NULL DEFAULT '',
+		gnomad_af TEXT NOT NULL DEFAULT '',
+		gnomad_ac TEXT NOT NULL DEFAULT '',
+		gnomad_an TEXT NOT NULL DEFAULT '',
+		gnomad_nhomalt TEXT NOT NULL DEFAULT '',
+		gnomad_version TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (chrom, pos, ref, alt)
 	) WITHOUT ROWID`)
 	if err != nil {
@@ -89,6 +96,18 @@ func setupTestDB(t *testing.T) string {
 	// 1-base insertion: ClinVar
 	// Original VCF: POS=935908 REF=A ALT=AG → normalized: pos=935908 ref="" alt="G"
 	_, err = db.Exec(`INSERT INTO genomic_annotations (chrom, pos, ref, alt, cv_clnsig) VALUES ('1', 935908, '', 'G', 'Benign')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// gnomAD variant
+	_, err = db.Exec(`INSERT INTO genomic_annotations (chrom, pos, ref, alt, gnomad_af, gnomad_ac, gnomad_an, gnomad_nhomalt, gnomad_version) VALUES ('2', 47403, 'G', 'A', '0.00123', '5', '4060', '0', '4.1')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Combined AM + gnomAD variant
+	_, err = db.Exec(`INSERT INTO genomic_annotations (chrom, pos, ref, alt, am_score, am_class, gnomad_af, gnomad_ac, gnomad_an, gnomad_nhomalt, gnomad_version) VALUES ('3', 178936091, 'G', 'A', 0.8765, 'likely_pathogenic', '0.0001', '2', '20000', '0', '4.1')`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,6 +182,19 @@ func TestLookup(t *testing.T) {
 			want: Result{CVClnSig: "Benign"}, found: true,
 		},
 		{
+			name: "gnomAD hit", chrom: "2", pos: 47403, ref: "G", alt: "A",
+			want:  Result{GnomadAF: "0.00123", GnomadAC: "5", GnomadAN: "4060", GnomadNhomalt: "0", GnomadVersion: "4.1"},
+			found: true,
+		},
+		{
+			name: "combined AM + gnomAD", chrom: "3", pos: 178936091, ref: "G", alt: "A",
+			want: Result{
+				AMScore: 0.8765, AMClass: "likely_pathogenic",
+				GnomadAF: "0.0001", GnomadAC: "2", GnomadAN: "20000", GnomadNhomalt: "0", GnomadVersion: "4.1",
+			},
+			found: true,
+		},
+		{
 			name: "miss", chrom: "1", pos: 99999, ref: "A", alt: "G",
 			found: false,
 		},
@@ -197,6 +229,21 @@ func TestLookup(t *testing.T) {
 			}
 			if got.SigFreq != tt.want.SigFreq {
 				t.Errorf("SigFreq=%q, want %q", got.SigFreq, tt.want.SigFreq)
+			}
+			if got.GnomadAF != tt.want.GnomadAF {
+				t.Errorf("GnomadAF=%q, want %q", got.GnomadAF, tt.want.GnomadAF)
+			}
+			if got.GnomadAC != tt.want.GnomadAC {
+				t.Errorf("GnomadAC=%q, want %q", got.GnomadAC, tt.want.GnomadAC)
+			}
+			if got.GnomadAN != tt.want.GnomadAN {
+				t.Errorf("GnomadAN=%q, want %q", got.GnomadAN, tt.want.GnomadAN)
+			}
+			if got.GnomadNhomalt != tt.want.GnomadNhomalt {
+				t.Errorf("GnomadNhomalt=%q, want %q", got.GnomadNhomalt, tt.want.GnomadNhomalt)
+			}
+			if got.GnomadVersion != tt.want.GnomadVersion {
+				t.Errorf("GnomadVersion=%q, want %q", got.GnomadVersion, tt.want.GnomadVersion)
 			}
 			// Float comparison with tolerance
 			diff := got.AMScore - tt.want.AMScore
@@ -366,6 +413,189 @@ func TestLookupMAFIndels(t *testing.T) {
 				t.Errorf("CVClnSig=%q, want %q", r.CVClnSig, tt.want)
 			}
 		})
+	}
+}
+
+// TestLoadGnomad verifies that loadGnomad correctly parses a VCF file,
+// normalizes indels, and inserts into the database.
+func TestLoadGnomad(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.sqlite")
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`CREATE TABLE genomic_annotations (
+		chrom TEXT NOT NULL, pos INTEGER NOT NULL, ref TEXT NOT NULL, alt TEXT NOT NULL,
+		am_score REAL NOT NULL DEFAULT 0, am_class TEXT NOT NULL DEFAULT '',
+		cv_clnsig TEXT NOT NULL DEFAULT '', cv_revstat TEXT NOT NULL DEFAULT '', cv_clndn TEXT NOT NULL DEFAULT '',
+		sig_mut_status TEXT NOT NULL DEFAULT '', sig_count TEXT NOT NULL DEFAULT '', sig_freq TEXT NOT NULL DEFAULT '',
+		gnomad_af TEXT NOT NULL DEFAULT '', gnomad_ac TEXT NOT NULL DEFAULT '', gnomad_an TEXT NOT NULL DEFAULT '',
+		gnomad_nhomalt TEXT NOT NULL DEFAULT '', gnomad_version TEXT NOT NULL DEFAULT '',
+		PRIMARY KEY (chrom, pos, ref, alt)
+	) WITHOUT ROWID`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a small test VCF file (uncompressed).
+	vcfContent := `##fileformat=VCFv4.2
+##INFO=<ID=AC,Number=A,Type=Integer>
+##INFO=<ID=AN,Number=1,Type=Integer>
+##INFO=<ID=AF,Number=A,Type=Float>
+##INFO=<ID=nhomalt,Number=A,Type=Integer>
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+chr1	10042	.	T	A	.	PASS	AC=4;AN=1526;AF=0.002621;nhomalt=0
+chr1	10055	.	T	C	.	AC0	AC=0;AN=0;AF=0;nhomalt=0
+chr2	20000	.	GA	G	.	PASS	AC=10;AN=5000;AF=0.002;nhomalt=1
+chr3	30000	.	T	TCGA	.	PASS	AC=3;AN=10000;AF=0.0003;nhomalt=0
+`
+	vcfPath := filepath.Join(dir, "test_gnomad.vcf")
+	if err := os.WriteFile(vcfPath, []byte(vcfContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := loadGnomad(db, vcfPath, "4.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should load 3 variants (1 SNP, 1 deletion, 1 insertion; the AC0 variant is filtered).
+	if n != 3 {
+		t.Fatalf("loaded %d variants, want 3", n)
+	}
+
+	// Verify the SNP.
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	r, ok := store.Lookup("1", 10042, "T", "A")
+	if !ok {
+		t.Fatal("expected SNP hit at chr1:10042")
+	}
+	if r.GnomadAF != "0.002621" {
+		t.Errorf("GnomadAF=%q, want %q", r.GnomadAF, "0.002621")
+	}
+	if r.GnomadAC != "4" {
+		t.Errorf("GnomadAC=%q, want %q", r.GnomadAC, "4")
+	}
+	if r.GnomadAN != "1526" {
+		t.Errorf("GnomadAN=%q, want %q", r.GnomadAN, "1526")
+	}
+	if r.GnomadVersion != "4.1" {
+		t.Errorf("GnomadVersion=%q, want %q", r.GnomadVersion, "4.1")
+	}
+
+	// Verify the deletion: VCF GA→G at pos 20000 → normalized (20001, "A", "").
+	r, ok = store.Lookup("2", 20001, "A", "")
+	if !ok {
+		t.Fatal("expected deletion hit at chr2:20001 (normalized from VCF pos 20000 GA>G)")
+	}
+	if r.GnomadAF != "0.002" {
+		t.Errorf("GnomadAF=%q, want %q", r.GnomadAF, "0.002")
+	}
+	if r.GnomadNhomalt != "1" {
+		t.Errorf("GnomadNhomalt=%q, want %q", r.GnomadNhomalt, "1")
+	}
+
+	// Verify the insertion: VCF T→TCGA at pos 30000 → normalized (30000, "", "CGA").
+	r, ok = store.Lookup("3", 30000, "", "CGA")
+	if !ok {
+		t.Fatal("expected insertion hit at chr3:30000 (normalized from VCF pos 30000 T>TCGA)")
+	}
+	if r.GnomadAF != "0.0003" {
+		t.Errorf("GnomadAF=%q, want %q", r.GnomadAF, "0.0003")
+	}
+}
+
+// TestGenomicSourceAnnotateGnomad verifies that GenomicSource.Annotate correctly
+// distributes gnomAD data to annotations via the Extra map.
+func TestGenomicSourceAnnotateGnomad(t *testing.T) {
+	dbPath := setupTestDB(t)
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	src := NewSource(store, "1.0")
+
+	// Verify columns include gnomAD.
+	cols := src.Columns()
+	gnomadCols := 0
+	for _, c := range cols {
+		if len(c.Name) > 7 && c.Name[:7] == "gnomad." {
+			gnomadCols++
+		}
+	}
+	if gnomadCols != 5 {
+		t.Errorf("expected 5 gnomAD columns, got %d", gnomadCols)
+	}
+
+	// Test gnomAD-only variant (chr2:47403 G>A).
+	v := &vcf.Variant{Chrom: "2", Pos: 47403, Ref: "G", Alt: "A"}
+	anns := []*annotate.Annotation{
+		{Consequence: "missense_variant"},
+		{Consequence: "synonymous_variant"},
+	}
+	src.Annotate(v, anns)
+
+	// gnomAD should be on all annotations.
+	for i, ann := range anns {
+		if got := ann.GetExtraKey("gnomad.af"); got != "0.00123" {
+			t.Errorf("ann[%d] gnomad.af=%q, want %q", i, got, "0.00123")
+		}
+		if got := ann.GetExtraKey("gnomad.ac"); got != "5" {
+			t.Errorf("ann[%d] gnomad.ac=%q, want %q", i, got, "5")
+		}
+		if got := ann.GetExtraKey("gnomad.an"); got != "4060" {
+			t.Errorf("ann[%d] gnomad.an=%q, want %q", i, got, "4060")
+		}
+		if got := ann.GetExtraKey("gnomad.nhomalt"); got != "0" {
+			t.Errorf("ann[%d] gnomad.nhomalt=%q, want %q", i, got, "0")
+		}
+		if got := ann.GetExtraKey("gnomad.version"); got != "4.1" {
+			t.Errorf("ann[%d] gnomad.version=%q, want %q", i, got, "4.1")
+		}
+	}
+
+	// Test combined AM + gnomAD variant (chr3:178936091 G>A).
+	// AlphaMissense should only apply to missense, but gnomAD applies to all.
+	v2 := &vcf.Variant{Chrom: "3", Pos: 178936091, Ref: "G", Alt: "A"}
+	anns2 := []*annotate.Annotation{
+		{Consequence: "missense_variant"},
+		{Consequence: "synonymous_variant"},
+	}
+	src.Annotate(v2, anns2)
+
+	// Missense: should have both AM and gnomAD.
+	if got := anns2[0].GetExtraKey("alphamissense.score"); got == "" {
+		t.Error("missense annotation should have alphamissense.score")
+	}
+	if got := anns2[0].GetExtraKey("gnomad.af"); got != "0.0001" {
+		t.Errorf("missense gnomad.af=%q, want %q", got, "0.0001")
+	}
+
+	// Synonymous: should have gnomAD but not AM.
+	if got := anns2[1].GetExtraKey("alphamissense.score"); got != "" {
+		t.Errorf("synonymous should not have alphamissense.score, got %q", got)
+	}
+	if got := anns2[1].GetExtraKey("gnomad.af"); got != "0.0001" {
+		t.Errorf("synonymous gnomad.af=%q, want %q", got, "0.0001")
+	}
+
+	// Test miss: no annotations set.
+	v3 := &vcf.Variant{Chrom: "99", Pos: 1, Ref: "A", Alt: "G"}
+	anns3 := []*annotate.Annotation{{Consequence: "missense_variant"}}
+	src.Annotate(v3, anns3)
+	if got := anns3[0].GetExtraKey("gnomad.af"); got != "" {
+		t.Errorf("miss should have empty gnomad.af, got %q", got)
 	}
 }
 

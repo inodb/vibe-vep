@@ -14,8 +14,9 @@
 // physical variant produces the same key whether it came from VCF or MAF input.
 //
 // AlphaMissense is SNV-only so format is unambiguous. ClinVar VCF indels are
-// normalized during build. SIGNAL uses MAF format natively. Lookups also
-// normalize, so both VCF and MAF input match correctly.
+// normalized during build. SIGNAL uses MAF format natively. gnomAD VCF indels
+// are normalized during build. Lookups also normalize, so both VCF and MAF
+// input match correctly.
 package genomicindex
 
 // Result holds the combined annotation data for a single genomic position.
@@ -28,6 +29,11 @@ type Result struct {
 	SigMutStatus string
 	SigCount     string
 	SigFreq      string
+	GnomadAF     string
+	GnomadAC     string
+	GnomadAN     string
+	GnomadNhomalt string
+	GnomadVersion string
 }
 
 // BuildSources holds paths to the source data files for building the index.
@@ -35,4 +41,6 @@ type BuildSources struct {
 	AlphaMissenseTSV string // gzipped TSV (e.g. AlphaMissense_hg38.tsv.gz)
 	ClinVarVCF       string // gzipped VCF (e.g. clinvar.vcf.gz)
 	SignalTSV        string // plain TSV (e.g. signaldb_all_variants_frequencies.txt)
+	GnomadVCF        string // gzipped VCF (e.g. gnomad.genomes.v4.1.sites.vcf.bgz)
+	GnomadVersion    string // version string (e.g. "4.1" or "2.1.1")
 }

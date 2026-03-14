@@ -15,9 +15,14 @@ const (
 	extraKeyCVClnSig = "clinvar.clnsig"
 	extraKeyCVRevStat = "clinvar.clnrevstat"
 	extraKeyCVClnDN  = "clinvar.clndn"
-	extraKeySigMut   = "signal.mutation_status"
-	extraKeySigCount = "signal.count_carriers"
-	extraKeySigFreq  = "signal.frequency"
+	extraKeySigMut       = "signal.mutation_status"
+	extraKeySigCount     = "signal.count_carriers"
+	extraKeySigFreq      = "signal.frequency"
+	extraKeyGnomadAF     = "gnomad.af"
+	extraKeyGnomadAC     = "gnomad.ac"
+	extraKeyGnomadAN     = "gnomad.an"
+	extraKeyGnomadNhomalt = "gnomad.nhomalt"
+	extraKeyGnomadVersion = "gnomad.version"
 )
 
 // GenomicSource is a unified AnnotationSource that combines AlphaMissense,
@@ -49,6 +54,12 @@ func (s *GenomicSource) Columns() []annotate.ColumnDef {
 		{Name: "signal.mutation_status", Description: "Germline mutation status"},
 		{Name: "signal.count_carriers", Description: "Number of carriers in SIGNAL cohort"},
 		{Name: "signal.frequency", Description: "Overall allele frequency in SIGNAL cohort"},
+		// gnomAD
+		{Name: "gnomad.af", Description: "gnomAD overall allele frequency"},
+		{Name: "gnomad.ac", Description: "gnomAD allele count"},
+		{Name: "gnomad.an", Description: "gnomAD allele number (total alleles)"},
+		{Name: "gnomad.nhomalt", Description: "gnomAD number of homozygous alternate individuals"},
+		{Name: "gnomad.version", Description: "gnomAD data version"},
 	}
 }
 
@@ -67,6 +78,7 @@ func (s *GenomicSource) Annotate(v *vcf.Variant, anns []*annotate.Annotation) {
 	hasAM := r.AMScore > 0
 	hasCV := r.CVClnSig != ""
 	hasSig := r.SigMutStatus != ""
+	hasGnomad := r.GnomadAF != ""
 
 	for _, ann := range anns {
 		// AlphaMissense: missense only
@@ -94,6 +106,23 @@ func (s *GenomicSource) Annotate(v *vcf.Variant, anns []*annotate.Annotation) {
 			}
 			if r.SigFreq != "" {
 				ann.SetExtraKey(extraKeySigFreq, r.SigFreq)
+			}
+		}
+
+		// gnomAD: all annotations
+		if hasGnomad {
+			ann.SetExtraKey(extraKeyGnomadAF, r.GnomadAF)
+			if r.GnomadAC != "" {
+				ann.SetExtraKey(extraKeyGnomadAC, r.GnomadAC)
+			}
+			if r.GnomadAN != "" {
+				ann.SetExtraKey(extraKeyGnomadAN, r.GnomadAN)
+			}
+			if r.GnomadNhomalt != "" {
+				ann.SetExtraKey(extraKeyGnomadNhomalt, r.GnomadNhomalt)
+			}
+			if r.GnomadVersion != "" {
+				ann.SetExtraKey(extraKeyGnomadVersion, r.GnomadVersion)
 			}
 		}
 	}

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/inodb/vibe-vep/internal/datasource/clinvar"
+	"github.com/inodb/vibe-vep/internal/datasource/gnomad"
 	"github.com/inodb/vibe-vep/internal/datasource/signal"
 	_ "modernc.org/sqlite"
 )
@@ -28,7 +29,8 @@ func Open(dbPath string) (*Store, error) {
 	}
 
 	ps, err := db.Prepare(`SELECT am_score, am_class, cv_clnsig, cv_revstat, cv_clndn,
-		sig_mut_status, sig_count, sig_freq
+		sig_mut_status, sig_count, sig_freq,
+		gnomad_af, gnomad_ac, gnomad_an, gnomad_nhomalt, gnomad_version
 		FROM genomic_annotations WHERE chrom=? AND pos=? AND ref=? AND alt=?`)
 	if err != nil {
 		db.Close()
@@ -44,6 +46,7 @@ func (s *Store) Lookup(chrom string, pos int64, ref, alt string) (Result, bool) 
 	err := s.lookupPS.QueryRow(chrom, pos, ref, alt).Scan(
 		&r.AMScore, &r.AMClass, &r.CVClnSig, &r.CVClnRevStat, &r.CVClnDN,
 		&r.SigMutStatus, &r.SigCount, &r.SigFreq,
+		&r.GnomadAF, &r.GnomadAC, &r.GnomadAN, &r.GnomadNhomalt, &r.GnomadVersion,
 	)
 	if err != nil {
 		return Result{}, false
@@ -74,7 +77,7 @@ func Ready(dbPath string, sources BuildSources) bool {
 
 	dbMod := dbInfo.ModTime()
 
-	for _, src := range []string{sources.AlphaMissenseTSV, sources.ClinVarVCF, sources.SignalTSV} {
+	for _, src := range []string{sources.AlphaMissenseTSV, sources.ClinVarVCF, sources.SignalTSV, sources.GnomadVCF} {
 		if src == "" {
 			continue
 		}
@@ -153,6 +156,11 @@ func Build(dbPath string, sources BuildSources, logf func(string, ...any)) error
 		sig_mut_status TEXT NOT NULL DEFAULT '',
 		sig_count TEXT NOT NULL DEFAULT '',
 		sig_freq TEXT NOT NULL DEFAULT '',
+		gnomad_af TEXT NOT NULL DEFAULT '',
+		gnomad_ac TEXT NOT NULL DEFAULT '',
+		gnomad_an TEXT NOT NULL DEFAULT '',
+		gnomad_nhomalt TEXT NOT NULL DEFAULT '',
+		gnomad_version TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (chrom, pos, ref, alt)
 	) WITHOUT ROWID`); err != nil {
 		return fmt.Errorf("create table: %w", err)
@@ -191,6 +199,18 @@ func Build(dbPath string, sources BuildSources, logf func(string, ...any)) error
 				return fmt.Errorf("load SIGNAL: %w", err)
 			}
 			logf("loaded %d SIGNAL variants", n)
+		}
+	}
+
+	// 4. gnomAD
+	if sources.GnomadVCF != "" {
+		if _, err := os.Stat(sources.GnomadVCF); err == nil {
+			logf("loading gnomAD from %s", sources.GnomadVCF)
+			n, err := loadGnomad(db, sources.GnomadVCF, sources.GnomadVersion)
+			if err != nil {
+				return fmt.Errorf("load gnomAD: %w", err)
+			}
+			logf("loaded %d gnomAD variants", n)
 		}
 	}
 
@@ -448,6 +468,77 @@ func loadSignal(db *sql.DB, tsvPath string) (int64, error) {
 
 		if _, err := stmt.Exec(chrom, pos, ref, alt, "germline", countStr, freqStr); err != nil {
 			return 0, fmt.Errorf("upsert SIGNAL row: %w", err)
+		}
+		count++
+	}
+	if err := scanner.Err(); err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// loadGnomad parses a gzipped gnomAD VCF and upserts into the DB.
+func loadGnomad(db *sql.DB, vcfPath, version string) (int64, error) {
+	f, err := os.Open(vcfPath)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	var scanner *bufio.Scanner
+	if strings.HasSuffix(vcfPath, ".gz") || strings.HasSuffix(vcfPath, ".bgz") {
+		gz, err := gzip.NewReader(f)
+		if err != nil {
+			return 0, err
+		}
+		defer gz.Close()
+		scanner = bufio.NewScanner(gz)
+	} else {
+		scanner = bufio.NewScanner(f)
+	}
+	scanner.Buffer(make([]byte, 4*1024*1024), 4*1024*1024)
+
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`INSERT INTO genomic_annotations (chrom, pos, ref, alt, gnomad_af, gnomad_ac, gnomad_an, gnomad_nhomalt, gnomad_version)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(chrom, pos, ref, alt) DO UPDATE SET
+			gnomad_af=excluded.gnomad_af, gnomad_ac=excluded.gnomad_ac,
+			gnomad_an=excluded.gnomad_an, gnomad_nhomalt=excluded.gnomad_nhomalt,
+			gnomad_version=excluded.gnomad_version`)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+
+	var count int64
+	for scanner.Scan() {
+		line := scanner.Text()
+		if len(line) == 0 || line[0] == '#' {
+			continue
+		}
+
+		entry, chrom, ok := gnomad.ParseVCFLine(line)
+		if !ok {
+			continue
+		}
+
+		nPos, nRef, nAlt := NormalizeAlleles(entry.Pos, entry.Ref, entry.Alt)
+		afStr := gnomad.FormatAF(entry.AF)
+		acStr := strconv.Itoa(entry.AC)
+		anStr := strconv.Itoa(entry.AN)
+		nhomaltStr := strconv.Itoa(entry.Nhomalt)
+
+		if _, err := stmt.Exec(chrom, nPos, nRef, nAlt, afStr, acStr, anStr, nhomaltStr, version); err != nil {
+			return 0, fmt.Errorf("upsert gnomAD row: %w", err)
 		}
 		count++
 	}
