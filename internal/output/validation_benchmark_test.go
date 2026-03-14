@@ -91,6 +91,259 @@ func TestValidationBenchmarkGRCh37(t *testing.T) {
 	writeReportJSON(t, findDocsDataPath(t, "grch37_validation.json"), results, meta, cgl)
 }
 
+// TestValidationBenchmarkGDC runs comparison against all 33 GDC TCGA MAF files (GRCh38)
+// and generates a markdown report at testdata/datahub_gdc/validation_report.md.
+//
+// Skipped with -short. Run with:
+//
+//	go test ./internal/output/ -run TestValidationBenchmarkGDC -v -count=1 -timeout 30m
+func TestValidationBenchmarkGDC(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping validation benchmark in short mode")
+	}
+
+	studyDir := findStudyDir(t, "datahub_gdc")
+	mafFiles, err := filepath.Glob(filepath.Join(studyDir, "*_data_mutations.txt"))
+	if err != nil {
+		t.Fatalf("glob MAF files: %v", err)
+	}
+	if len(mafFiles) == 0 {
+		t.Skipf("no GDC MAF files found in %s — run: scripts/download_datahub_gdc.sh", studyDir)
+	}
+	sort.Strings(mafFiles)
+
+	c, cacheDuration, loadSource := loadGENCODECache(t, "GRCh38")
+	cgl := loadCancerGeneList(t)
+	results := runValidationStudies(t, mafFiles, c, cgl)
+
+	reportPath := filepath.Join(studyDir, "validation_report.md")
+	meta := reportMeta{
+		Assembly:        "GRCh38",
+		TranscriptCount: c.TranscriptCount(),
+		CacheDuration:   cacheDuration,
+		LoadSource:      loadSource,
+	}
+	writeReport(t, reportPath, results, meta.TranscriptCount, meta.CacheDuration, meta.LoadSource, cgl, meta.Assembly)
+	writeReportJSON(t, filepath.Join(studyDir, "validation_report.json"), results, meta, cgl)
+}
+
+// TestValidationBenchmarkAll runs comparison against all datahub MAF files
+// (GDC + public GRCh38) and generates a report at testdata/datahub_all/GRCh38/validation_report.md.
+//
+// Skipped with -short. Run with:
+//
+//	go test ./internal/output/ -run TestValidationBenchmarkAll -v -count=1 -timeout 120m
+func TestValidationBenchmarkAll(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping validation benchmark in short mode")
+	}
+
+	studyDir := findStudyDir(t, filepath.Join("datahub_all", "GRCh38"))
+	mafFiles, err := filepath.Glob(filepath.Join(studyDir, "*_data_mutations.txt"))
+	if err != nil {
+		t.Fatalf("glob MAF files: %v", err)
+	}
+	if len(mafFiles) == 0 {
+		t.Skipf("no datahub_all MAF files found in %s — run: scripts/download_datahub_all.sh", studyDir)
+	}
+	sort.Strings(mafFiles)
+
+	c, cacheDuration, loadSource := loadGENCODECache(t, "GRCh38")
+	cgl := loadCancerGeneList(t)
+	results := runValidationStudies(t, mafFiles, c, cgl)
+
+	reportPath := filepath.Join(studyDir, "validation_report.md")
+	meta := reportMeta{
+		Assembly:        "GRCh38",
+		TranscriptCount: c.TranscriptCount(),
+		CacheDuration:   cacheDuration,
+		LoadSource:      loadSource,
+	}
+	writeReport(t, reportPath, results, meta.TranscriptCount, meta.CacheDuration, meta.LoadSource, cgl, meta.Assembly)
+	writeReportJSON(t, filepath.Join(studyDir, "validation_report.json"), results, meta, cgl)
+}
+
+// mismatchRecord captures a single mismatched variant for analysis.
+type mismatchRecord struct {
+	Study        string `json:"study"`
+	Chrom        string `json:"chrom"`
+	Pos          int64  `json:"pos"`
+	Ref          string `json:"ref"`
+	Alt          string `json:"alt"`
+	TranscriptID string `json:"transcript_id"`
+	Column       string `json:"column"`
+	MAFValue     string `json:"maf_value"`
+	VEPValue     string `json:"vep_value"`
+	Category     string `json:"category"`
+}
+
+// TestMismatchCollection collects all mismatched variants from the largest
+// available dataset and writes them to a JSON file for analysis.
+//
+//	go test ./internal/output/ -run TestMismatchCollection -v -count=1 -timeout 120m
+func TestMismatchCollection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping mismatch collection in short mode")
+	}
+
+	// Use best available dataset
+	studyDir, datasetName := findBestDataset(t)
+	mafFiles, err := filepath.Glob(filepath.Join(studyDir, "*_data_mutations.txt"))
+	if err != nil {
+		t.Fatalf("glob MAF files: %v", err)
+	}
+	if len(mafFiles) == 0 {
+		t.Skipf("no MAF files found in %s", studyDir)
+	}
+	sort.Strings(mafFiles)
+	t.Logf("using dataset: %s (%d files)", datasetName, len(mafFiles))
+
+	c, _, _ := loadGENCODECache(t, "GRCh38")
+
+	categorizer := &output.Categorizer{}
+	comparedColumns := []string{"Consequence", "HGVSp_Short", "HGVSc"}
+	var mismatches []mismatchRecord
+
+	for _, mafFile := range mafFiles {
+		name := studyName(mafFile)
+		t.Run(name, func(t *testing.T) {
+			parser, err := maf.NewParser(mafFile)
+			if err != nil {
+				t.Fatalf("open MAF: %v", err)
+			}
+			defer parser.Close()
+
+			ann := annotate.NewAnnotator(c)
+			fileMismatches := 0
+
+			for {
+				v, mafAnn, err := parser.NextWithAnnotation()
+				if err != nil {
+					t.Fatalf("read variant: %v", err)
+				}
+				if v == nil {
+					break
+				}
+				vepAnns, err := ann.Annotate(v)
+				if err != nil {
+					continue
+				}
+
+				bestAnn := output.SelectBestAnnotation(mafAnn, vepAnns)
+
+				left := map[string]string{
+					"Consequence": mafAnn.Consequence,
+					"HGVSp_Short": mafAnn.HGVSpShort,
+					"HGVSc":       mafAnn.HGVSc,
+				}
+				right := map[string]string{
+					"Consequence": "",
+					"HGVSp_Short": "",
+					"HGVSc":       "",
+				}
+				if bestAnn != nil {
+					right["Consequence"] = bestAnn.Consequence
+					right["HGVSp_Short"] = output.HGVSpToShort(bestAnn.HGVSp)
+					right["HGVSc"] = bestAnn.HGVSc
+				}
+
+				cats := categorizer.CategorizeRow(comparedColumns, left, right,
+					comparedColumns, comparedColumns)
+
+				for _, col := range comparedColumns {
+					if cats[col] == output.CatMismatch {
+						mismatches = append(mismatches, mismatchRecord{
+							Study:        name,
+							Chrom:        v.Chrom,
+							Pos:          v.Pos,
+							Ref:          v.Ref,
+							Alt:          v.Alt,
+							TranscriptID: mafAnn.TranscriptID,
+							Column:       col,
+							MAFValue:     left[col],
+							VEPValue:     right[col],
+							Category:     string(cats[col]),
+						})
+						fileMismatches++
+					}
+				}
+			}
+			t.Logf("%s: %d mismatches collected", name, fileMismatches)
+		})
+	}
+
+	// Group by consequence type for pattern recognition
+	type consequenceGroup struct {
+		Count    int              `json:"count"`
+		Examples []mismatchRecord `json:"examples"`
+	}
+	groups := make(map[string]*consequenceGroup)
+	for _, m := range mismatches {
+		if m.Column != "Consequence" {
+			continue
+		}
+		key := m.MAFValue + " -> " + m.VEPValue
+		g, ok := groups[key]
+		if !ok {
+			g = &consequenceGroup{}
+			groups[key] = g
+		}
+		g.Count++
+		if len(g.Examples) < 3 {
+			g.Examples = append(g.Examples, m)
+		}
+	}
+
+	report := struct {
+		Dataset    string                        `json:"dataset"`
+		Total      int                           `json:"total_mismatches"`
+		Mismatches []mismatchRecord              `json:"mismatches"`
+		Groups     map[string]*consequenceGroup  `json:"consequence_groups"`
+	}{
+		Dataset:    datasetName,
+		Total:      len(mismatches),
+		Mismatches: mismatches,
+		Groups:     groups,
+	}
+
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal mismatches: %v", err)
+	}
+	outPath := filepath.Join(studyDir, "mismatches.json")
+	if err := os.WriteFile(outPath, data, 0644); err != nil {
+		t.Fatalf("write mismatches: %v", err)
+	}
+	t.Logf("wrote %d mismatches to %s", len(mismatches), outPath)
+	t.Logf("consequence mismatch groups: %d", len(groups))
+}
+
+// findBestDataset returns the study directory and name for the largest
+// available dataset, preferring datahub_all > datahub_gdc > tcga.
+func findBestDataset(t *testing.T) (dir, name string) {
+	t.Helper()
+	candidates := []struct {
+		subdir string
+		name   string
+	}{
+		{filepath.Join("datahub_all", "GRCh38"), "datahub_all"},
+		{"datahub_gdc", "datahub_gdc"},
+		{"tcga", "datahub_gdc_tcga"},
+	}
+	for _, c := range candidates {
+		for _, p := range []string{
+			filepath.Join("testdata", c.subdir),
+			filepath.Join("..", "..", "testdata", c.subdir),
+		} {
+			if files, _ := filepath.Glob(filepath.Join(p, "*_data_mutations.txt")); len(files) > 0 {
+				return p, c.name
+			}
+		}
+	}
+	t.Fatal("no MAF datasets found — run one of the download scripts")
+	return "", ""
+}
+
 // loadGENCODECache loads GENCODE transcripts for the given assembly,
 // preferring gob cache over raw GTF/FASTA. Skips the test if files are not found.
 func loadGENCODECache(t *testing.T, assembly string) (c *cache.Cache, duration time.Duration, source string) {

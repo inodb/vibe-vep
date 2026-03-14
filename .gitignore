@@ -48,3 +48,9 @@ testdata/tcga/*.txt
 
 # GRCh37 test data (large MAF files, download with: scripts/download_grch37.sh)
 testdata/grch37/*.txt
+
+# Datahub GDC test data (large MAF files, download with: scripts/download_datahub_gdc.sh)
+testdata/datahub_gdc/*.txt
+
+# Datahub all test data (large MAF files, download with: scripts/download_datahub_all.sh)
+testdata/datahub_all/
