@@ -85,8 +85,8 @@ GDC_BASE="https://media.githubusercontent.com/media/cBioPortal/datahub/master/cr
 for study in "${GDC_STUDIES[@]}"; do
   echo "Downloading $study..."
   url="$GDC_BASE/$study/data_mutations.txt"
-  download_study "$study" "$url"
-  rc=$?
+  rc=0
+  download_study "$study" "$url" || rc=$?
   case $rc in
     0) downloaded=$((downloaded + 1)) ;;
     1) echo "  Skipping (already exists)"; skipped=$((skipped + 1)) ;;
@@ -138,8 +138,8 @@ PUBLIC_BASE="https://media.githubusercontent.com/media/cBioPortal/datahub/master
 for study in "${all_studies[@]}"; do
   echo "Downloading $study..."
   url="$PUBLIC_BASE/$study/data_mutations.txt"
-  download_study "$study" "$url"
-  rc=$?
+  rc=0
+  download_study "$study" "$url" || rc=$?
   case $rc in
     0) downloaded=$((downloaded + 1)) ;;
     1) echo "  Skipping (already exists)"; skipped=$((skipped + 1)) ;;
