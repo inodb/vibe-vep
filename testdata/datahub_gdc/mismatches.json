@@ -1,0 +1,1091 @@
+{
+  "dataset": "datahub_gdc",
+  "total_mismatches": 53,
+  "mismatches": [
+    {
+      "study": "blca_tcga_gdc",
+      "chrom": "1",
+      "pos": 247948848,
+      "ref": "GGAATGCTCCAT",
+      "alt": "",
+      "transcript_id": "ENST00000623922",
+      "column": "Consequence",
+      "maf_value": "coding_sequence_variant,5_prime_UTR_variant",
+      "vep_value": "intergenic_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "brca_tcga_gdc",
+      "chrom": "12",
+      "pos": 69390312,
+      "ref": "",
+      "alt": "A",
+      "transcript_id": "ENST00000247843",
+      "column": "Consequence",
+      "maf_value": "inframe_insertion,stop_retained_variant",
+      "vep_value": "frameshift_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "ccrcc_tcga_gdc",
+      "chrom": "15",
+      "pos": 69028246,
+      "ref": "",
+      "alt": "CTATCTATGACTCCTATTCTATCTA",
+      "transcript_id": "ENST00000388866",
+      "column": "Consequence",
+      "maf_value": "inframe_insertion,stop_retained_variant",
+      "vep_value": "frameshift_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "ccrcc_tcga_gdc",
+      "chrom": "3",
+      "pos": 10149965,
+      "ref": "AA",
+      "alt": "",
+      "transcript_id": "ENST00000256474",
+      "column": "Consequence",
+      "maf_value": "stop_lost,3_prime_UTR_variant",
+      "vep_value": "frameshift_variant,stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "ccrcc_tcga_gdc",
+      "chrom": "3",
+      "pos": 10149965,
+      "ref": "AA",
+      "alt": "",
+      "transcript_id": "ENST00000256474",
+      "column": "Consequence",
+      "maf_value": "stop_lost,3_prime_UTR_variant",
+      "vep_value": "frameshift_variant,stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "cesc_tcga_gdc",
+      "chrom": "19",
+      "pos": 1105404,
+      "ref": "G",
+      "alt": "A",
+      "transcript_id": "ENST00000354171",
+      "column": "Consequence",
+      "maf_value": "stop_gained",
+      "vep_value": "stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "cesc_tcga_gdc",
+      "chrom": "7",
+      "pos": 142796891,
+      "ref": "GCTCGG",
+      "alt": "",
+      "transcript_id": "ENST00000390415",
+      "column": "Consequence",
+      "maf_value": "coding_sequence_variant,3_prime_UTR_variant",
+      "vep_value": "splice_donor_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "cesc_tcga_gdc",
+      "chrom": "4",
+      "pos": 17614629,
+      "ref": "TGGATCTCTCTTGCGCCATTCCAAACA",
+      "alt": "",
+      "transcript_id": "ENST00000237380",
+      "column": "Consequence",
+      "maf_value": "coding_sequence_variant,5_prime_UTR_variant",
+      "vep_value": "intergenic_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "chrcc_tcga_gdc",
+      "chrom": "5",
+      "pos": 45261922,
+      "ref": "",
+      "alt": "A",
+      "transcript_id": "ENST00000303230",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant,stop_lost",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "coad_tcga_gdc",
+      "chrom": "9",
+      "pos": 111686771,
+      "ref": "",
+      "alt": "A",
+      "transcript_id": "ENST00000318737",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant,stop_lost",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "coad_tcga_gdc",
+      "chrom": "18",
+      "pos": 80247356,
+      "ref": "G",
+      "alt": "A",
+      "transcript_id": "ENST00000353265",
+      "column": "Consequence",
+      "maf_value": "5_prime_UTR_variant",
+      "vep_value": "intergenic_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "coad_tcga_gdc",
+      "chrom": "9",
+      "pos": 116699703,
+      "ref": "",
+      "alt": "T",
+      "transcript_id": "ENST00000373983",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant,stop_lost",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "difg_tcga_gdc",
+      "chrom": "15",
+      "pos": 57273239,
+      "ref": "",
+      "alt": "TTGAC",
+      "transcript_id": "ENST00000267811",
+      "column": "Consequence",
+      "maf_value": "inframe_insertion,stop_retained_variant",
+      "vep_value": "frameshift_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "dlbclnos_tcga_gdc",
+      "chrom": "2",
+      "pos": 88861553,
+      "ref": "AAAACTGCACACACAATGGTTCCTCTT",
+      "alt": "",
+      "transcript_id": "ENST00000390241",
+      "column": "Consequence",
+      "maf_value": "coding_sequence_variant,5_prime_UTR_variant",
+      "vep_value": "start_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "esca_tcga_gdc",
+      "chrom": "10",
+      "pos": 125836270,
+      "ref": "",
+      "alt": "CTAAC",
+      "transcript_id": "ENST00000278100",
+      "column": "Consequence",
+      "maf_value": "inframe_insertion,stop_retained_variant",
+      "vep_value": "frameshift_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "esca_tcga_gdc",
+      "chrom": "14",
+      "pos": 22513997,
+      "ref": "AAGT",
+      "alt": "",
+      "transcript_id": "ENST00000390508",
+      "column": "Consequence",
+      "maf_value": "coding_sequence_variant,3_prime_UTR_variant",
+      "vep_value": "splice_donor_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "hcc_tcga_gdc",
+      "chrom": "6",
+      "pos": 43308794,
+      "ref": "GCTCC",
+      "alt": "",
+      "transcript_id": "ENST00000274990",
+      "column": "Consequence",
+      "maf_value": "5_prime_UTR_variant",
+      "vep_value": "splice_acceptor_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "hgsoc_tcga_gdc",
+      "chrom": "17",
+      "pos": 78223554,
+      "ref": "",
+      "alt": "G",
+      "transcript_id": "ENST00000350051",
+      "column": "Consequence",
+      "maf_value": "3_prime_UTR_variant",
+      "vep_value": "frameshift_variant,stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "hgsoc_tcga_gdc",
+      "chrom": "11",
+      "pos": 44929172,
+      "ref": "CCAGTAGAGGGTATGGCCTG",
+      "alt": "",
+      "transcript_id": "ENST00000340160",
+      "column": "Consequence",
+      "maf_value": "stop_lost,3_prime_UTR_variant",
+      "vep_value": "frameshift_variant,stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "hnsc_tcga_gdc",
+      "chrom": "15",
+      "pos": 34229772,
+      "ref": "GAGGACTGCTTTTGTGAACATGAGAA",
+      "alt": "",
+      "transcript_id": "ENST00000267750",
+      "column": "Consequence",
+      "maf_value": "stop_lost,3_prime_UTR_variant",
+      "vep_value": "frameshift_variant,stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "hnsc_tcga_gdc",
+      "chrom": "16",
+      "pos": 30445549,
+      "ref": "C",
+      "alt": "T",
+      "transcript_id": "ENST00000478753",
+      "column": "Consequence",
+      "maf_value": "stop_gained",
+      "vep_value": "stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "luad_tcga_gdc",
+      "chrom": "8",
+      "pos": 145054016,
+      "ref": "A",
+      "alt": "T",
+      "transcript_id": "ENST00000331434",
+      "column": "Consequence",
+      "maf_value": "splice_acceptor_variant",
+      "vep_value": "intergenic_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "luad_tcga_gdc",
+      "chrom": "8",
+      "pos": 86048463,
+      "ref": "",
+      "alt": "A",
+      "transcript_id": "ENST00000276616",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant,stop_lost",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "lusc_tcga_gdc",
+      "chrom": "10",
+      "pos": 89645249,
+      "ref": "C",
+      "alt": "G",
+      "transcript_id": "ENST00000307534",
+      "column": "Consequence",
+      "maf_value": "5_prime_UTR_variant",
+      "vep_value": "intergenic_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "lusc_tcga_gdc",
+      "chrom": "12",
+      "pos": 31148122,
+      "ref": "",
+      "alt": "G",
+      "transcript_id": "ENST00000641844",
+      "column": "Consequence",
+      "maf_value": "splice_region_variant,non_coding_transcript_variant",
+      "vep_value": "non_coding_transcript_exon_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "lusc_tcga_gdc",
+      "chrom": "1",
+      "pos": 71407448,
+      "ref": "",
+      "alt": "T",
+      "transcript_id": "ENST00000357731",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "lusc_tcga_gdc",
+      "chrom": "16",
+      "pos": 56476203,
+      "ref": "TGACAGCACT",
+      "alt": "",
+      "transcript_id": "ENST00000566157",
+      "column": "Consequence",
+      "maf_value": "stop_lost,3_prime_UTR_variant",
+      "vep_value": "frameshift_variant,stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "lusc_tcga_gdc",
+      "chrom": "10",
+      "pos": 89645249,
+      "ref": "C",
+      "alt": "G",
+      "transcript_id": "ENST00000307534",
+      "column": "Consequence",
+      "maf_value": "5_prime_UTR_variant",
+      "vep_value": "intergenic_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "plmeso_tcga_gdc",
+      "chrom": "6",
+      "pos": 24701612,
+      "ref": "",
+      "alt": "T",
+      "transcript_id": "ENST00000230048",
+      "column": "Consequence",
+      "maf_value": "inframe_insertion,stop_retained_variant",
+      "vep_value": "frameshift_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "prad_tcga_gdc",
+      "chrom": "3",
+      "pos": 179234364,
+      "ref": "AAAAGATAACT",
+      "alt": "",
+      "transcript_id": "ENST00000263967",
+      "column": "Consequence",
+      "maf_value": "stop_lost,3_prime_UTR_variant",
+      "vep_value": "frameshift_variant,stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "prcc_tcga_gdc",
+      "chrom": "16",
+      "pos": 19700474,
+      "ref": "",
+      "alt": "G",
+      "transcript_id": "ENST00000417362",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant,stop_lost",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "prcc_tcga_gdc",
+      "chrom": "11",
+      "pos": 99819604,
+      "ref": "",
+      "alt": "GTTGAGTTGAGTT",
+      "transcript_id": "ENST00000524871",
+      "column": "Consequence",
+      "maf_value": "inframe_insertion,stop_retained_variant",
+      "vep_value": "frameshift_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "skcm_tcga_gdc",
+      "chrom": "2",
+      "pos": 58159676,
+      "ref": "GCTTTATTTTTTCTCTGAAGATGATACC",
+      "alt": "",
+      "transcript_id": "ENST00000340157",
+      "column": "Consequence",
+      "maf_value": "stop_lost,3_prime_UTR_variant",
+      "vep_value": "frameshift_variant,stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "skcm_tcga_gdc",
+      "chrom": "16",
+      "pos": 30445550,
+      "ref": "A",
+      "alt": "T",
+      "transcript_id": "ENST00000478753",
+      "column": "Consequence",
+      "maf_value": "missense_variant",
+      "vep_value": "stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "skcm_tcga_gdc",
+      "chrom": "1",
+      "pos": 9930401,
+      "ref": "",
+      "alt": "T",
+      "transcript_id": "ENST00000377213",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "stad_tcga_gdc",
+      "chrom": "6",
+      "pos": 43224445,
+      "ref": "",
+      "alt": "G",
+      "transcript_id": "ENST00000252050",
+      "column": "Consequence",
+      "maf_value": "3_prime_UTR_variant",
+      "vep_value": "frameshift_variant,stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "stad_tcga_gdc",
+      "chrom": "11",
+      "pos": 14498928,
+      "ref": "",
+      "alt": "GGTTTCTG",
+      "transcript_id": "ENST00000249923",
+      "column": "Consequence",
+      "maf_value": "5_prime_UTR_variant",
+      "vep_value": "frameshift_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "stad_tcga_gdc",
+      "chrom": "13",
+      "pos": 21493250,
+      "ref": "",
+      "alt": "A",
+      "transcript_id": "ENST00000382374",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant,stop_lost",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "stad_tcga_gdc",
+      "chrom": "1",
+      "pos": 206648962,
+      "ref": "",
+      "alt": "T",
+      "transcript_id": "ENST00000367109",
+      "column": "Consequence",
+      "maf_value": "inframe_insertion,stop_retained_variant",
+      "vep_value": "frameshift_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "stad_tcga_gdc",
+      "chrom": "17",
+      "pos": 57120324,
+      "ref": "",
+      "alt": "C",
+      "transcript_id": "ENST00000337714",
+      "column": "Consequence",
+      "maf_value": "3_prime_UTR_variant",
+      "vep_value": "frameshift_variant,stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "stad_tcga_gdc",
+      "chrom": "5",
+      "pos": 177441790,
+      "ref": "",
+      "alt": "C",
+      "transcript_id": "ENST00000355472",
+      "column": "Consequence",
+      "maf_value": "3_prime_UTR_variant",
+      "vep_value": "frameshift_variant,stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "stad_tcga_gdc",
+      "chrom": "3",
+      "pos": 20152525,
+      "ref": "ATTTT",
+      "alt": "",
+      "transcript_id": "ENST00000263754",
+      "column": "Consequence",
+      "maf_value": "stop_lost,3_prime_UTR_variant",
+      "vep_value": "frameshift_variant,stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "ucec_tcga_gdc",
+      "chrom": "2",
+      "pos": 36981491,
+      "ref": "",
+      "alt": "A",
+      "transcript_id": "ENST00000233099",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant,stop_lost",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "ucec_tcga_gdc",
+      "chrom": "5",
+      "pos": 133956860,
+      "ref": "",
+      "alt": "A",
+      "transcript_id": "ENST00000231512",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant,stop_lost",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "ucec_tcga_gdc",
+      "chrom": "7",
+      "pos": 969380,
+      "ref": "",
+      "alt": "T",
+      "transcript_id": "ENST00000344111",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "ucec_tcga_gdc",
+      "chrom": "12",
+      "pos": 118034197,
+      "ref": "",
+      "alt": "A",
+      "transcript_id": "ENST00000315436",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant,stop_lost",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "ucec_tcga_gdc",
+      "chrom": "10",
+      "pos": 72275186,
+      "ref": "",
+      "alt": "G",
+      "transcript_id": "ENST00000307365",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant,stop_lost",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "ucec_tcga_gdc",
+      "chrom": "9",
+      "pos": 111686771,
+      "ref": "",
+      "alt": "A",
+      "transcript_id": "ENST00000318737",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant,stop_lost",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "ucec_tcga_gdc",
+      "chrom": "5",
+      "pos": 111092287,
+      "ref": "T",
+      "alt": "G",
+      "transcript_id": "ENST00000506538",
+      "column": "Consequence",
+      "maf_value": "5_prime_UTR_variant",
+      "vep_value": "intergenic_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "ucec_tcga_gdc",
+      "chrom": "5",
+      "pos": 42800912,
+      "ref": "T",
+      "alt": "G",
+      "transcript_id": "ENST00000506577",
+      "column": "Consequence",
+      "maf_value": "missense_variant",
+      "vep_value": "stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "ucec_tcga_gdc",
+      "chrom": "15",
+      "pos": 44561146,
+      "ref": "GTGAC",
+      "alt": "",
+      "transcript_id": "ENST00000261868",
+      "column": "Consequence",
+      "maf_value": "stop_lost,3_prime_UTR_variant",
+      "vep_value": "frameshift_variant,stop_lost",
+      "category": "mismatch"
+    },
+    {
+      "study": "ucec_tcga_gdc",
+      "chrom": "14",
+      "pos": 60436846,
+      "ref": "",
+      "alt": "A",
+      "transcript_id": "ENST00000321731",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant,stop_lost",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    },
+    {
+      "study": "ucec_tcga_gdc",
+      "chrom": "9",
+      "pos": 111686771,
+      "ref": "",
+      "alt": "A",
+      "transcript_id": "ENST00000318737",
+      "column": "Consequence",
+      "maf_value": "frameshift_variant,stop_lost",
+      "vep_value": "inframe_insertion,stop_retained_variant",
+      "category": "mismatch"
+    }
+  ],
+  "consequence_groups": {
+    "3_prime_UTR_variant -\u003e frameshift_variant,stop_lost": {
+      "count": 4,
+      "examples": [
+        {
+          "study": "hgsoc_tcga_gdc",
+          "chrom": "17",
+          "pos": 78223554,
+          "ref": "",
+          "alt": "G",
+          "transcript_id": "ENST00000350051",
+          "column": "Consequence",
+          "maf_value": "3_prime_UTR_variant",
+          "vep_value": "frameshift_variant,stop_lost",
+          "category": "mismatch"
+        },
+        {
+          "study": "stad_tcga_gdc",
+          "chrom": "6",
+          "pos": 43224445,
+          "ref": "",
+          "alt": "G",
+          "transcript_id": "ENST00000252050",
+          "column": "Consequence",
+          "maf_value": "3_prime_UTR_variant",
+          "vep_value": "frameshift_variant,stop_lost",
+          "category": "mismatch"
+        },
+        {
+          "study": "stad_tcga_gdc",
+          "chrom": "17",
+          "pos": 57120324,
+          "ref": "",
+          "alt": "C",
+          "transcript_id": "ENST00000337714",
+          "column": "Consequence",
+          "maf_value": "3_prime_UTR_variant",
+          "vep_value": "frameshift_variant,stop_lost",
+          "category": "mismatch"
+        }
+      ]
+    },
+    "5_prime_UTR_variant -\u003e frameshift_variant": {
+      "count": 1,
+      "examples": [
+        {
+          "study": "stad_tcga_gdc",
+          "chrom": "11",
+          "pos": 14498928,
+          "ref": "",
+          "alt": "GGTTTCTG",
+          "transcript_id": "ENST00000249923",
+          "column": "Consequence",
+          "maf_value": "5_prime_UTR_variant",
+          "vep_value": "frameshift_variant",
+          "category": "mismatch"
+        }
+      ]
+    },
+    "5_prime_UTR_variant -\u003e intergenic_variant": {
+      "count": 4,
+      "examples": [
+        {
+          "study": "coad_tcga_gdc",
+          "chrom": "18",
+          "pos": 80247356,
+          "ref": "G",
+          "alt": "A",
+          "transcript_id": "ENST00000353265",
+          "column": "Consequence",
+          "maf_value": "5_prime_UTR_variant",
+          "vep_value": "intergenic_variant",
+          "category": "mismatch"
+        },
+        {
+          "study": "lusc_tcga_gdc",
+          "chrom": "10",
+          "pos": 89645249,
+          "ref": "C",
+          "alt": "G",
+          "transcript_id": "ENST00000307534",
+          "column": "Consequence",
+          "maf_value": "5_prime_UTR_variant",
+          "vep_value": "intergenic_variant",
+          "category": "mismatch"
+        },
+        {
+          "study": "lusc_tcga_gdc",
+          "chrom": "10",
+          "pos": 89645249,
+          "ref": "C",
+          "alt": "G",
+          "transcript_id": "ENST00000307534",
+          "column": "Consequence",
+          "maf_value": "5_prime_UTR_variant",
+          "vep_value": "intergenic_variant",
+          "category": "mismatch"
+        }
+      ]
+    },
+    "5_prime_UTR_variant -\u003e splice_acceptor_variant": {
+      "count": 1,
+      "examples": [
+        {
+          "study": "hcc_tcga_gdc",
+          "chrom": "6",
+          "pos": 43308794,
+          "ref": "GCTCC",
+          "alt": "",
+          "transcript_id": "ENST00000274990",
+          "column": "Consequence",
+          "maf_value": "5_prime_UTR_variant",
+          "vep_value": "splice_acceptor_variant",
+          "category": "mismatch"
+        }
+      ]
+    },
+    "coding_sequence_variant,3_prime_UTR_variant -\u003e splice_donor_variant": {
+      "count": 2,
+      "examples": [
+        {
+          "study": "cesc_tcga_gdc",
+          "chrom": "7",
+          "pos": 142796891,
+          "ref": "GCTCGG",
+          "alt": "",
+          "transcript_id": "ENST00000390415",
+          "column": "Consequence",
+          "maf_value": "coding_sequence_variant,3_prime_UTR_variant",
+          "vep_value": "splice_donor_variant",
+          "category": "mismatch"
+        },
+        {
+          "study": "esca_tcga_gdc",
+          "chrom": "14",
+          "pos": 22513997,
+          "ref": "AAGT",
+          "alt": "",
+          "transcript_id": "ENST00000390508",
+          "column": "Consequence",
+          "maf_value": "coding_sequence_variant,3_prime_UTR_variant",
+          "vep_value": "splice_donor_variant",
+          "category": "mismatch"
+        }
+      ]
+    },
+    "coding_sequence_variant,5_prime_UTR_variant -\u003e intergenic_variant": {
+      "count": 2,
+      "examples": [
+        {
+          "study": "blca_tcga_gdc",
+          "chrom": "1",
+          "pos": 247948848,
+          "ref": "GGAATGCTCCAT",
+          "alt": "",
+          "transcript_id": "ENST00000623922",
+          "column": "Consequence",
+          "maf_value": "coding_sequence_variant,5_prime_UTR_variant",
+          "vep_value": "intergenic_variant",
+          "category": "mismatch"
+        },
+        {
+          "study": "cesc_tcga_gdc",
+          "chrom": "4",
+          "pos": 17614629,
+          "ref": "TGGATCTCTCTTGCGCCATTCCAAACA",
+          "alt": "",
+          "transcript_id": "ENST00000237380",
+          "column": "Consequence",
+          "maf_value": "coding_sequence_variant,5_prime_UTR_variant",
+          "vep_value": "intergenic_variant",
+          "category": "mismatch"
+        }
+      ]
+    },
+    "coding_sequence_variant,5_prime_UTR_variant -\u003e start_lost": {
+      "count": 1,
+      "examples": [
+        {
+          "study": "dlbclnos_tcga_gdc",
+          "chrom": "2",
+          "pos": 88861553,
+          "ref": "AAAACTGCACACACAATGGTTCCTCTT",
+          "alt": "",
+          "transcript_id": "ENST00000390241",
+          "column": "Consequence",
+          "maf_value": "coding_sequence_variant,5_prime_UTR_variant",
+          "vep_value": "start_lost",
+          "category": "mismatch"
+        }
+      ]
+    },
+    "frameshift_variant -\u003e inframe_insertion,stop_retained_variant": {
+      "count": 3,
+      "examples": [
+        {
+          "study": "lusc_tcga_gdc",
+          "chrom": "1",
+          "pos": 71407448,
+          "ref": "",
+          "alt": "T",
+          "transcript_id": "ENST00000357731",
+          "column": "Consequence",
+          "maf_value": "frameshift_variant",
+          "vep_value": "inframe_insertion,stop_retained_variant",
+          "category": "mismatch"
+        },
+        {
+          "study": "skcm_tcga_gdc",
+          "chrom": "1",
+          "pos": 9930401,
+          "ref": "",
+          "alt": "T",
+          "transcript_id": "ENST00000377213",
+          "column": "Consequence",
+          "maf_value": "frameshift_variant",
+          "vep_value": "inframe_insertion,stop_retained_variant",
+          "category": "mismatch"
+        },
+        {
+          "study": "ucec_tcga_gdc",
+          "chrom": "7",
+          "pos": 969380,
+          "ref": "",
+          "alt": "T",
+          "transcript_id": "ENST00000344111",
+          "column": "Consequence",
+          "maf_value": "frameshift_variant",
+          "vep_value": "inframe_insertion,stop_retained_variant",
+          "category": "mismatch"
+        }
+      ]
+    },
+    "frameshift_variant,stop_lost -\u003e inframe_insertion,stop_retained_variant": {
+      "count": 13,
+      "examples": [
+        {
+          "study": "chrcc_tcga_gdc",
+          "chrom": "5",
+          "pos": 45261922,
+          "ref": "",
+          "alt": "A",
+          "transcript_id": "ENST00000303230",
+          "column": "Consequence",
+          "maf_value": "frameshift_variant,stop_lost",
+          "vep_value": "inframe_insertion,stop_retained_variant",
+          "category": "mismatch"
+        },
+        {
+          "study": "coad_tcga_gdc",
+          "chrom": "9",
+          "pos": 111686771,
+          "ref": "",
+          "alt": "A",
+          "transcript_id": "ENST00000318737",
+          "column": "Consequence",
+          "maf_value": "frameshift_variant,stop_lost",
+          "vep_value": "inframe_insertion,stop_retained_variant",
+          "category": "mismatch"
+        },
+        {
+          "study": "coad_tcga_gdc",
+          "chrom": "9",
+          "pos": 116699703,
+          "ref": "",
+          "alt": "T",
+          "transcript_id": "ENST00000373983",
+          "column": "Consequence",
+          "maf_value": "frameshift_variant,stop_lost",
+          "vep_value": "inframe_insertion,stop_retained_variant",
+          "category": "mismatch"
+        }
+      ]
+    },
+    "inframe_insertion,stop_retained_variant -\u003e frameshift_variant": {
+      "count": 7,
+      "examples": [
+        {
+          "study": "brca_tcga_gdc",
+          "chrom": "12",
+          "pos": 69390312,
+          "ref": "",
+          "alt": "A",
+          "transcript_id": "ENST00000247843",
+          "column": "Consequence",
+          "maf_value": "inframe_insertion,stop_retained_variant",
+          "vep_value": "frameshift_variant",
+          "category": "mismatch"
+        },
+        {
+          "study": "ccrcc_tcga_gdc",
+          "chrom": "15",
+          "pos": 69028246,
+          "ref": "",
+          "alt": "CTATCTATGACTCCTATTCTATCTA",
+          "transcript_id": "ENST00000388866",
+          "column": "Consequence",
+          "maf_value": "inframe_insertion,stop_retained_variant",
+          "vep_value": "frameshift_variant",
+          "category": "mismatch"
+        },
+        {
+          "study": "difg_tcga_gdc",
+          "chrom": "15",
+          "pos": 57273239,
+          "ref": "",
+          "alt": "TTGAC",
+          "transcript_id": "ENST00000267811",
+          "column": "Consequence",
+          "maf_value": "inframe_insertion,stop_retained_variant",
+          "vep_value": "frameshift_variant",
+          "category": "mismatch"
+        }
+      ]
+    },
+    "missense_variant -\u003e stop_lost": {
+      "count": 2,
+      "examples": [
+        {
+          "study": "skcm_tcga_gdc",
+          "chrom": "16",
+          "pos": 30445550,
+          "ref": "A",
+          "alt": "T",
+          "transcript_id": "ENST00000478753",
+          "column": "Consequence",
+          "maf_value": "missense_variant",
+          "vep_value": "stop_lost",
+          "category": "mismatch"
+        },
+        {
+          "study": "ucec_tcga_gdc",
+          "chrom": "5",
+          "pos": 42800912,
+          "ref": "T",
+          "alt": "G",
+          "transcript_id": "ENST00000506577",
+          "column": "Consequence",
+          "maf_value": "missense_variant",
+          "vep_value": "stop_lost",
+          "category": "mismatch"
+        }
+      ]
+    },
+    "splice_acceptor_variant -\u003e intergenic_variant": {
+      "count": 1,
+      "examples": [
+        {
+          "study": "luad_tcga_gdc",
+          "chrom": "8",
+          "pos": 145054016,
+          "ref": "A",
+          "alt": "T",
+          "transcript_id": "ENST00000331434",
+          "column": "Consequence",
+          "maf_value": "splice_acceptor_variant",
+          "vep_value": "intergenic_variant",
+          "category": "mismatch"
+        }
+      ]
+    },
+    "splice_region_variant,non_coding_transcript_variant -\u003e non_coding_transcript_exon_variant": {
+      "count": 1,
+      "examples": [
+        {
+          "study": "lusc_tcga_gdc",
+          "chrom": "12",
+          "pos": 31148122,
+          "ref": "",
+          "alt": "G",
+          "transcript_id": "ENST00000641844",
+          "column": "Consequence",
+          "maf_value": "splice_region_variant,non_coding_transcript_variant",
+          "vep_value": "non_coding_transcript_exon_variant",
+          "category": "mismatch"
+        }
+      ]
+    },
+    "stop_gained -\u003e stop_retained_variant": {
+      "count": 2,
+      "examples": [
+        {
+          "study": "cesc_tcga_gdc",
+          "chrom": "19",
+          "pos": 1105404,
+          "ref": "G",
+          "alt": "A",
+          "transcript_id": "ENST00000354171",
+          "column": "Consequence",
+          "maf_value": "stop_gained",
+          "vep_value": "stop_retained_variant",
+          "category": "mismatch"
+        },
+        {
+          "study": "hnsc_tcga_gdc",
+          "chrom": "16",
+          "pos": 30445549,
+          "ref": "C",
+          "alt": "T",
+          "transcript_id": "ENST00000478753",
+          "column": "Consequence",
+          "maf_value": "stop_gained",
+          "vep_value": "stop_retained_variant",
+          "category": "mismatch"
+        }
+      ]
+    },
+    "stop_lost,3_prime_UTR_variant -\u003e frameshift_variant,stop_lost": {
+      "count": 9,
+      "examples": [
+        {
+          "study": "ccrcc_tcga_gdc",
+          "chrom": "3",
+          "pos": 10149965,
+          "ref": "AA",
+          "alt": "",
+          "transcript_id": "ENST00000256474",
+          "column": "Consequence",
+          "maf_value": "stop_lost,3_prime_UTR_variant",
+          "vep_value": "frameshift_variant,stop_lost",
+          "category": "mismatch"
+        },
+        {
+          "study": "ccrcc_tcga_gdc",
+          "chrom": "3",
+          "pos": 10149965,
+          "ref": "AA",
+          "alt": "",
+          "transcript_id": "ENST00000256474",
+          "column": "Consequence",
+          "maf_value": "stop_lost,3_prime_UTR_variant",
+          "vep_value": "frameshift_variant,stop_lost",
+          "category": "mismatch"
+        },
+        {
+          "study": "hgsoc_tcga_gdc",
+          "chrom": "11",
+          "pos": 44929172,
+          "ref": "CCAGTAGAGGGTATGGCCTG",
+          "alt": "",
+          "transcript_id": "ENST00000340160",
+          "column": "Consequence",
+          "maf_value": "stop_lost,3_prime_UTR_variant",
+          "vep_value": "frameshift_variant,stop_lost",
+          "category": "mismatch"
+        }
+      ]
+    }
+  }
+}
