@@ -53,4 +53,6 @@ testdata/grch37/*.txt
 testdata/datahub_gdc/*.txt
 
 # Datahub all test data (large MAF files, download with: scripts/download_datahub_all.sh)
-testdata/datahub_all/
+testdata/datahub_all/**/*.txt
+!testdata/datahub_all/**/validation_report.*
+!testdata/datahub_all/**/mismatches.json

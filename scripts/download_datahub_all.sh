@@ -38,31 +38,29 @@ download_study() {
     return 2  # failed
   fi
 
-  # Detect assembly from NCBI_Build column
-  local assembly="unknown"
-  local header
-  header=$(head -1 "$tmpfile")
+  # Detect assembly from NCBI_Build column using a single awk pass.
+  # Skips comment lines (#), finds NCBI_Build in header, reads first data line.
+  local assembly
+  assembly=$(awk -F'\t' '
+    /^#/ { next }
+    !hdr {
+      hdr = 1
+      for (i = 1; i <= NF; i++) {
+        if ($i == "NCBI_Build") { col = i; break }
+      }
+      next
+    }
+    col > 0 {
+      print $col
+      exit
+    }
+  ' "$tmpfile")
 
-  # Find NCBI_Build column index
-  local col_idx=-1
-  local i=0
-  while IFS=$'\t' read -r field; do
-    if [[ "$field" == "NCBI_Build" ]]; then
-      col_idx=$i
-      break
-    fi
-    ((i++))
-  done < <(echo "$header" | tr '\t' '\n')
-
-  if [[ $col_idx -ge 0 ]]; then
-    # Get the value from the first data line
-    local build
-    build=$(awk -F'\t' -v col=$((col_idx + 1)) 'NR==2 { print $col; exit }' "$tmpfile")
-    case "$build" in
-      GRCh38|hg38) assembly="GRCh38" ;;
-      GRCh37|hg19) assembly="GRCh37" ;;
-    esac
-  fi
+  case "$assembly" in
+    GRCh38|hg38) assembly="GRCh38" ;;
+    GRCh37|hg19) assembly="GRCh37" ;;
+    *) assembly="unknown" ;;
+  esac
 
   mv "$tmpfile" "$DEST_DIR/$assembly/$filename"
   echo "  -> $assembly"
