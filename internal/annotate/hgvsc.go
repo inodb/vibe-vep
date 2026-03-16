@@ -29,9 +29,16 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		prefix = "n."
 	}
 
-	// SNV (and MNV — same length ref/alt): compute RC and return immediately.
-	// This avoids computing RC for the more common indel CDS paths.
+	// SNV and MNV (same length ref/alt): compute RC and format.
 	if !v.IsIndel() {
+		// No change (ref==alt): HGVS uses "=" notation
+		if v.Ref == v.Alt {
+			startPosStr := genomicToHGVScPos(v.Pos, t)
+			if startPosStr == "" {
+				return ""
+			}
+			return prefix + startPosStr + "="
+		}
 		ref := v.Ref
 		alt := v.Alt
 		if t.IsReverseStrand() {
@@ -42,7 +49,20 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		if startPosStr == "" {
 			return ""
 		}
-		return prefix + startPosStr + ref + ">" + alt
+		// SNV: single nucleotide substitution (c.123A>G)
+		if len(v.Ref) == 1 {
+			return prefix + startPosStr + ref + ">" + alt
+		}
+		// MNV: multi-nucleotide changes must use delins per HGVS
+		// (substitution is defined as exactly one nucleotide replaced by one)
+		endPosStr := genomicToHGVScPos(v.Pos+int64(len(v.Ref))-1, t)
+		if t.IsReverseStrand() {
+			startPosStr, endPosStr = endPosStr, startPosStr
+		}
+		if endPosStr == "" {
+			return ""
+		}
+		return prefix + startPosStr + "_" + endPosStr + "delins" + alt
 	}
 
 	// Indel handling — defer RC computation to branches that need it.
@@ -53,28 +73,7 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		return formatHGVScInsertion(v, t, prefix, refLen, altLen)
 	}
 
-	if refLen > altLen {
-		return formatHGVScDeletion(v, t, prefix, refLen, altLen)
-	}
-
-	// MNV (same length ref/alt, len > 1) — treat as delins.
-	// Note: unreachable because !v.IsIndel() is true for same-length variants.
-	if refLen > 1 {
-		ref := v.Ref
-		alt := v.Alt
-		if t.IsReverseStrand() {
-			ref = ReverseComplement(ref)
-			alt = ReverseComplement(alt)
-		}
-		startPosStr := genomicToHGVScPos(v.Pos, t)
-		endPosStr := genomicToHGVScPos(v.Pos+int64(refLen)-1, t)
-		if t.IsReverseStrand() {
-			startPosStr, endPosStr = genomicToHGVScPos(v.Pos+int64(refLen)-1, t), startPosStr
-		}
-		return prefix + startPosStr + "_" + endPosStr + "delins" + alt
-	}
-
-	return ""
+	return formatHGVScDeletion(v, t, prefix, refLen, altLen)
 }
 
 // formatHGVScInsertion handles the insertion path of FormatHGVSc.
@@ -115,8 +114,9 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 			cdsIdx = 0
 		}
 
-		// Shift insertion in place (modifies seq)
-		shiftedIdx := shiftInsertionBuf(seq, cdsIdx, t.CDSSequence)
+		// Shift insertion in place (modifies seq), stops at exon boundary
+		maxIdx := cdsExonEndIdx(cdsIdx, t)
+		shiftedIdx := shiftInsertionBuf(seq, cdsIdx, t.CDSSequence, maxIdx)
 		seqLen := len(seq)
 
 		// Check dup: inserted bases match preceding bases at shifted position.
@@ -146,6 +146,10 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 			n += copy(buf[n:], "ins")
 			n += copy(buf[n:], seq)
 			return string(buf[:n])
+		}
+		// Insertion at end of CDS: second flanking position is *1 (3'UTR)
+		if shiftedIdx+1 == len(t.CDSSequence) {
+			return prefix + strconv.FormatInt(int64(shiftedIdx+1), 10) + "_*1ins" + string(seq)
 		}
 	}
 
@@ -252,8 +256,9 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 			}
 			return string(buf[:n])
 		}
-		// Pure deletion: apply 3' shift
-		sStart, sEnd := shiftDeletionThreePrime(int(delStartCDS-1), int(delEndCDS-1), t.CDSSequence)
+		// Pure deletion: apply 3' shift (stops at exon boundary)
+		maxIdx := cdsExonEndIdx(int(delEndCDS-1), t)
+		sStart, sEnd := shiftDeletionThreePrime(int(delStartCDS-1), int(delEndCDS-1), t.CDSSequence, maxIdx)
 		return cdsPosRangeStr(sStart+1, sEnd+1, "del")
 	}
 
@@ -296,10 +301,11 @@ func cdsPosRangeStr(start, end int, suffix string) string {
 
 // shiftInsertionBuf shifts an insertion rightward (3' direction) in CDS space.
 // It operates on the provided mutable byte slice, avoiding allocations.
+// The shift stops at maxIdx (0-based) to avoid crossing exon-exon junctions.
 // Returns the new anchor index.
-func shiftInsertionBuf(seq []byte, cdsAnchorIdx int, cdsSeq string) int {
+func shiftInsertionBuf(seq []byte, cdsAnchorIdx int, cdsSeq string, maxIdx int) int {
 	idx := cdsAnchorIdx
-	for idx+1 < len(cdsSeq) && cdsSeq[idx+1] == seq[0] {
+	for idx < maxIdx && idx+1 < len(cdsSeq) && cdsSeq[idx+1] == seq[0] {
 		first := seq[0]
 		copy(seq, seq[1:])
 		seq[len(seq)-1] = first
@@ -526,13 +532,33 @@ func exonBoundaryHGVScPos(genomicPos int64, exon *cache.Exon, t *cache.Transcrip
 	return ""
 }
 
+// cdsExonEndIdx returns the 0-based CDS index of the last base in the same exon
+// as the given 0-based CDS index. This is used to prevent 3' shifting from crossing
+// exon-exon junctions per HGVS rules. Returns len(cdsSeq)-1 if no exon boundary
+// information is available.
+func cdsExonEndIdx(cdsIdx0 int, t *cache.Transcript) int {
+	if len(t.CDSRegions) == 0 {
+		return len(t.CDSSequence) - 1
+	}
+	for _, r := range t.CDSRegions {
+		regionLen := int(r.GenomicEnd - r.GenomicStart + 1)
+		regionStart := int(r.CDSOffset)
+		regionEnd := regionStart + regionLen - 1
+		if cdsIdx0 >= regionStart && cdsIdx0 <= regionEnd {
+			return regionEnd
+		}
+	}
+	return len(t.CDSSequence) - 1
+}
+
 // shiftInsertionThreePrime shifts an insertion rightward (3' direction) in CDS space.
 // cdsAnchorIdx is the 0-based CDS index of the VCF anchor base (insertion is after this position).
+// maxIdx limits the shift to avoid crossing exon-exon junctions.
 // Returns the shifted inserted sequence and new anchor index.
-func shiftInsertionThreePrime(insertedSeq string, cdsAnchorIdx int, cdsSeq string) (string, int) {
+func shiftInsertionThreePrime(insertedSeq string, cdsAnchorIdx int, cdsSeq string, maxIdx int) (string, int) {
 	seq := []byte(insertedSeq)
 	idx := cdsAnchorIdx
-	for idx+1 < len(cdsSeq) && cdsSeq[idx+1] == seq[0] {
+	for idx < maxIdx && idx+1 < len(cdsSeq) && cdsSeq[idx+1] == seq[0] {
 		first := seq[0]
 		copy(seq, seq[1:])
 		seq[len(seq)-1] = first
@@ -543,9 +569,10 @@ func shiftInsertionThreePrime(insertedSeq string, cdsAnchorIdx int, cdsSeq strin
 
 // shiftDeletionThreePrime shifts a deletion rightward (3' direction) in CDS space.
 // delStart and delEnd are 0-based inclusive CDS indices of the deleted bases.
+// The shift stops at maxIdx (0-based) to avoid crossing exon-exon junctions.
 // Returns the shifted start and end indices.
-func shiftDeletionThreePrime(delStart, delEnd int, cdsSeq string) (int, int) {
-	for delEnd+1 < len(cdsSeq) && cdsSeq[delStart] == cdsSeq[delEnd+1] {
+func shiftDeletionThreePrime(delStart, delEnd int, cdsSeq string, maxIdx int) (int, int) {
+	for delEnd < maxIdx && delEnd+1 < len(cdsSeq) && cdsSeq[delStart] == cdsSeq[delEnd+1] {
 		delStart++
 		delEnd++
 	}

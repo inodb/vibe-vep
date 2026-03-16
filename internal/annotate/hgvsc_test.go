@@ -267,7 +267,7 @@ func TestShiftDeletionThreePrime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotS, gotE := shiftDeletionThreePrime(tt.delStart, tt.delEnd, tt.cdsSeq)
+			gotS, gotE := shiftDeletionThreePrime(tt.delStart, tt.delEnd, tt.cdsSeq, len(tt.cdsSeq)-1)
 			assert.Equal(t, tt.wantS, gotS, "delStart")
 			assert.Equal(t, tt.wantE, gotE, "delEnd")
 		})
@@ -311,7 +311,7 @@ func TestShiftInsertionThreePrime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotSeq, gotIdx := shiftInsertionThreePrime(tt.insertSeq, tt.anchorIdx, tt.cdsSeq)
+			gotSeq, gotIdx := shiftInsertionThreePrime(tt.insertSeq, tt.anchorIdx, tt.cdsSeq, len(tt.cdsSeq)-1)
 			assert.Equal(t, tt.wantSeq, gotSeq, "shifted sequence")
 			assert.Equal(t, tt.wantIdx, gotIdx, "shifted anchor index")
 		})

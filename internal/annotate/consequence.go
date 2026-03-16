@@ -124,29 +124,33 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 	}
 
 	if inUTR {
-		// For large indels starting in UTR, check if deletion spans into
-		// higher-impact regions (splice sites, start codon, CDS)
-		if v.IsIndel() && len(v.Ref) > 1 {
-			// Check splice site overlap first (highest priority)
-			if spliceSite := indelSpliceSiteType(v, t); spliceSite != "" {
-				result.Consequence = spliceSite
-				result.Impact = GetImpact(spliceSite)
-				return result
+		// For multi-base variants starting in UTR, check if they span into
+		// higher-impact regions (splice sites, start codon, CDS).
+		// This applies to both indels (different ref/alt length) and MNVs (same length).
+		variantEnd := v.Pos + int64(len(v.Ref)) - 1
+		if len(v.Ref) > 1 {
+			if v.IsIndel() {
+				// Check splice site overlap first (highest priority)
+				if spliceSite := indelSpliceSiteType(v, t); spliceSite != "" {
+					result.Consequence = spliceSite
+					result.Impact = GetImpact(spliceSite)
+					return result
+				}
 			}
-			// Check if deletion spans into start codon
-			indelEnd := v.Pos + int64(len(v.Ref)) - 1
+			// Check if variant spans into start codon
 			startCodonStart, startCodonEnd := t.CDSStart, t.CDSStart+2
 			if !t.IsForwardStrand() {
 				startCodonStart, startCodonEnd = t.CDSEnd-2, t.CDSEnd
 			}
-			if indelEnd >= startCodonStart && v.Pos <= startCodonEnd {
+			if utrConsequence == Consequence5PrimeUTR &&
+				variantEnd >= startCodonStart && v.Pos <= startCodonEnd {
 				result.Consequence = ConsequenceStartLost
 				result.ProteinPosition = 1
 				result.Impact = GetImpact(result.Consequence)
 				result.HGVSp = FormatHGVSp(result)
 				return result
 			}
-			// Check if deletion from 3'UTR spans into the stop codon
+			// Check if variant from 3'UTR spans into the stop codon
 			if utrConsequence == Consequence3PrimeUTR {
 				var stopCodonStart, stopCodonEnd int64
 				if t.IsForwardStrand() {
@@ -154,7 +158,7 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 				} else {
 					stopCodonStart, stopCodonEnd = t.CDSStart, t.CDSStart+2
 				}
-				if indelEnd >= stopCodonStart && v.Pos <= stopCodonEnd {
+				if variantEnd >= stopCodonStart && v.Pos <= stopCodonEnd {
 					result.Consequence = ConsequenceStopLost3PrimeUTR
 					result.Impact = GetImpact(ConsequenceStopLost)
 					return result
