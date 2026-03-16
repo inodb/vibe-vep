@@ -23,11 +23,17 @@ CGO_ENABLED=1 go build -o vibe-vep ./cmd/vibe-vep
 # Run all tests (fast mode, ~1s)
 go test ./... -short -count=1
 
+# Run corner case tests (66 tests, 7ms)
+go test ./internal/annotate/ -run 'TestDatahub_|TestEdge_|TestCorner_' -v
+
 # Run benchmarks
 go test ./internal/annotate/ -bench . -benchmem
 
-# Run full validation benchmark (~30min)
-go test ./internal/output/ -run TestValidationBenchmark -v -count=1 -timeout 30m
+# Run fast validation benchmark (GDC, ~2 min)
+go test ./internal/output/ -run TestValidationBenchmarkGDC -v -count=1 -timeout 10m
+
+# Run full validation benchmark (all assemblies, ~21 min)
+go test ./internal/output/ -run 'TestValidationBenchmark(GDC|All|AllGRCh37)' -v -count=1 -timeout 120m
 
 # Run annotation sources benchmark
 go test ./internal/output/ -run TestAnnotationSourcesBenchmark -v -count=1 -timeout 30m
@@ -35,23 +41,14 @@ go test ./internal/output/ -run TestAnnotationSourcesBenchmark -v -count=1 -time
 
 ## Test Data
 
-Download TCGA test data for validation (~1.6GB):
+Three tiers of test data are available:
 
-```bash
-make download-testdata
-```
+| Tier | Size | Studies | Command |
+|------|------|---------|---------|
+| `datahub_gdc` | ~5 GB | 32 GDC studies (GRCh38) | `make download-datahub-gdc` |
+| `datahub_all` | ~50 GB | 431+ studies (GRCh38 + GRCh37) | `make download-datahub-all` |
 
-This provides 7 TCGA GDC studies (1,052,366 total variants):
-
-| Study | Variants |
-|-------|----------|
-| CHOL | 3,800 |
-| GBM | 55,000 |
-| BRCA | 89,000 |
-| BLCA | 116,000 |
-| LUAD | 191,000 |
-| COAD | 245,000 |
-| SKCM | 353,000 |
+For backward compatibility, `make download-testdata` still downloads the original 7-study TCGA subset.
 
 ## Project Structure
 
@@ -59,6 +56,9 @@ This provides 7 TCGA GDC studies (1,052,366 total variants):
 cmd/vibe-vep/       CLI entry point (annotate, download commands)
 internal/
   annotate/         Consequence prediction (PredictConsequence, Annotator)
+    corner_case_test.go       13 edge case tests
+    vep_edge_cases_test.go    17 Ensembl VEP test patterns
+    datahub_mismatch_test.go  36 datahub mismatch tests
   cache/            Transcript cache (GENCODE GTF/FASTA loader)
   duckdb/           DuckDB cache for transcripts and variant results
   genomicindex/     Unified SQLite index for annotation source lookups (AM, ClinVar, SIGNAL)
@@ -67,7 +67,8 @@ internal/
   vcf/              VCF file parser
 testdata/
   cache/            Test transcript data (JSON)
-  tcga/             TCGA GDC MAF files for validation
+  datahub_gdc/      32 GDC studies for GRCh38 validation (~5 GB)
+  datahub_all/      All datahub studies (GRCh38 + GRCh37, ~50 GB)
 ```
 
 ## Roadmap
@@ -87,7 +88,7 @@ testdata/
   - [ ] SIFT predictions
   - [ ] PolyPhen-2 predictions
   - [ ] gnomAD allele frequencies
-- [ ] **Re-annotate datahub GDC studies**
+- [x] **Re-annotate datahub GDC studies**
 - [ ] **Replace genome-nexus-annotation-pipeline for datahub**
 
 ## License

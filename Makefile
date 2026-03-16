@@ -1,4 +1,4 @@
-.PHONY: build test lint clean install download-testdata download-tcga download-grch37 docs docs-build wasm wasm-exec parquet-export
+.PHONY: build test lint clean install download-testdata download-tcga download-grch37 download-datahub-gdc download-datahub-all docs docs-build wasm wasm-exec parquet-export
 
 # Binary name
 BINARY=vibe-vep
@@ -42,6 +42,14 @@ download-tcga:
 # Download GRCh37 test data for validation
 download-grch37:
 	./scripts/download_grch37.sh
+
+# Download datahub GDC studies for GRCh38 validation (~5GB)
+download-datahub-gdc:
+	./scripts/download_datahub_gdc.sh
+
+# Download all datahub studies for full validation (~50GB)
+download-datahub-all:
+	./scripts/download_datahub_all.sh
 
 # Download dependencies
 deps:

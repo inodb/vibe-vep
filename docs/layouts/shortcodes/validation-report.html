@@ -12,8 +12,12 @@
 <p>
   Generated: {{ $data.generated }}<br>
   Assembly: {{ $data.assembly }}<br>
+  {{ with $data.studies }}Studies: {{ printf "%.0f" . }}<br>{{ end }}
   GENCODE transcripts: {{ printf "%.0f" $data.transcripts }} (loaded from {{ $data.load_source }} in {{ $data.load_duration }})<br>
   Workers: {{ printf "%.0f" $data.workers }} (GOMAXPROCS)
+  {{ with $data.system }}
+  <br>System: {{ .cpu }} ({{ printf "%.0f" .cores }} cores), {{ .memory }}, {{ .os }}, Go {{ .go_version }}
+  {{ end }}
 </p>
 
 {{ partial "validation-table.html" (dict "table" $data.match_rates "caption" "Match Rates") }}

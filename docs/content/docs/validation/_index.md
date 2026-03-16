@@ -1,6 +1,6 @@
 ---
 title: Validation
-description: Validation methodology and results against TCGA datasets.
+description: Validation methodology and results against cBioPortal datahub datasets.
 weight: 3
 ---
 
@@ -38,31 +38,74 @@ MAF files may use different consequence terms than SO standard. The validation n
 - **Upstream/downstream tolerance**: MAF upstream/downstream calls are always accepted as matching, since different canonical transcript sets produce different transcript boundaries
 - **Sorting**: Comma-separated terms are sorted alphabetically for consistent comparison
 
-## GRCh38 Results (TCGA)
+## Datahub Benchmark
 
-Tested against 7 TCGA GDC studies from [cBioPortal/datahub](https://github.com/cBioPortal/datahub):
+Comprehensive validation against [cBioPortal/datahub](https://github.com/cBioPortal/datahub) MAF annotations across both assemblies:
+
+| Tier | Assembly | Studies | Variants | Conseq Match | Time |
+|------|----------|---------|----------|-------------|------|
+| `datahub_gdc` | GRCh38 | 32 | 2,489,269 | 99.8% | ~2 min |
+| `datahub_all` | GRCh37 | 431 | 30,612,130 | 99.7% | ~19 min |
+| **Total** | | **463** | **~33M** | **99.7%** | **~21 min** |
+
+### Corner Case Tests
+
+66 unit tests covering all mismatch patterns discovered during benchmark analysis, runs in **7ms**:
+
+```bash
+go test ./internal/annotate/ -run 'TestDatahub_|TestEdge_|TestCorner_' -v
+```
+
+| File | Tests | Source |
+|------|-------|--------|
+| `corner_case_test.go` | 13 | Manual edge cases + GRCh37 bug fixes |
+| `vep_edge_cases_test.go` | 17 | Ensembl VEP test patterns |
+| `datahub_mismatch_test.go` | 36 | Datahub mismatch mining |
+
+### Mismatch Collection
+
+Collect all mismatches for analysis:
+
+```bash
+# GRCh38 mismatches
+go test ./internal/output/ -run TestMismatchCollection -v -count=1 -timeout 60m
+# Output: testdata/datahub_all/GRCh38/mismatches.json
+
+# GRCh37 mismatches
+go test ./internal/output/ -run TestMismatchCollectionGRCh37 -v -count=1 -timeout 120m
+# Output: testdata/datahub_all/GRCh37/mismatches.json
+```
+
+## GRCh38 Results
+
+32-study GDC benchmark from [cBioPortal/datahub](https://github.com/cBioPortal/datahub):
 
 {{< validation-report assembly="grch38" >}}
 
-## GRCh37 Results (MSK-IMPACT)
+## GRCh37 Results
+
+431-study benchmark from [cBioPortal/datahub](https://github.com/cBioPortal/datahub):
 
 {{< validation-report assembly="grch37" >}}
 
 ## Reproducing Validation
 
-To download test data and regenerate the reports:
-
 ```bash
-# Download all test data
-make download-testdata
+# Download test data
+make download-datahub-gdc     # 32 GDC studies (~5 GB)
+make download-datahub-all     # 431+ studies (~50 GB, includes GRCh37)
 
-# Run GRCh38 validation
-go test ./internal/output/ -run TestValidationBenchmark$ -v -count=1 -timeout 30m
+# Download GENCODE reference
+vibe-vep download --assembly GRCh38
+vibe-vep download --assembly GRCh37   # only needed for GRCh37 benchmark
 
-# Run GRCh37 validation
-go test ./internal/output/ -run TestValidationBenchmarkGRCh37 -v -count=1 -timeout 30m
+# Run fast benchmark (GDC only, ~2 min)
+go test ./internal/output/ -run TestValidationBenchmarkGDC -v -count=1 -timeout 10m
+
+# Run full benchmark (all assemblies, ~21 min)
+go test ./internal/output/ -run 'TestValidationBenchmark(GDC|All|AllGRCh37)' -v -count=1 -timeout 120m
 ```
 
-Full markdown reports are also available:
-- [GRCh38 report](https://github.com/inodb/vibe-vep/blob/main/testdata/tcga/validation_report.md)
-- [GRCh37 report](https://github.com/inodb/vibe-vep/blob/main/testdata/grch37/validation_report.md)
+Full markdown reports are generated in each study directory:
+- `testdata/datahub_gdc/validation_report.md` — GRCh38 (32 GDC studies)
+- `testdata/datahub_all/GRCh37/validation_report.md` — GRCh37 (431 studies)
