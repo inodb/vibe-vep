@@ -512,6 +512,33 @@ func TestDatahub_MNV_MissenseNotStop(t *testing.T) {
 	}
 }
 
+func TestDatahub_MNV_MultiCodon_StopLost(t *testing.T) {
+	// Real bug: chr2:218813 AA>TT, ENST00000356150 (SH3YL1)
+	// MNV spanning into the stop codon that removes it → stop_lost
+	// CDS: ATG GCT AAA TAA (M A K *)
+	// MNV at CDS pos 11-12 (last base of codon 3 + first base of stop):
+	// change AA→TT: codon 3 AAA→AAT (Lys→Asn), codon 4 TAA→TAA... wait.
+	// Need: change inside the stop codon.
+	// CDS pos 10-11 = TA in stop codon TAA. Change TA→CA: TAA→CAA (Gln) = stop_lost
+	tr := &cache.Transcript{
+		ID: "ENST_MNV_STOPLOST", GeneName: "MNVSTOPLOST", Chrom: "1",
+		Start: 995, End: 1025, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1011,
+		Exons:        []cache.Exon{{Number: 1, Start: 995, End: 1025, CDSStart: 1000, CDSEnd: 1011, Frame: 0}},
+		CDSSequence:  "ATGGCTAAA" + "TAA",
+		UTR3Sequence: "GCATAA",
+	}
+
+	// MNV changing first 2 bases of stop codon: TAA→CAA (Gln)
+	// CDS pos 10-11 = genomic 1009-1010
+	v := &vcf.Variant{Chrom: "1", Pos: 1009, Ref: "TA", Alt: "CA"}
+	result := PredictConsequence(v, tr)
+
+	if result.Consequence != ConsequenceStopLost {
+		t.Errorf("MNV removing stop codon should be stop_lost, got %q", result.Consequence)
+	}
+}
+
 // --- Pattern: 5'UTR deletion spanning into splice acceptor ---
 // Real: chr9:97922494 del 16bp, ENST00000375119 (ccle_broad_2025)
 // MAF says 5_prime_UTR_variant but vibe-vep correctly upgrades to

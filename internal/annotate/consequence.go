@@ -321,7 +321,17 @@ func predictMNVConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseque
 
 	default:
 		// Multi-codon change: emit as delins.
-		result.Consequence = ConsequenceMissenseVariant
+		// Check if the MNV creates or removes a stop codon.
+		hasDelStop := containsStop(deletedAAs)
+		hasInsStop := containsStop(insertedAAs)
+		switch {
+		case hasInsStop && !hasDelStop:
+			result.Consequence = ConsequenceStopGained
+		case hasDelStop && !hasInsStop:
+			result.Consequence = ConsequenceStopLost
+		default:
+			result.Consequence = ConsequenceMissenseVariant
+		}
 		result.IsDelIns = true
 		result.ProteinPosition = startPos
 		if len(deletedAAs) > 0 {
@@ -1276,6 +1286,16 @@ func nearestSpliceBoundaryProteinPos(pos int64, t *cache.Transcript) int64 {
 	}
 	codonNum, _ := CDSToCodonPosition(cdsPos)
 	return codonNum
+}
+
+// containsStop returns true if the amino acid string contains a stop codon ('*').
+func containsStop(aas string) bool {
+	for i := 0; i < len(aas); i++ {
+		if aas[i] == '*' {
+			return true
+		}
+	}
+	return false
 }
 
 func abs64(x int64) int64 {
