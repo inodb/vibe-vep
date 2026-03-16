@@ -225,8 +225,8 @@ func predictCodingConsequence(v *vcf.Variant, t *cache.Transcript, exon *cache.E
 	}
 
 	// SNV - calculate amino acid change
-	if len(t.CDSSequence) == 0 {
-		// No CDS sequence available, can't determine AA change
+	if len(t.CDSSequence) == 0 || len(v.Alt) == 0 {
+		// No CDS sequence or empty alt allele — can't determine AA change
 		result.Consequence = ConsequenceCodingSequenceVariant
 		result.Impact = GetImpact(result.Consequence)
 		return result
@@ -290,7 +290,7 @@ func predictCodingConsequence(v *vcf.Variant, t *cache.Transcript, exon *cache.E
 // that may affect multiple codons. Single-codon changes are classified as
 // missense/stop/synonymous; multi-codon changes are emitted as delins.
 func predictMNVConsequence(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult) *ConsequenceResult {
-	if len(t.CDSSequence) == 0 {
+	if len(t.CDSSequence) == 0 || len(v.Alt) == 0 {
 		result.Consequence = ConsequenceCodingSequenceVariant
 		result.Impact = GetImpact(result.Consequence)
 		return result
@@ -324,7 +324,9 @@ func predictMNVConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseque
 		result.Consequence = ConsequenceMissenseVariant
 		result.IsDelIns = true
 		result.ProteinPosition = startPos
-		result.RefAA = deletedAAs[0]
+		if len(deletedAAs) > 0 {
+			result.RefAA = deletedAAs[0]
+		}
 		result.InsertedAAs = insertedAAs
 		if len(deletedAAs) > 1 {
 			result.ProteinEndPosition = startPos + int64(len(deletedAAs)) - 1

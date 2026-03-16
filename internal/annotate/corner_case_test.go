@@ -234,6 +234,42 @@ func TestCorner_EmptyAltAllele(t *testing.T) {
 	assert.NotEmpty(t, result.Consequence)
 }
 
+func TestCorner_EmptyAltAlleleMNVPosition(t *testing.T) {
+	// Bug found by GRCh37 benchmark: multi-base ref with empty alt
+	// in predictMNVConsequence causes panic at deletedAAs[0].
+	tr := &cache.Transcript{
+		ID: "ENST_EMPTYALT3", GeneName: "EMPTYALT3", Chrom: "1",
+		Start: 995, End: 1020, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1011,
+		Exons:       []cache.Exon{{Number: 1, Start: 995, End: 1020, CDSStart: 1000, CDSEnd: 1011, Frame: 0}},
+		CDSSequence: "ATGGCTAAATAA",
+	}
+
+	// Multi-base ref with empty alt (some GRCh37 MAFs use this format)
+	v := &vcf.Variant{Chrom: "1", Pos: 1003, Ref: "GC", Alt: ""}
+	result := PredictConsequence(v, tr)
+	assert.NotEmpty(t, result.Consequence)
+}
+
+func TestCorner_EmptyAltAlleleSNVPosition(t *testing.T) {
+	// Bug found by GRCh37 benchmark: SNV-like position with empty alt
+	// causes panic at v.Alt[0] in predictCodingConsequence.
+	tr := &cache.Transcript{
+		ID: "ENST_EMPTYALT2", GeneName: "EMPTYALT2", Chrom: "1",
+		Start: 995, End: 1020, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1011,
+		Exons:       []cache.Exon{{Number: 1, Start: 995, End: 1020, CDSStart: 1000, CDSEnd: 1011, Frame: 0}},
+		CDSSequence: "ATGGCTAAATAA",
+	}
+
+	// Single-base ref with empty alt (deletion of 1 base, old-style MAF format)
+	v := &vcf.Variant{Chrom: "1", Pos: 1005, Ref: "T", Alt: ""}
+	result := PredictConsequence(v, tr)
+
+	// Should not panic
+	assert.NotEmpty(t, result.Consequence)
+}
+
 // --- Pattern: Variant exactly at UTR/CDS boundary ---
 
 func TestCorner_VariantAtUTRCDSBoundary(t *testing.T) {

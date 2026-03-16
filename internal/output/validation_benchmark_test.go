@@ -163,6 +163,42 @@ func TestValidationBenchmarkAll(t *testing.T) {
 	writeReportJSON(t, filepath.Join(studyDir, "validation_report.json"), results, meta, cgl)
 }
 
+// TestValidationBenchmarkAllGRCh37 runs comparison against all GRCh37 public studies
+// from datahub and generates a report at testdata/datahub_all/GRCh37/validation_report.md.
+//
+// Skipped with -short. Run with:
+//
+//	go test ./internal/output/ -run TestValidationBenchmarkAllGRCh37 -v -count=1 -timeout 120m
+func TestValidationBenchmarkAllGRCh37(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping validation benchmark in short mode")
+	}
+
+	studyDir := findStudyDir(t, filepath.Join("datahub_all", "GRCh37"))
+	mafFiles, err := filepath.Glob(filepath.Join(studyDir, "*_data_mutations.txt"))
+	if err != nil {
+		t.Fatalf("glob MAF files: %v", err)
+	}
+	if len(mafFiles) == 0 {
+		t.Skipf("no GRCh37 datahub_all MAF files found in %s — run: scripts/download_datahub_all.sh", studyDir)
+	}
+	sort.Strings(mafFiles)
+
+	c, cacheDuration, loadSource := loadGENCODECache(t, "GRCh37")
+	cgl := loadCancerGeneList(t)
+	results := runValidationStudies(t, mafFiles, c, cgl)
+
+	reportPath := filepath.Join(studyDir, "validation_report.md")
+	meta := reportMeta{
+		Assembly:        "GRCh37",
+		TranscriptCount: c.TranscriptCount(),
+		CacheDuration:   cacheDuration,
+		LoadSource:      loadSource,
+	}
+	writeReport(t, reportPath, results, meta.TranscriptCount, meta.CacheDuration, meta.LoadSource, cgl, meta.Assembly)
+	writeReportJSON(t, filepath.Join(studyDir, "validation_report.json"), results, meta, cgl)
+}
+
 // mismatchRecord captures a single mismatched variant for analysis.
 type mismatchRecord struct {
 	Study        string `json:"study"`
@@ -301,6 +337,147 @@ func TestMismatchCollection(t *testing.T) {
 		Groups     map[string]*consequenceGroup  `json:"consequence_groups"`
 	}{
 		Dataset:    datasetName,
+		Total:      len(mismatches),
+		Mismatches: mismatches,
+		Groups:     groups,
+	}
+
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal mismatches: %v", err)
+	}
+	outPath := filepath.Join(studyDir, "mismatches.json")
+	if err := os.WriteFile(outPath, data, 0644); err != nil {
+		t.Fatalf("write mismatches: %v", err)
+	}
+	t.Logf("wrote %d mismatches to %s", len(mismatches), outPath)
+	t.Logf("consequence mismatch groups: %d", len(groups))
+}
+
+// TestMismatchCollectionGRCh37 collects mismatches from GRCh37 public studies.
+//
+//	go test ./internal/output/ -run TestMismatchCollectionGRCh37 -v -count=1 -timeout 120m
+func TestMismatchCollectionGRCh37(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping mismatch collection in short mode")
+	}
+
+	studyDir := findStudyDir(t, filepath.Join("datahub_all", "GRCh37"))
+	mafFiles, err := filepath.Glob(filepath.Join(studyDir, "*_data_mutations.txt"))
+	if err != nil {
+		t.Fatalf("glob MAF files: %v", err)
+	}
+	if len(mafFiles) == 0 {
+		t.Skipf("no GRCh37 MAF files found in %s — run: scripts/download_datahub_all.sh", studyDir)
+	}
+	sort.Strings(mafFiles)
+	t.Logf("using GRCh37 dataset (%d files)", len(mafFiles))
+
+	c, _, _ := loadGENCODECache(t, "GRCh37")
+
+	categorizer := &output.Categorizer{}
+	comparedColumns := []string{"Consequence", "HGVSp_Short", "HGVSc"}
+	var mismatches []mismatchRecord
+
+	for _, mafFile := range mafFiles {
+		name := studyName(mafFile)
+		t.Run(name, func(t *testing.T) {
+			parser, err := maf.NewParser(mafFile)
+			if err != nil {
+				t.Fatalf("open MAF: %v", err)
+			}
+			defer parser.Close()
+
+			ann := annotate.NewAnnotator(c)
+			fileMismatches := 0
+
+			for {
+				v, mafAnn, err := parser.NextWithAnnotation()
+				if err != nil {
+					t.Fatalf("read variant: %v", err)
+				}
+				if v == nil {
+					break
+				}
+				vepAnns, err := ann.Annotate(v)
+				if err != nil {
+					continue
+				}
+
+				bestAnn := output.SelectBestAnnotation(mafAnn, vepAnns)
+
+				left := map[string]string{
+					"Consequence": mafAnn.Consequence,
+					"HGVSp_Short": mafAnn.HGVSpShort,
+					"HGVSc":       mafAnn.HGVSc,
+				}
+				right := map[string]string{
+					"Consequence": "",
+					"HGVSp_Short": "",
+					"HGVSc":       "",
+				}
+				if bestAnn != nil {
+					right["Consequence"] = bestAnn.Consequence
+					right["HGVSp_Short"] = output.HGVSpToShort(bestAnn.HGVSp)
+					right["HGVSc"] = bestAnn.HGVSc
+				}
+
+				cats := categorizer.CategorizeRow(comparedColumns, left, right,
+					comparedColumns, comparedColumns)
+
+				for _, col := range comparedColumns {
+					if cats[col] == output.CatMismatch {
+						mismatches = append(mismatches, mismatchRecord{
+							Study:        name,
+							Chrom:        v.Chrom,
+							Pos:          v.Pos,
+							Ref:          v.Ref,
+							Alt:          v.Alt,
+							TranscriptID: mafAnn.TranscriptID,
+							Column:       col,
+							MAFValue:     left[col],
+							VEPValue:     right[col],
+							Category:     string(cats[col]),
+						})
+						fileMismatches++
+					}
+				}
+			}
+			t.Logf("%s: %d mismatches collected", name, fileMismatches)
+		})
+	}
+
+	// Group by consequence type
+	type consequenceGroup struct {
+		Count    int              `json:"count"`
+		Examples []mismatchRecord `json:"examples"`
+	}
+	groups := make(map[string]*consequenceGroup)
+	for _, m := range mismatches {
+		if m.Column != "Consequence" {
+			continue
+		}
+		key := m.MAFValue + " -> " + m.VEPValue
+		g, ok := groups[key]
+		if !ok {
+			g = &consequenceGroup{}
+			groups[key] = g
+		}
+		g.Count++
+		if len(g.Examples) < 3 {
+			g.Examples = append(g.Examples, m)
+		}
+	}
+
+	report := struct {
+		Dataset    string                       `json:"dataset"`
+		Assembly   string                       `json:"assembly"`
+		Total      int                          `json:"total_mismatches"`
+		Mismatches []mismatchRecord             `json:"mismatches"`
+		Groups     map[string]*consequenceGroup `json:"consequence_groups"`
+	}{
+		Dataset:    "datahub_all_grch37",
+		Assembly:   "GRCh37",
 		Total:      len(mismatches),
 		Mismatches: mismatches,
 		Groups:     groups,
