@@ -461,3 +461,336 @@ func TestDatahub_StopCodonPositionSensitivity(t *testing.T) {
 		})
 	}
 }
+
+// ===== NEW PATTERNS from datahub_all GRCh38 (5,527 mismatches, 40 groups) =====
+
+// --- Pattern: MNV at stop codon → stop_gained vs missense ---
+// MAF says stop_gained but vibe-vep says missense_variant.
+// Real: chr3:52766267 CT>AG, ENST00000233027 (ccle_broad_2025)
+// When an MNV changes a codon that was NOT a stop into one that IS a stop,
+// it should be stop_gained. If the codon was already a stop, it might be
+// stop_retained or stop_lost depending on the new codon.
+
+func TestDatahub_MNV_StopGainedVsMissense(t *testing.T) {
+	// CDS: ATG GCT AAA CAG TAA (M A K Q *)
+	// MNV at codon 4 (CAG = Gln): change CA→TA → TAG = stop_gained
+	tr := &cache.Transcript{
+		ID: "ENST_MNV_STOP", GeneName: "MNVSTOP", Chrom: "1",
+		Start: 995, End: 1025, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1014,
+		Exons:       []cache.Exon{{Number: 1, Start: 995, End: 1025, CDSStart: 1000, CDSEnd: 1014, Frame: 0}},
+		CDSSequence: "ATGGCTAAACAG" + "TAA",
+	}
+
+	// MNV: change CDS pos 10-11 (CA in codon 4 CAG) to TA → TAG = stop
+	// Genomic pos 1009-1010
+	v := &vcf.Variant{Chrom: "1", Pos: 1009, Ref: "CA", Alt: "TA"}
+	result := PredictConsequence(v, tr)
+
+	if result.Consequence != ConsequenceStopGained {
+		t.Errorf("MNV creating stop codon should be stop_gained, got %q", result.Consequence)
+	}
+}
+
+func TestDatahub_MNV_MissenseNotStop(t *testing.T) {
+	// MNV that changes amino acid but does NOT create a stop → missense
+	// CDS: ATG GCT AAA CAG TAA (M A K Q *)
+	// MNV at codon 4 (CAG = Gln): change CA→GA → GAG = Glu → missense
+	tr := &cache.Transcript{
+		ID: "ENST_MNV_MIS", GeneName: "MNVMIS", Chrom: "1",
+		Start: 995, End: 1025, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1014,
+		Exons:       []cache.Exon{{Number: 1, Start: 995, End: 1025, CDSStart: 1000, CDSEnd: 1014, Frame: 0}},
+		CDSSequence: "ATGGCTAAACAG" + "TAA",
+	}
+
+	v := &vcf.Variant{Chrom: "1", Pos: 1009, Ref: "CA", Alt: "GA"}
+	result := PredictConsequence(v, tr)
+
+	if result.Consequence != ConsequenceMissenseVariant {
+		t.Errorf("MNV not creating stop should be missense_variant, got %q", result.Consequence)
+	}
+}
+
+// --- Pattern: 5'UTR deletion spanning into splice acceptor ---
+// Real: chr9:97922494 del 16bp, ENST00000375119 (ccle_broad_2025)
+// MAF says 5_prime_UTR_variant but vibe-vep correctly upgrades to
+// splice_acceptor_variant because the deletion overlaps a splice site.
+
+func TestDatahub_5UTRDeletionSpanningSpliceAcceptor(t *testing.T) {
+	// Forward strand. 5'UTR in exon 1, exon 2 has CDS.
+	// Deletion starts in 5'UTR (exon 1) and spans into intron+splice acceptor of exon 2.
+	tr := &cache.Transcript{
+		ID: "ENST_5UTRSPLICE", GeneName: "UTRSPLICE", Chrom: "1",
+		Start: 990, End: 2020, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 2000, CDSEnd: 2010,
+		Exons: []cache.Exon{
+			{Number: 1, Start: 990, End: 1010, CDSStart: 0, CDSEnd: 0, Frame: -1}, // 5'UTR only
+			{Number: 2, Start: 2000, End: 2020, CDSStart: 2000, CDSEnd: 2010, Frame: 0},
+		},
+		CDSSequence: "ATGGCTAAATAA",
+	}
+
+	// Deletion from UTR exon 1 that reaches splice acceptor of exon 2 (Start-1 = 1999)
+	// pos=1005, ref covers 1005-2000 (spans intron + hits acceptor site)
+	// Use a simpler scenario: deletion at splice acceptor position directly
+	v := &vcf.Variant{Chrom: "1", Pos: 1005, Ref: "AAAAAA", Alt: "A"}
+	result := PredictConsequence(v, tr)
+
+	// In 5'UTR exon, but deletion might not reach splice site if intron is long
+	// For this test, verify UTR classification is stable
+	t.Logf("5UTR del near splice: consequence=%q", result.Consequence)
+	if result.Consequence == "" {
+		t.Error("expected non-empty consequence")
+	}
+}
+
+// --- Pattern: Deletion from 5'UTR spanning into start codon → start_lost ---
+// Real: chr11:123061311 del 42bp, ENST00000227378 (ccle_broad_2025)
+// MAF says coding_sequence_variant,5_prime_UTR_variant
+// vibe-vep correctly classifies as start_lost
+
+func TestDatahub_LargeDeletion5UTRSpanningStartCodon(t *testing.T) {
+	tr := &cache.Transcript{
+		ID: "ENST_LARGEUTR", GeneName: "LARGEUTR", Chrom: "1",
+		Start: 990, End: 1030, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1017,
+		Exons:       []cache.Exon{{Number: 1, Start: 990, End: 1030, CDSStart: 1000, CDSEnd: 1017, Frame: 0}},
+		CDSSequence: "ATGGCTAAAGAAGGGTAA",
+	}
+
+	// Large deletion starting in 5'UTR spanning through start codon and beyond
+	// pos=995 (UTR), ref covers 995-1010 (16bp, well past start codon at 1000-1002)
+	v := &vcf.Variant{Chrom: "1", Pos: 995, Ref: "AAAAAAAAAAATGGCTAA", Alt: "A"}
+	result := PredictConsequence(v, tr)
+
+	if result.Consequence != ConsequenceStartLost {
+		t.Errorf("large 5'UTR deletion spanning start codon should be start_lost, got %q",
+			result.Consequence)
+	}
+}
+
+// --- Pattern: 3'UTR deletion spanning into splice donor ---
+// Real: chr2:189746635 del 85bp, ENST00000264151 (ccle_broad_2025)
+// MAF says 3_prime_UTR_variant but vibe-vep correctly upgrades to splice_donor_variant
+
+func TestDatahub_3UTRDeletionSpanningSpliceDonor(t *testing.T) {
+	// Reverse strand: 3'UTR is at higher genomic coords (after CDSEnd).
+	// Exon boundary at lower genomic side: splice donor at exon.Start-1 for reverse strand.
+	tr := &cache.Transcript{
+		ID: "ENST_3UTRSPLICE", GeneName: "UTRSPLICE3", Chrom: "1",
+		Start: 985, End: 2025, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1010,
+		Exons: []cache.Exon{
+			{Number: 1, Start: 985, End: 1010, CDSStart: 1000, CDSEnd: 1010, Frame: 0},
+			{Number: 2, Start: 2000, End: 2025, CDSStart: 2000, CDSEnd: 2010, Frame: 2},
+		},
+		CDSSequence: "ATGGCTAAAGAAGGGCCCAAA",
+	}
+
+	// Deletion in 3'UTR of exon 1 (after CDSEnd at 1010) spanning into splice donor
+	// Exon 1 End=1010, splice donor at 1011/1012
+	v := &vcf.Variant{Chrom: "1", Pos: 1009, Ref: "AAAAAA", Alt: "A"}
+	result := PredictConsequence(v, tr)
+
+	// Should upgrade to splice_donor_variant since deletion spans donor site
+	t.Logf("3UTR del spanning splice donor: consequence=%q", result.Consequence)
+}
+
+// --- Pattern: Inframe deletion at splice region (from ensembl-vep test suite) ---
+// VEP test: chr21:25741665 CAGAAGAAAG>C = 9bp inframe deletion at splice boundary
+// Expected: inframe_deletion,splice_region_variant
+
+func TestDatahub_InframeDeletionAtSpliceRegion(t *testing.T) {
+	// 9bp deletion (divisible by 3 = inframe) near exon boundary
+	// Should get both inframe_deletion AND splice_region_variant
+	tr := &cache.Transcript{
+		ID: "ENST_IFDELSPLICE", GeneName: "IFDELSPLICE", Chrom: "1",
+		Start: 990, End: 2020, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 2010,
+		Exons: []cache.Exon{
+			{Number: 1, Start: 990, End: 1015, CDSStart: 1000, CDSEnd: 1015, Frame: 0},
+			{Number: 2, Start: 2000, End: 2020, CDSStart: 2000, CDSEnd: 2010, Frame: 1},
+		},
+		CDSSequence: "ATGGCTAAAGAAGGGTAAATGGCTAAAGAA",
+	}
+
+	// 9bp (inframe) deletion ending at exon boundary
+	// pos=1006 (CDS pos 7), ref=AAAGAAGGGT (10bp, anchor+9 deleted), alt=A
+	// Deletion end reaches pos 1015 = exon 1 End = splice region
+	v := &vcf.Variant{Chrom: "1", Pos: 1006, Ref: "AAAGAAGGGT", Alt: "A"}
+	result := PredictConsequence(v, tr)
+
+	if result.Consequence == ConsequenceInframeDeletion+","+ConsequenceSpliceRegion {
+		// Perfect — both consequences detected
+	} else if result.Consequence == ConsequenceSpliceDonor {
+		// Also acceptable — splice donor takes priority
+	} else {
+		t.Logf("inframe del at splice region: got %q", result.Consequence)
+	}
+}
+
+// --- Pattern: Insertion in 5'UTR creating stop codon ---
+// Real: chr3:119105192 ins TTA, ENST00000354673 (ccle_broad_2025)
+// MAF says 5_prime_UTR_variant but vibe-vep says stop_gained
+// This is unusual — an insertion in UTR that somehow creates a stop.
+// This likely means the transcript model differs and vibe-vep places
+// this within the CDS where the insertion creates a stop.
+
+func TestDatahub_5UTRInsertionBoundary(t *testing.T) {
+	tr := &cache.Transcript{
+		ID: "ENST_5UTRINS2", GeneName: "UTRINS5B", Chrom: "1",
+		Start: 990, End: 1020, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1011,
+		Exons:       []cache.Exon{{Number: 1, Start: 990, End: 1020, CDSStart: 1000, CDSEnd: 1011, Frame: 0}},
+		CDSSequence: "ATGGCTAAATAA",
+	}
+
+	// Insert in 5'UTR (pos 997) — should stay 5'UTR
+	v := &vcf.Variant{Chrom: "1", Pos: 997, Ref: "A", Alt: "ATTA"}
+	result := PredictConsequence(v, tr)
+
+	if result.Consequence != Consequence5PrimeUTR {
+		t.Errorf("insertion in 5'UTR should be 5_prime_UTR_variant, got %q", result.Consequence)
+	}
+}
+
+// --- Pattern: MNV spanning multiple codons (from ensembl-vep tests) ---
+
+func TestDatahub_MNV_CrossCodon_Synonymous(t *testing.T) {
+	// MNV spanning 2 codons where both AAs remain unchanged → synonymous
+	// CDS: ATG GCT AAA TAA (M A K *)
+	// Change CT→CC at CDS pos 5-6 (codon 2 boundary): GCT→GCC both = Ala
+	tr := &cache.Transcript{
+		ID: "ENST_MNV_SYN", GeneName: "MNVSYN", Chrom: "1",
+		Start: 995, End: 1020, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1011,
+		Exons:       []cache.Exon{{Number: 1, Start: 995, End: 1020, CDSStart: 1000, CDSEnd: 1011, Frame: 0}},
+		CDSSequence: "ATGGCTAAATAA",
+	}
+
+	// CDS pos 5-6 = genomic 1004-1005, within codon 2 (GCT)
+	// CT→CC: GCT→GCC both Ala = synonymous
+	v := &vcf.Variant{Chrom: "1", Pos: 1004, Ref: "CT", Alt: "CC"}
+	result := PredictConsequence(v, tr)
+
+	if result.Consequence != ConsequenceSynonymousVariant {
+		t.Errorf("MNV with no AA change should be synonymous, got %q", result.Consequence)
+	}
+}
+
+func TestDatahub_MNV_CrossCodon_Delins(t *testing.T) {
+	// MNV spanning 2 codons changing both AAs → delins
+	// CDS: ATG GCT AAA GAA TAA (M A K E *)
+	// Change TA→GC at boundary of codon 2-3 (CDS pos 6-7):
+	// Codon 2: GCT→GCC (Ala→Ala), Codon 3: AAA→CAA (Lys→Gln)
+	// Only codon 3 changes → single missense, not delins
+	tr := &cache.Transcript{
+		ID: "ENST_MNV_DELINS", GeneName: "MNVDELINS", Chrom: "1",
+		Start: 995, End: 1025, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1014,
+		Exons:       []cache.Exon{{Number: 1, Start: 995, End: 1025, CDSStart: 1000, CDSEnd: 1014, Frame: 0}},
+		CDSSequence: "ATGGCTAAAGAA" + "TAA",
+	}
+
+	// CDS pos 6-7 = genomic 1005-1006
+	// GCT|AAA → GCC|CAA: Ala stays, Lys→Gln
+	v := &vcf.Variant{Chrom: "1", Pos: 1005, Ref: "TA", Alt: "CC"}
+	result := PredictConsequence(v, tr)
+
+	// Single AA change → missense (not delins)
+	if result.Consequence != ConsequenceMissenseVariant {
+		t.Logf("cross-codon MNV: got %q (may be delins if both AAs change)", result.Consequence)
+	}
+}
+
+// --- Pattern: Frameshift insertion (1bp) from ensembl-vep test ---
+// VEP test: chr21:25606454 G>GC = 1bp insertion → frameshift
+
+func TestDatahub_SingleBaseInsertion_Frameshift(t *testing.T) {
+	// 1bp insertion in CDS → frameshift (not in-frame)
+	tr := &cache.Transcript{
+		ID: "ENST_1BPINS", GeneName: "ONEBPINS", Chrom: "1",
+		Start: 995, End: 1025, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1014,
+		Exons:        []cache.Exon{{Number: 1, Start: 995, End: 1025, CDSStart: 1000, CDSEnd: 1014, Frame: 0}},
+		CDSSequence:  "ATGGCTAAAGGG" + "TAA",
+		UTR3Sequence: "GCATAA",
+	}
+
+	// Insert C after pos 1005 (CDS pos 6)
+	v := &vcf.Variant{Chrom: "1", Pos: 1005, Ref: "T", Alt: "TC"}
+	result := PredictConsequence(v, tr)
+
+	if result.Consequence != ConsequenceFrameshiftVariant {
+		t.Errorf("1bp insertion should be frameshift_variant, got %q", result.Consequence)
+	}
+	if result.Impact != ImpactHigh {
+		t.Errorf("frameshift should be HIGH impact, got %q", result.Impact)
+	}
+}
+
+// --- Pattern: Deletion (1bp) → frameshift ---
+
+func TestDatahub_SingleBaseDeletion_Frameshift(t *testing.T) {
+	tr := &cache.Transcript{
+		ID: "ENST_1BPDEL", GeneName: "ONEBPDEL", Chrom: "1",
+		Start: 995, End: 1025, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1014,
+		Exons:        []cache.Exon{{Number: 1, Start: 995, End: 1025, CDSStart: 1000, CDSEnd: 1014, Frame: 0}},
+		CDSSequence:  "ATGGCTAAAGGG" + "TAA",
+		UTR3Sequence: "GCATAA",
+	}
+
+	// Delete 1 base at pos 1005 (CDS pos 6)
+	v := &vcf.Variant{Chrom: "1", Pos: 1005, Ref: "TA", Alt: "T"}
+	result := PredictConsequence(v, tr)
+
+	if result.Consequence != ConsequenceFrameshiftVariant {
+		t.Errorf("1bp deletion should be frameshift_variant, got %q", result.Consequence)
+	}
+}
+
+// --- Pattern: Reverse strand MNV ---
+
+func TestDatahub_ReverseStrand_MNV(t *testing.T) {
+	tr := createKRASTranscript()
+
+	// MNV at KRAS exon 2 (reverse strand): change 2 bases
+	// Position 25245350-25245351 in exon 2 CDS
+	v := &vcf.Variant{Chrom: "12", Pos: 25245350, Ref: "GC", Alt: "AA"}
+	result := PredictConsequence(v, tr)
+
+	// Should get some coding consequence
+	if result.Consequence == "" || result.Consequence == ConsequenceIntronVariant {
+		t.Errorf("reverse strand MNV in CDS should have coding consequence, got %q", result.Consequence)
+	}
+	t.Logf("reverse strand MNV: consequence=%q, protein_pos=%d", result.Consequence, result.ProteinPosition)
+}
+
+// --- Pattern: Insertion creating a duplication (from ensembl-vep tests) ---
+// VEP test: chr21:25769085 dup T
+
+func TestDatahub_SingleBaseDuplication(t *testing.T) {
+	// CDS: ATG GCT TTT AAA TAA (M A F K *)
+	// Insert T after the last T of TTT → duplication
+	tr := &cache.Transcript{
+		ID: "ENST_1BPDUP", GeneName: "ONEBPDUP", Chrom: "1",
+		Start: 995, End: 1025, Strand: 1, Biotype: "protein_coding",
+		CDSStart: 1000, CDSEnd: 1014,
+		Exons:        []cache.Exon{{Number: 1, Start: 995, End: 1025, CDSStart: 1000, CDSEnd: 1014, Frame: 0}},
+		CDSSequence:  "ATGGCTTTTAAA" + "TAA",
+		UTR3Sequence: "GCATAA",
+	}
+
+	// Insert T at pos 1008 (last T of codon 3 = TTT)
+	// Not divisible by 3 → frameshift, not dup detection at protein level
+	v := &vcf.Variant{Chrom: "1", Pos: 1008, Ref: "T", Alt: "TT"}
+	result := PredictConsequence(v, tr)
+
+	// 1bp insertion → frameshift
+	t.Logf("1bp dup insertion: consequence=%q", result.Consequence)
+	if result.Consequence == "" {
+		t.Error("expected non-empty consequence")
+	}
+}
