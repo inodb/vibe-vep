@@ -748,12 +748,23 @@ func benchmarkParallel(t *testing.T, mafFile string, ann *annotate.Annotator, wo
 func writeReport(t *testing.T, path string, results []studyResult, transcriptCount int, cacheDuration time.Duration, loadSource string, cgl oncokb.CancerGeneList, assembly string) {
 	t.Helper()
 
+	sys := getSystemInfo()
+
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("# %s Validation Report\n\n", assembly))
 	sb.WriteString(fmt.Sprintf("Generated: %s  \n", time.Now().UTC().Format("2006-01-02 15:04 UTC")))
 	sb.WriteString(fmt.Sprintf("Assembly: %s  \n", assembly))
 	sb.WriteString(fmt.Sprintf("GENCODE transcripts: %d (loaded from %s in %s)  \n", transcriptCount, loadSource, cacheDuration.Round(time.Millisecond)))
-	sb.WriteString(fmt.Sprintf("Workers: %d (GOMAXPROCS)\n\n", runtime.NumCPU()))
+	sb.WriteString(fmt.Sprintf("Workers: %d (GOMAXPROCS)  \n", runtime.NumCPU()))
+	sb.WriteString(fmt.Sprintf("Studies: %d\n\n", len(results)))
+	sb.WriteString("## System\n\n")
+	sb.WriteString(fmt.Sprintf("| | |\n|---|---|\n"))
+	sb.WriteString(fmt.Sprintf("| CPU | %s |\n", sys.CPU))
+	sb.WriteString(fmt.Sprintf("| Cores | %d |\n", sys.Cores))
+	sb.WriteString(fmt.Sprintf("| Memory | %s |\n", sys.Memory))
+	sb.WriteString(fmt.Sprintf("| OS | %s |\n", sys.OS))
+	sb.WriteString(fmt.Sprintf("| Kernel | %s |\n", sys.Kernel))
+	sb.WriteString(fmt.Sprintf("| Go | %s |\n\n", sys.GoVer))
 
 	// Match rates table (consequence + HGVSp + HGVSc)
 	sb.WriteString("## Match Rates\n\n")
@@ -947,6 +958,79 @@ type reportMeta struct {
 	LoadSource      string
 }
 
+// systemInfo collects hardware and OS information for benchmark reports.
+type systemInfo struct {
+	CPU    string `json:"cpu"`
+	Cores  int    `json:"cores"`
+	Memory string `json:"memory"`
+	OS     string `json:"os"`
+	Kernel string `json:"kernel"`
+	GoVer  string `json:"go_version"`
+}
+
+func getSystemInfo() systemInfo {
+	info := systemInfo{
+		Cores: runtime.NumCPU(),
+		GoVer: runtime.Version(),
+	}
+
+	// CPU model
+	if data, err := os.ReadFile("/proc/cpuinfo"); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(line, "model name") {
+				parts := strings.SplitN(line, ":", 2)
+				if len(parts) == 2 {
+					info.CPU = strings.TrimSpace(parts[1])
+					break
+				}
+			}
+		}
+	}
+	if info.CPU == "" {
+		info.CPU = runtime.GOARCH
+	}
+
+	// Memory
+	if data, err := os.ReadFile("/proc/meminfo"); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(line, "MemTotal:") {
+				parts := strings.Fields(line)
+				if len(parts) >= 2 {
+					var kb int64
+					if _, err := fmt.Sscanf(parts[1], "%d", &kb); err == nil {
+						gb := float64(kb) / 1024 / 1024
+						info.Memory = fmt.Sprintf("%.0f GB", gb)
+					} else {
+						info.Memory = parts[1] + " kB"
+					}
+				}
+				break
+			}
+		}
+	}
+
+	// OS
+	if data, err := os.ReadFile("/etc/os-release"); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(line, "PRETTY_NAME=") {
+				info.OS = strings.Trim(strings.TrimPrefix(line, "PRETTY_NAME="), "\"")
+				break
+			}
+		}
+	}
+
+	// Kernel
+	info.Kernel = runtime.GOOS + "/" + runtime.GOARCH
+	if data, err := os.ReadFile("/proc/version"); err == nil {
+		fields := strings.Fields(string(data))
+		if len(fields) >= 3 {
+			info.Kernel = fields[2]
+		}
+	}
+
+	return info
+}
+
 // findDocsDataPath locates the docs/data directory relative to the test file
 // and returns the full path for the given filename.
 func findDocsDataPath(t *testing.T, filename string) string {
@@ -979,6 +1063,8 @@ type reportJSON struct {
 	LoadSource         string                  `json:"load_source"`
 	LoadDuration       string                  `json:"load_duration"`
 	Workers            int                     `json:"workers"`
+	Studies            int                     `json:"studies"`
+	System             *systemInfo             `json:"system,omitempty"`
 	MatchRates         reportTable             `json:"match_rates"`
 	CategoryBreakdowns map[string]reportTable   `json:"category_breakdowns"`
 	CancerGenes        *reportCancerGenes      `json:"cancer_genes,omitempty"`
@@ -996,6 +1082,7 @@ type reportCancerGenes struct {
 func writeReportJSON(t *testing.T, path string, results []studyResult, meta reportMeta, cgl oncokb.CancerGeneList) {
 	t.Helper()
 
+	sys := getSystemInfo()
 	report := reportJSON{
 		Assembly:     meta.Assembly,
 		Generated:    time.Now().UTC().Format("2006-01-02 15:04 UTC"),
@@ -1003,6 +1090,8 @@ func writeReportJSON(t *testing.T, path string, results []studyResult, meta repo
 		LoadSource:   meta.LoadSource,
 		LoadDuration: meta.CacheDuration.Round(time.Millisecond).String(),
 		Workers:      runtime.NumCPU(),
+		Studies:      len(results),
+		System:       &sys,
 	}
 
 	// Match rates table
