@@ -24,7 +24,7 @@ type sourcesCtx struct {
 }
 
 // TestAnnotationSourcesBenchmark runs annotation source coverage and performance benchmarks
-// against all TCGA MAF files and generates testdata/tcga/annotation_sources_report.md.
+// against datahub GDC MAF files and generates testdata/datahub_gdc/annotation_sources_report.md.
 //
 // Skipped with -short. Run with:
 //
@@ -34,16 +34,22 @@ func TestAnnotationSourcesBenchmark(t *testing.T) {
 		t.Skip("skipping annotation sources benchmark in short mode")
 	}
 
-	// Find TCGA MAF files.
-	tcgaDir := findStudyDir(t, "tcga")
-	mafFiles, err := filepath.Glob(filepath.Join(tcgaDir, "*_data_mutations.txt"))
-	if err != nil {
-		t.Fatalf("glob MAF files: %v", err)
+	// Find datahub GDC MAF files (preferred), fall back to TCGA.
+	studyDir := ""
+	for _, dir := range []string{"datahub_gdc", "tcga"} {
+		d := findStudyDir(t, dir)
+		mafFiles, err := filepath.Glob(filepath.Join(d, "*_data_mutations.txt"))
+		if err == nil && len(mafFiles) > 0 {
+			studyDir = d
+			break
+		}
 	}
-	if len(mafFiles) == 0 {
-		t.Skip("no TCGA MAF files found in", tcgaDir)
+	if studyDir == "" {
+		t.Skip("no MAF files found in datahub_gdc or tcga")
 	}
+	mafFiles, _ := filepath.Glob(filepath.Join(studyDir, "*_data_mutations.txt"))
 	sort.Strings(mafFiles)
+	t.Logf("found %d MAF files in %s", len(mafFiles), studyDir)
 
 	// Load GENCODE cache.
 	gtfPath, fastaPath, canonicalPath := findGENCODEFiles(t, "GRCh38")
@@ -104,7 +110,7 @@ func TestAnnotationSourcesBenchmark(t *testing.T) {
 	}
 
 	// Write report.
-	reportPath := filepath.Join(tcgaDir, "annotation_sources_report.md")
+	reportPath := filepath.Join(studyDir, "annotation_sources_report.md")
 	writeAnnotationSourcesReport(t, reportPath, results, c.TranscriptCount(), &ctx)
 }
 
@@ -141,6 +147,12 @@ func benchmarkStudy(t *testing.T, mafFile string, c *cache.Cache, ctx *sourcesCt
 		cvHits        int
 		cvSigCounts   = make(map[string]int)
 		sigHits       int
+		gnomadHits    int
+		siftHits      int
+		siftPredCounts = make(map[string]int)
+		pp2Hits       int
+		pp2PredCounts = make(map[string]int)
+		dbsnpHits     int
 	)
 	seenMissense := make(map[lookupKey]bool)
 
@@ -198,6 +210,32 @@ func benchmarkStudy(t *testing.T, mafFile string, c *cache.Cache, ctx *sourcesCt
 				if r.SigMutStatus != "" {
 					sigHits++
 				}
+
+				// Track gnomAD metrics.
+				if r.GnomadAF != "" {
+					gnomadHits++
+				}
+
+				// Track SIFT metrics (missense-relevant).
+				if r.SiftScore > 0 || r.SiftPred != "" {
+					siftHits++
+					if r.SiftPred != "" {
+						siftPredCounts[r.SiftPred]++
+					}
+				}
+
+				// Track PolyPhen-2 metrics (missense-relevant).
+				if r.PP2Score > 0 || r.PP2Pred != "" {
+					pp2Hits++
+					if r.PP2Pred != "" {
+						pp2PredCounts[r.PP2Pred]++
+					}
+				}
+
+				// Track dbSNP metrics.
+				if r.DbSnpID != "" {
+					dbsnpHits++
+				}
 			}
 		}
 
@@ -248,39 +286,53 @@ func benchmarkStudy(t *testing.T, mafFile string, c *cache.Cache, ctx *sourcesCt
 	if ctx.hsStore != nil {
 		t.Logf("  hotspots: %d checked, %d hits", hsChecked, hsHits)
 	}
-	t.Logf("  ClinVar: %d hits out of %d variants", cvHits, totalVariants)
-	t.Logf("  SIGNAL: %d hits out of %d variants (GRCh37 coords)", sigHits, totalVariants)
+	t.Logf("  ClinVar: %d hits, gnomAD: %d hits, SIGNAL: %d hits",
+		cvHits, gnomadHits, sigHits)
+	t.Logf("  SIFT: %d hits, PolyPhen-2: %d hits, dbSNP: %d hits",
+		siftHits, pp2Hits, dbsnpHits)
 
 	return sourceStudyResult{
-		variants:     totalVariants,
-		missense:     uniqueMissense,
-		amHits:       amHits,
-		classCounts:  classCounts,
-		baseTime:     baseTime,
-		giLookupTime: giLookupTime,
-		hsChecked:    hsChecked,
-		hsHits:       hsHits,
-		hsTypeCounts: hsTypeCounts,
-		cvHits:       cvHits,
-		cvSigCounts:  cvSigCounts,
-		sigHits:      sigHits,
+		variants:       totalVariants,
+		missense:       uniqueMissense,
+		amHits:         amHits,
+		classCounts:    classCounts,
+		baseTime:       baseTime,
+		giLookupTime:   giLookupTime,
+		hsChecked:      hsChecked,
+		hsHits:         hsHits,
+		hsTypeCounts:   hsTypeCounts,
+		cvHits:         cvHits,
+		cvSigCounts:    cvSigCounts,
+		sigHits:        sigHits,
+		gnomadHits:     gnomadHits,
+		siftHits:       siftHits,
+		siftPredCounts: siftPredCounts,
+		pp2Hits:        pp2Hits,
+		pp2PredCounts:  pp2PredCounts,
+		dbsnpHits:      dbsnpHits,
 	}
 }
 
 type sourceStudyResult struct {
-	name         string
-	variants     int
-	missense     int
-	amHits       int
-	classCounts  map[string]int
-	baseTime     time.Duration
-	giLookupTime time.Duration
-	hsChecked    int
-	hsHits       int
-	hsTypeCounts map[string]int
-	cvHits       int
-	cvSigCounts  map[string]int
-	sigHits      int
+	name           string
+	variants       int
+	missense       int
+	amHits         int
+	classCounts    map[string]int
+	baseTime       time.Duration
+	giLookupTime   time.Duration
+	hsChecked      int
+	hsHits         int
+	hsTypeCounts   map[string]int
+	cvHits         int
+	cvSigCounts    map[string]int
+	sigHits        int
+	gnomadHits     int
+	siftHits       int
+	siftPredCounts map[string]int
+	pp2Hits        int
+	pp2PredCounts  map[string]int
+	dbsnpHits      int
 }
 
 // isMissenseConsequence returns true if the consequence includes missense_variant.
@@ -313,13 +365,43 @@ func writeAnnotationSourcesReport(t *testing.T, path string, results []sourceStu
 	}
 	sb.WriteString(fmt.Sprintf("Workers: %d (GOMAXPROCS)\n\n", runtime.NumCPU()))
 
+	// Compute totals.
+	var totVariants, totMissense, totAMHits int
+	var totCVHits, totSigHits, totGnomadHits int
+	var totSiftHits, totPP2Hits, totDbsnpHits int
+	totClass := make(map[string]int)
+	totCVSig := make(map[string]int)
+	totSiftPred := make(map[string]int)
+	totPP2Pred := make(map[string]int)
+	for _, r := range results {
+		totVariants += r.variants
+		totMissense += r.missense
+		totAMHits += r.amHits
+		totCVHits += r.cvHits
+		totSigHits += r.sigHits
+		totGnomadHits += r.gnomadHits
+		totSiftHits += r.siftHits
+		totPP2Hits += r.pp2Hits
+		totDbsnpHits += r.dbsnpHits
+		for k, v := range r.classCounts {
+			totClass[k] += v
+		}
+		for k, v := range r.cvSigCounts {
+			totCVSig[k] += v
+		}
+		for k, v := range r.siftPredCounts {
+			totSiftPred[k] += v
+		}
+		for k, v := range r.pp2PredCounts {
+			totPP2Pred[k] += v
+		}
+	}
+
 	// --- AlphaMissense Coverage ---
 	sb.WriteString("## AlphaMissense Coverage\n\n")
 	sb.WriteString("| Study | Variants | Missense | AM Hits | Coverage | likely_benign | ambiguous | likely_pathogenic |\n")
 	sb.WriteString("|-------|----------|----------|---------|----------|---------------|-----------|-------------------|\n")
 
-	var totVariants, totMissense, totAMHits int
-	totClass := make(map[string]int)
 	for _, r := range results {
 		coverage := 0.0
 		if r.missense > 0 {
@@ -330,12 +412,6 @@ func writeAnnotationSourcesReport(t *testing.T, path string, results []sourceStu
 			r.classCounts["likely_benign"],
 			r.classCounts["ambiguous"],
 			r.classCounts["likely_pathogenic"]))
-		totVariants += r.variants
-		totMissense += r.missense
-		totAMHits += r.amHits
-		for cls, n := range r.classCounts {
-			totClass[cls] += n
-		}
 	}
 	totCoverage := 0.0
 	if totMissense > 0 {
@@ -389,8 +465,6 @@ func writeAnnotationSourcesReport(t *testing.T, path string, results []sourceStu
 	sb.WriteString("| Study | Variants | ClinVar Hits | Hit Rate | Pathogenic | Likely_pathogenic | Uncertain | Benign | Likely_benign | Other |\n")
 	sb.WriteString("|-------|----------|--------------|----------|------------|-------------------|-----------|--------|---------------|-------|\n")
 
-	var totCVHits int
-	totCVSig := make(map[string]int)
 	for _, r := range results {
 		hitRate := 0.0
 		if r.variants > 0 {
@@ -408,10 +482,6 @@ func writeAnnotationSourcesReport(t *testing.T, path string, results []sourceStu
 			r.cvSigCounts["Benign"],
 			r.cvSigCounts["Likely_benign"],
 			other))
-		totCVHits += r.cvHits
-		for sig, n := range r.cvSigCounts {
-			totCVSig[sig] += n
-		}
 	}
 	totCVRate := 0.0
 	if totVariants > 0 {
@@ -430,13 +500,102 @@ func writeAnnotationSourcesReport(t *testing.T, path string, results []sourceStu
 		totCVSig["Likely_benign"],
 		totOther))
 
+	// --- gnomAD Coverage ---
+	sb.WriteString("## gnomAD Coverage\n\n")
+	sb.WriteString("| Study | Variants | gnomAD Hits | Hit Rate |\n")
+	sb.WriteString("|-------|----------|-------------|----------|\n")
+
+	for _, r := range results {
+		hitRate := 0.0
+		if r.variants > 0 {
+			hitRate = float64(r.gnomadHits) / float64(r.variants) * 100
+		}
+		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %.2f%% |\n",
+			r.name, r.variants, r.gnomadHits, hitRate))
+	}
+	totGnomadRate := 0.0
+	if totVariants > 0 {
+		totGnomadRate = float64(totGnomadHits) / float64(totVariants) * 100
+	}
+	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%.2f%%** |\n\n",
+		totVariants, totGnomadHits, totGnomadRate))
+
+	// --- SIFT Coverage ---
+	sb.WriteString("## SIFT Coverage\n\n")
+	sb.WriteString("| Study | Variants | SIFT Hits | Hit Rate | deleterious | tolerated |\n")
+	sb.WriteString("|-------|----------|-----------|----------|-------------|----------|\n")
+
+	for _, r := range results {
+		hitRate := 0.0
+		if r.variants > 0 {
+			hitRate = float64(r.siftHits) / float64(r.variants) * 100
+		}
+		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %.2f%% | %d | %d |\n",
+			r.name, r.variants, r.siftHits, hitRate,
+			r.siftPredCounts["deleterious"],
+			r.siftPredCounts["tolerated"]))
+	}
+	totSiftRate := 0.0
+	if totVariants > 0 {
+		totSiftRate = float64(totSiftHits) / float64(totVariants) * 100
+	}
+	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%.2f%%** | **%d** | **%d** |\n\n",
+		totVariants, totSiftHits, totSiftRate,
+		totSiftPred["deleterious"],
+		totSiftPred["tolerated"]))
+
+	// --- PolyPhen-2 Coverage ---
+	sb.WriteString("## PolyPhen-2 Coverage\n\n")
+	sb.WriteString("| Study | Variants | PP2 Hits | Hit Rate | deleterious | possibly_damaging | benign |\n")
+	sb.WriteString("|-------|----------|----------|----------|-------------|-------------------|--------|\n")
+
+	for _, r := range results {
+		hitRate := 0.0
+		if r.variants > 0 {
+			hitRate = float64(r.pp2Hits) / float64(r.variants) * 100
+		}
+		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %.2f%% | %d | %d | %d |\n",
+			r.name, r.variants, r.pp2Hits, hitRate,
+			r.pp2PredCounts["deleterious"],
+			r.pp2PredCounts["possibly_damaging"],
+			r.pp2PredCounts["benign"]))
+	}
+	totPP2Rate := 0.0
+	if totVariants > 0 {
+		totPP2Rate = float64(totPP2Hits) / float64(totVariants) * 100
+	}
+	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%.2f%%** | **%d** | **%d** | **%d** |\n\n",
+		totVariants, totPP2Hits, totPP2Rate,
+		totPP2Pred["deleterious"],
+		totPP2Pred["possibly_damaging"],
+		totPP2Pred["benign"]))
+
+	// --- dbSNP Coverage ---
+	sb.WriteString("## dbSNP Coverage\n\n")
+	sb.WriteString("| Study | Variants | dbSNP Hits | Hit Rate |\n")
+	sb.WriteString("|-------|----------|------------|----------|\n")
+
+	for _, r := range results {
+		hitRate := 0.0
+		if r.variants > 0 {
+			hitRate = float64(r.dbsnpHits) / float64(r.variants) * 100
+		}
+		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %.2f%% |\n",
+			r.name, r.variants, r.dbsnpHits, hitRate))
+	}
+	totDbsnpRate := 0.0
+	if totVariants > 0 {
+		totDbsnpRate = float64(totDbsnpHits) / float64(totVariants) * 100
+	}
+	sb.WriteString(fmt.Sprintf("| **Total** | **%d** | **%d** | **%.2f%%** |\n\n",
+		totVariants, totDbsnpHits, totDbsnpRate))
+
 	// --- SIGNAL Coverage ---
 	sb.WriteString("## SIGNAL Coverage\n\n")
 	sb.WriteString("*Note: SIGNAL data uses GRCh37 coordinates. TCGA GDC MAFs use GRCh38, so few hits are expected.*\n\n")
 	sb.WriteString("| Study | Variants | SIGNAL Hits | Hit Rate |\n")
 	sb.WriteString("|-------|----------|-------------|----------|\n")
 
-	var totSigHits int
 	for _, r := range results {
 		hitRate := 0.0
 		if r.variants > 0 {
@@ -444,7 +603,6 @@ func writeAnnotationSourcesReport(t *testing.T, path string, results []sourceStu
 		}
 		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %.2f%% |\n",
 			r.name, r.variants, r.sigHits, hitRate))
-		totSigHits += r.sigHits
 	}
 	totSigRate := 0.0
 	if totVariants > 0 {
