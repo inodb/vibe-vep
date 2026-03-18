@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/inodb/vibe-vep/internal/datasource/clinvar"
+	"github.com/inodb/vibe-vep/internal/datasource/dbnsfp"
+	"github.com/inodb/vibe-vep/internal/datasource/dbsnp"
 	"github.com/inodb/vibe-vep/internal/datasource/gnomad"
 	"github.com/inodb/vibe-vep/internal/datasource/signal"
 	_ "modernc.org/sqlite"
@@ -30,7 +32,8 @@ func Open(dbPath string) (*Store, error) {
 
 	ps, err := db.Prepare(`SELECT am_score, am_class, cv_clnsig, cv_revstat, cv_clndn,
 		sig_mut_status, sig_count, sig_freq,
-		gnomad_af, gnomad_ac, gnomad_an, gnomad_nhomalt, gnomad_version
+		gnomad_af, gnomad_ac, gnomad_an, gnomad_nhomalt, gnomad_version,
+		sift_score, sift_pred, pp2_score, pp2_pred, dbsnp_id
 		FROM genomic_annotations WHERE chrom=? AND pos=? AND ref=? AND alt=?`)
 	if err != nil {
 		db.Close()
@@ -47,6 +50,7 @@ func (s *Store) Lookup(chrom string, pos int64, ref, alt string) (Result, bool) 
 		&r.AMScore, &r.AMClass, &r.CVClnSig, &r.CVClnRevStat, &r.CVClnDN,
 		&r.SigMutStatus, &r.SigCount, &r.SigFreq,
 		&r.GnomadAF, &r.GnomadAC, &r.GnomadAN, &r.GnomadNhomalt, &r.GnomadVersion,
+		&r.SiftScore, &r.SiftPred, &r.PP2Score, &r.PP2Pred, &r.DbSnpID,
 	)
 	if err != nil {
 		return Result{}, false
@@ -77,7 +81,7 @@ func Ready(dbPath string, sources BuildSources) bool {
 
 	dbMod := dbInfo.ModTime()
 
-	for _, src := range []string{sources.AlphaMissenseTSV, sources.ClinVarVCF, sources.SignalTSV, sources.GnomadVCF} {
+	for _, src := range []string{sources.AlphaMissenseTSV, sources.ClinVarVCF, sources.SignalTSV, sources.GnomadVCF, sources.DbNSFPDir, sources.DbSnpVCF} {
 		if src == "" {
 			continue
 		}
@@ -161,6 +165,11 @@ func Build(dbPath string, sources BuildSources, logf func(string, ...any)) error
 		gnomad_an TEXT NOT NULL DEFAULT '',
 		gnomad_nhomalt TEXT NOT NULL DEFAULT '',
 		gnomad_version TEXT NOT NULL DEFAULT '',
+		sift_score REAL NOT NULL DEFAULT 0,
+		sift_pred TEXT NOT NULL DEFAULT '',
+		pp2_score REAL NOT NULL DEFAULT 0,
+		pp2_pred TEXT NOT NULL DEFAULT '',
+		dbsnp_id TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (chrom, pos, ref, alt)
 	) WITHOUT ROWID`); err != nil {
 		return fmt.Errorf("create table: %w", err)
@@ -211,6 +220,30 @@ func Build(dbPath string, sources BuildSources, logf func(string, ...any)) error
 				return fmt.Errorf("load gnomAD: %w", err)
 			}
 			logf("loaded %d gnomAD variants", n)
+		}
+	}
+
+	// 5. dbNSFP (SIFT + PolyPhen-2)
+	if sources.DbNSFPDir != "" {
+		if info, err := os.Stat(sources.DbNSFPDir); err == nil && info.IsDir() {
+			logf("loading dbNSFP from %s", sources.DbNSFPDir)
+			n, err := loadDbNSFP(db, sources.DbNSFPDir)
+			if err != nil {
+				return fmt.Errorf("load dbNSFP: %w", err)
+			}
+			logf("loaded %d dbNSFP variants", n)
+		}
+	}
+
+	// 6. dbSNP
+	if sources.DbSnpVCF != "" {
+		if _, err := os.Stat(sources.DbSnpVCF); err == nil {
+			logf("loading dbSNP from %s", sources.DbSnpVCF)
+			n, err := loadDbSNP(db, sources.DbSnpVCF)
+			if err != nil {
+				return fmt.Errorf("load dbSNP: %w", err)
+			}
+			logf("loaded %d dbSNP variants", n)
 		}
 	}
 
@@ -539,6 +572,163 @@ func loadGnomad(db *sql.DB, vcfPath, version string) (int64, error) {
 
 		if _, err := stmt.Exec(chrom, nPos, nRef, nAlt, afStr, acStr, anStr, nhomaltStr, version); err != nil {
 			return 0, fmt.Errorf("upsert gnomAD row: %w", err)
+		}
+		count++
+	}
+	if err := scanner.Err(); err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// loadDbNSFP parses per-chromosome dbNSFP TSV files and upserts SIFT + PolyPhen-2 columns.
+func loadDbNSFP(db *sql.DB, dirPath string) (int64, error) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return 0, err
+	}
+
+	var totalCount int64
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, "dbNSFP") || !strings.HasSuffix(name, ".gz") {
+			continue
+		}
+
+		filePath := dirPath + "/" + name
+		n, err := loadDbNSFPFile(db, filePath)
+		if err != nil {
+			return totalCount, fmt.Errorf("load %s: %w", name, err)
+		}
+		totalCount += n
+	}
+
+	return totalCount, nil
+}
+
+// loadDbNSFPFile parses a single gzipped dbNSFP TSV file.
+func loadDbNSFPFile(db *sql.DB, tsvPath string) (int64, error) {
+	f, err := os.Open(tsvPath)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return 0, err
+	}
+	defer gz.Close()
+
+	scanner := bufio.NewScanner(gz)
+	scanner.Buffer(make([]byte, 4*1024*1024), 4*1024*1024)
+
+	// Read header line.
+	if !scanner.Scan() {
+		return 0, fmt.Errorf("empty dbNSFP file")
+	}
+	header := strings.Split(scanner.Text(), "\t")
+	col := dbnsfp.IndexColumns(header,
+		dbnsfp.ColChrom, dbnsfp.ColPos, dbnsfp.ColRef, dbnsfp.ColAlt,
+		dbnsfp.ColSIFTScore, dbnsfp.ColSIFTPred, dbnsfp.ColPP2Score, dbnsfp.ColPP2Pred,
+	)
+
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`INSERT INTO genomic_annotations (chrom, pos, ref, alt, sift_score, sift_pred, pp2_score, pp2_pred)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(chrom, pos, ref, alt) DO UPDATE SET
+			sift_score=excluded.sift_score, sift_pred=excluded.sift_pred,
+			pp2_score=excluded.pp2_score, pp2_pred=excluded.pp2_pred`)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+
+	var count int64
+	for scanner.Scan() {
+		fields := strings.Split(scanner.Text(), "\t")
+		entries, chrom, ok := dbnsfp.ParseLine(fields, col)
+		if !ok {
+			continue
+		}
+
+		for _, e := range entries {
+			if _, err := stmt.Exec(chrom, e.Pos, e.Ref, e.Alt, e.SIFTScore, e.SIFTPred, e.PP2Score, e.PP2Pred); err != nil {
+				return 0, fmt.Errorf("upsert dbNSFP row: %w", err)
+			}
+			count++
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// loadDbSNP parses a gzipped dbSNP VCF and upserts RS IDs into the DB.
+func loadDbSNP(db *sql.DB, vcfPath string) (int64, error) {
+	f, err := os.Open(vcfPath)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	var scanner *bufio.Scanner
+	if strings.HasSuffix(vcfPath, ".gz") || strings.HasSuffix(vcfPath, ".bgz") {
+		gz, err := gzip.NewReader(f)
+		if err != nil {
+			return 0, err
+		}
+		defer gz.Close()
+		scanner = bufio.NewScanner(gz)
+	} else {
+		scanner = bufio.NewScanner(f)
+	}
+	scanner.Buffer(make([]byte, 4*1024*1024), 4*1024*1024)
+
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`INSERT INTO genomic_annotations (chrom, pos, ref, alt, dbsnp_id)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(chrom, pos, ref, alt) DO UPDATE SET
+			dbsnp_id=excluded.dbsnp_id`)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+
+	var count int64
+	for scanner.Scan() {
+		line := scanner.Text()
+		if len(line) == 0 || line[0] == '#' {
+			continue
+		}
+
+		entry, chrom, ok := dbsnp.ParseVCFLine(line)
+		if !ok {
+			continue
+		}
+
+		nPos, nRef, nAlt := NormalizeAlleles(entry.Pos, entry.Ref, entry.Alt)
+		if _, err := stmt.Exec(chrom, nPos, nRef, nAlt, entry.ID); err != nil {
+			return 0, fmt.Errorf("upsert dbSNP row: %w", err)
 		}
 		count++
 	}

@@ -85,8 +85,8 @@ testdata/
   - [x] ClinVar clinical significance
   - [x] Cancer Hotspots
   - [x] SIGNAL germline frequencies
-  - [ ] SIFT predictions
-  - [ ] PolyPhen-2 predictions
+  - [x] SIFT predictions
+  - [x] PolyPhen-2 predictions
   - [ ] gnomAD allele frequencies
 - [x] **Re-annotate datahub GDC studies**
 - [ ] **Replace genome-nexus-annotation-pipeline for datahub**

@@ -42,6 +42,11 @@ func setupTestDB(t *testing.T) string {
 		gnomad_an TEXT NOT NULL DEFAULT '',
 		gnomad_nhomalt TEXT NOT NULL DEFAULT '',
 		gnomad_version TEXT NOT NULL DEFAULT '',
+		sift_score REAL NOT NULL DEFAULT 0,
+		sift_pred TEXT NOT NULL DEFAULT '',
+		pp2_score REAL NOT NULL DEFAULT 0,
+		pp2_pred TEXT NOT NULL DEFAULT '',
+		dbsnp_id TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (chrom, pos, ref, alt)
 	) WITHOUT ROWID`)
 	if err != nil {
@@ -435,6 +440,9 @@ func TestLoadGnomad(t *testing.T) {
 		sig_mut_status TEXT NOT NULL DEFAULT '', sig_count TEXT NOT NULL DEFAULT '', sig_freq TEXT NOT NULL DEFAULT '',
 		gnomad_af TEXT NOT NULL DEFAULT '', gnomad_ac TEXT NOT NULL DEFAULT '', gnomad_an TEXT NOT NULL DEFAULT '',
 		gnomad_nhomalt TEXT NOT NULL DEFAULT '', gnomad_version TEXT NOT NULL DEFAULT '',
+		sift_score REAL NOT NULL DEFAULT 0, sift_pred TEXT NOT NULL DEFAULT '',
+		pp2_score REAL NOT NULL DEFAULT 0, pp2_pred TEXT NOT NULL DEFAULT '',
+		dbsnp_id TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (chrom, pos, ref, alt)
 	) WITHOUT ROWID`)
 	if err != nil {

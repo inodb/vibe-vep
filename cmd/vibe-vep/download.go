@@ -167,6 +167,16 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 		}
 	}
 
+	// Download dbSNP data if enabled in config
+	if viper.GetBool("annotations.dbsnp") {
+		dbsnpURL := getDbSnpURL(assembly)
+		dbsnpFile := filepath.Join(destDir, DbSnpFileName)
+		fmt.Printf("\ndbSNP annotation enabled in config, downloading...\n")
+		if err := downloadFile(dbsnpURL, dbsnpFile); err != nil {
+			logger.Warn("could not download dbSNP data", zap.Error(err))
+		}
+	}
+
 	fmt.Printf("\nDownload complete!\n")
 	fmt.Printf("To annotate variants, run:\n")
 	fmt.Printf("  vibe-vep annotate input.vcf\n")
@@ -279,6 +289,8 @@ func formatSize(bytes int64) string {
 const (
 	ClinVarFileName = "clinvar.vcf.gz"
 	SignalFileName  = "signaldb_all_variants_frequencies.txt"
+	DbNSFPDirName   = "dbnsfp"
+	DbSnpFileName   = "dbsnp.vcf.gz"
 )
 
 // GnomadFileName returns the expected filename for the given assembly.
@@ -309,6 +321,16 @@ func getAlphaMissenseURL(assembly string) string {
 // AlphaMissenseFileName returns the expected filename for the assembly.
 func AlphaMissenseFileName(assembly string) string {
 	return filepath.Base(getAlphaMissenseURL(assembly))
+}
+
+// getDbSnpURL returns the download URL for dbSNP VCF.
+func getDbSnpURL(assembly string) string {
+	switch strings.ToUpper(assembly) {
+	case "GRCH37":
+		return "https://ftp.ncbi.nih.gov/snp/latest_release/VCF/GCF_000001405.25.gz"
+	default:
+		return "https://ftp.ncbi.nih.gov/snp/latest_release/VCF/GCF_000001405.40.gz"
+	}
 }
 
 // getGnomadURL returns the download URL for gnomAD sites VCF.

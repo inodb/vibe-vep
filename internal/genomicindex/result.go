@@ -34,6 +34,11 @@ type Result struct {
 	GnomadAN     string
 	GnomadNhomalt string
 	GnomadVersion string
+	SiftScore    float32
+	SiftPred     string
+	PP2Score     float32
+	PP2Pred      string
+	DbSnpID      string
 }
 
 // BuildSources holds paths to the source data files for building the index.
@@ -43,4 +48,6 @@ type BuildSources struct {
 	SignalTSV        string // plain TSV (e.g. signaldb_all_variants_frequencies.txt)
 	GnomadVCF        string // gzipped VCF (e.g. gnomad.genomes.v4.1.sites.vcf.bgz)
 	GnomadVersion    string // version string (e.g. "4.1" or "2.1.1")
+	DbNSFPDir        string // directory containing per-chromosome dbNSFP TSV files
+	DbSnpVCF         string // gzipped VCF (e.g. GCF_000001405.40.gz)
 }

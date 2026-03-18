@@ -315,9 +315,10 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 		}
 	}
 
-	// Unified genomic index (AlphaMissense + ClinVar + SIGNAL + gnomAD)
+	// Unified genomic index (AlphaMissense + ClinVar + SIGNAL + gnomAD + SIFT + PolyPhen + dbSNP)
 	needGenomic := viper.GetBool("annotations.alphamissense") || viper.GetBool("annotations.clinvar") ||
-		(viper.GetBool("annotations.signal") && assembly == "grch37") || viper.GetBool("annotations.gnomad")
+		(viper.GetBool("annotations.signal") && assembly == "grch37") || viper.GetBool("annotations.gnomad") ||
+		viper.GetBool("annotations.sift") || viper.GetBool("annotations.polyphen") || viper.GetBool("annotations.dbsnp")
 	if needGenomic {
 		gs, err := loadGenomicIndex(logger, cacheDir, assembly)
 		if err != nil {
@@ -378,6 +379,8 @@ func genomicIndexSources(cacheDir, assembly string) genomicindex.BuildSources {
 		SignalTSV:        filepath.Join(cacheDir, SignalFileName),
 		GnomadVCF:        filepath.Join(cacheDir, GnomadFileName(assembly)),
 		GnomadVersion:    gnomadVersionForAssembly(assembly),
+		DbNSFPDir:        filepath.Join(cacheDir, DbNSFPDirName),
+		DbSnpVCF:         filepath.Join(cacheDir, DbSnpFileName),
 	}
 	return bs
 }
