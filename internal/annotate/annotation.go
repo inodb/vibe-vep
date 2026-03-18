@@ -74,6 +74,7 @@ type Annotation struct {
 	CDNAPosition    int64             // Position in cDNA
 	HGVSp           string            // HGVS protein notation (e.g., "p.Gly12Cys")
 	HGVSc           string            // HGVS coding DNA notation (e.g., "c.34G>T")
+	PeptideMD5      string            // MD5 hex of transcript protein sequence (for Ensembl predictions lookup)
 	Extra           map[string]string // Annotation source data, e.g. "alphamissense.score" → "0.9876"
 }
 

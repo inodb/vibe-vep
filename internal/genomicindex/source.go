@@ -23,10 +23,6 @@ const (
 	extraKeyGnomadAN     = "gnomad.an"
 	extraKeyGnomadNhomalt = "gnomad.nhomalt"
 	extraKeyGnomadVersion = "gnomad.version"
-	extraKeySiftScore     = "sift.score"
-	extraKeySiftPred      = "sift.prediction"
-	extraKeyPP2Score      = "polyphen.score"
-	extraKeyPP2Pred       = "polyphen.prediction"
 	extraKeyDbSnpID       = "dbsnp.id"
 )
 
@@ -65,12 +61,6 @@ func (s *GenomicSource) Columns() []annotate.ColumnDef {
 		{Name: "gnomad.an", Description: "gnomAD allele number (total alleles)"},
 		{Name: "gnomad.nhomalt", Description: "gnomAD number of homozygous alternate individuals"},
 		{Name: "gnomad.version", Description: "gnomAD data version"},
-		// SIFT
-		{Name: "sift.score", Description: "SIFT score (0-1, lower = more damaging)"},
-		{Name: "sift.prediction", Description: "SIFT prediction (deleterious/tolerated)"},
-		// PolyPhen-2
-		{Name: "polyphen.score", Description: "PolyPhen-2 HDIV score (0-1, higher = more damaging)"},
-		{Name: "polyphen.prediction", Description: "PolyPhen-2 HDIV prediction (deleterious/possibly_damaging/benign)"},
 		// dbSNP
 		{Name: "dbsnp.id", Description: "dbSNP RS identifier"},
 	}
@@ -92,8 +82,6 @@ func (s *GenomicSource) Annotate(v *vcf.Variant, anns []*annotate.Annotation) {
 	hasCV := r.CVClnSig != ""
 	hasSig := r.SigMutStatus != ""
 	hasGnomad := r.GnomadAF != ""
-	hasSift := r.SiftScore > 0 || r.SiftPred != ""
-	hasPP2 := r.PP2Score > 0 || r.PP2Pred != ""
 	hasDbSnp := r.DbSnpID != ""
 
 	for _, ann := range anns {
@@ -139,26 +127,6 @@ func (s *GenomicSource) Annotate(v *vcf.Variant, anns []*annotate.Annotation) {
 			}
 			if r.GnomadVersion != "" {
 				ann.SetExtraKey(extraKeyGnomadVersion, r.GnomadVersion)
-			}
-		}
-
-		// SIFT: missense only
-		if hasSift && isMissense(ann.Consequence) {
-			if r.SiftScore > 0 {
-				ann.SetExtraKey(extraKeySiftScore, formatScore(r.SiftScore))
-			}
-			if r.SiftPred != "" {
-				ann.SetExtraKey(extraKeySiftPred, r.SiftPred)
-			}
-		}
-
-		// PolyPhen-2: missense only
-		if hasPP2 && isMissense(ann.Consequence) {
-			if r.PP2Score > 0 {
-				ann.SetExtraKey(extraKeyPP2Score, formatScore(r.PP2Score))
-			}
-			if r.PP2Pred != "" {
-				ann.SetExtraKey(extraKeyPP2Pred, r.PP2Pred)
 			}
 		}
 

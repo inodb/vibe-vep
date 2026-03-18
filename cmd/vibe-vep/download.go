@@ -177,6 +177,15 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 		}
 	}
 
+	// Download Ensembl SIFT/PolyPhen predictions if enabled in config
+	if viper.GetBool("annotations.sift") || viper.GetBool("annotations.polyphen") {
+		predFile := filepath.Join(destDir, EnsemblPredFileName)
+		fmt.Printf("\nSIFT/PolyPhen annotation enabled in config, downloading Ensembl predictions (~12 GB)...\n")
+		if err := downloadFile(EnsemblPredURL, predFile); err != nil {
+			logger.Warn("could not download Ensembl SIFT/PolyPhen predictions", zap.Error(err))
+		}
+	}
+
 	fmt.Printf("\nDownload complete!\n")
 	fmt.Printf("To annotate variants, run:\n")
 	fmt.Printf("  vibe-vep annotate input.vcf\n")
@@ -287,10 +296,11 @@ func formatSize(bytes int64) string {
 
 // Annotation source data file names.
 const (
-	ClinVarFileName = "clinvar.vcf.gz"
-	SignalFileName  = "signaldb_all_variants_frequencies.txt"
-	DbNSFPDirName   = "dbnsfp"
-	DbSnpFileName   = "dbsnp.vcf.gz"
+	ClinVarFileName      = "clinvar.vcf.gz"
+	SignalFileName       = "signaldb_all_variants_frequencies.txt"
+	DbSnpFileName        = "dbsnp.vcf.gz"
+	EnsemblPredFileName  = "ensembl_sift_polyphen.db"
+	EnsemblPredURL       = "https://ftp.ensembl.org/pub/current_variation/pangenomes/Human/homo_sapiens_pangenome_PolyPhen_SIFT_20240502.db"
 )
 
 // GnomadFileName returns the expected filename for the given assembly.

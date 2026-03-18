@@ -13,6 +13,7 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/datasource/ensemblpred"
 	"github.com/inodb/vibe-vep/internal/datasource/gnomad"
 	"github.com/inodb/vibe-vep/internal/datasource/hotspots"
 	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
@@ -169,6 +170,9 @@ func (cr *cacheResult) closeSources() {
 		if gs, ok := src.(*genomicindex.GenomicSource); ok {
 			gs.Store().Close()
 		}
+		if ep, ok := src.(*ensemblpred.Source); ok {
+			ep.Store().Close()
+		}
 	}
 }
 
@@ -315,10 +319,10 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 		}
 	}
 
-	// Unified genomic index (AlphaMissense + ClinVar + SIGNAL + gnomAD + SIFT + PolyPhen + dbSNP)
+	// Unified genomic index (AlphaMissense + ClinVar + SIGNAL + gnomAD + dbSNP)
 	needGenomic := viper.GetBool("annotations.alphamissense") || viper.GetBool("annotations.clinvar") ||
 		(viper.GetBool("annotations.signal") && assembly == "grch37") || viper.GetBool("annotations.gnomad") ||
-		viper.GetBool("annotations.sift") || viper.GetBool("annotations.polyphen") || viper.GetBool("annotations.dbsnp")
+		viper.GetBool("annotations.dbsnp")
 	if needGenomic {
 		gs, err := loadGenomicIndex(logger, cacheDir, assembly)
 		if err != nil {
@@ -338,6 +342,19 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 		} else {
 			logger.Info("loaded cancer hotspots", zap.Int("transcripts", store.TranscriptCount()), zap.Int("hotspots", store.HotspotCount()))
 			sources = append(sources, hotspots.NewSource(store))
+		}
+	}
+
+	// Ensembl SIFT/PolyPhen-2 predictions (protein-level, assembly-independent)
+	if viper.GetBool("annotations.sift") || viper.GetBool("annotations.polyphen") {
+		predPath := filepath.Join(cacheDir, EnsemblPredFileName)
+		store, err := ensemblpred.Open(predPath)
+		if err != nil {
+			logger.Warn("could not load Ensembl SIFT/PolyPhen predictions (try: vibe-vep download)",
+				zap.String("path", predPath), zap.Error(err))
+		} else {
+			logger.Info("loaded Ensembl SIFT/PolyPhen predictions")
+			sources = append(sources, ensemblpred.NewSource(store))
 		}
 	}
 
@@ -379,7 +396,6 @@ func genomicIndexSources(cacheDir, assembly string) genomicindex.BuildSources {
 		SignalTSV:        filepath.Join(cacheDir, SignalFileName),
 		GnomadVCF:        filepath.Join(cacheDir, GnomadFileName(assembly)),
 		GnomadVersion:    gnomadVersionForAssembly(assembly),
-		DbNSFPDir:        filepath.Join(cacheDir, DbNSFPDirName),
 		DbSnpVCF:         filepath.Join(cacheDir, DbSnpFileName),
 	}
 	return bs

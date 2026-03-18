@@ -2,6 +2,8 @@
 package annotate
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"runtime"
 
@@ -98,6 +100,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 			CDNAPosition:    result.CDNAPosition,
 			HGVSp:           result.HGVSp,
 			HGVSc:           result.HGVSc,
+			PeptideMD5:      peptideMD5(t.ProteinSequence),
 		}
 
 		annotations = append(annotations, ann)
@@ -183,4 +186,14 @@ type AnnotationWriter interface {
 	WriteHeader() error
 	Write(v *vcf.Variant, ann *Annotation) error
 	Flush() error
+}
+
+// peptideMD5 returns the lowercase hex MD5 of a protein sequence.
+// Returns "" for empty sequences.
+func peptideMD5(seq string) string {
+	if seq == "" {
+		return ""
+	}
+	h := md5.Sum([]byte(seq))
+	return hex.EncodeToString(h[:])
 }

@@ -19,8 +19,8 @@ aliases:
 | **ClinVar** | Genomic (chr:pos:ref:alt) | GRCh38 | ~182 MB | Clinical significance from [ClinVar](https://www.ncbi.nlm.nih.gov/clinvar/) (4.1M variants) |
 | **Cancer Hotspots** | Protein position (transcript + AA pos) | Any | ~200 KB | Recurrent mutation hotspots from [cancerhotspots.org](https://www.cancerhotspots.org/) |
 | **SIGNAL** | Genomic (chr:pos:ref:alt) | GRCh37 only | ~32 MB | Germline mutation frequencies from [SIGNAL](https://signal.mutationalsignatures.com/) |
-| **SIFT** | Genomic (chr:pos:ref:alt) | GRCh38 | via dbNSFP | SIFT missense prediction scores (0-1, lower = more damaging) via [dbNSFP](https://sites.google.com/site/jpopgen/dbNSFP) |
-| **PolyPhen-2** | Genomic (chr:pos:ref:alt) | GRCh38 | via dbNSFP | PolyPhen-2 HDIV missense prediction scores (0-1, higher = more damaging) via [dbNSFP](https://sites.google.com/site/jpopgen/dbNSFP) |
+| **SIFT** | Protein (peptide MD5 + position) | Any | ~12 GB | SIFT missense prediction scores (0-1, lower = more damaging) via [Ensembl](https://ftp.ensembl.org/pub/current_variation/pangenomes/Human/) |
+| **PolyPhen-2** | Protein (peptide MD5 + position) | Any | ~12 GB | PolyPhen-2 HDIV missense prediction scores (0-1, higher = more damaging) via [Ensembl](https://ftp.ensembl.org/pub/current_variation/pangenomes/Human/) |
 | **dbSNP** | Genomic (chr:pos:ref:alt) | GRCh38 | ~17 GB | RS identifiers from [dbSNP](https://www.ncbi.nlm.nih.gov/snp/) |
 
 ## Match Levels
@@ -59,10 +59,10 @@ vibe-vep config set annotations.hotspots /path/to/hotspots_v2_and_3d.txt
 # SIGNAL (GRCh37 only): enable
 vibe-vep config set annotations.signal true
 
-# SIFT + PolyPhen-2 (via dbNSFP): enable
-# Requires dbNSFP per-chromosome files in ~/.vibe-vep/{assembly}/dbnsfp/
+# SIFT + PolyPhen-2 (via Ensembl): download + enable
 vibe-vep config set annotations.sift true
 vibe-vep config set annotations.polyphen true
+vibe-vep download  # fetches ~12 GB Ensembl predictions DB
 
 # dbSNP RS IDs: download + enable
 vibe-vep config set annotations.dbsnp true

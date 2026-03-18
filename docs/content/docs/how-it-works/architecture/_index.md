@@ -222,7 +222,7 @@ graph TB
     parquet["internal/parquet<br/><small>Parquet export</small>"]
     mafpkg["internal/maf<br/><small>MAF parser</small>"]
     vcfpkg["internal/vcf<br/><small>VCF parser</small>"]
-    datasource["internal/datasource/*<br/><small>OncoKB, Hotspots,<br/>ClinVar, AlphaMissense,<br/>SIGNAL, gnomAD, dbNSFP, dbSNP</small>"]
+    datasource["internal/datasource/*<br/><small>OncoKB, Hotspots,<br/>ClinVar, AlphaMissense,<br/>SIGNAL, gnomAD, SIFT/PP2, dbSNP</small>"]
 
     output --> annotate
     output --> mafpkg

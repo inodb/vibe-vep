@@ -42,10 +42,6 @@ func setupTestDB(t *testing.T) string {
 		gnomad_an TEXT NOT NULL DEFAULT '',
 		gnomad_nhomalt TEXT NOT NULL DEFAULT '',
 		gnomad_version TEXT NOT NULL DEFAULT '',
-		sift_score REAL NOT NULL DEFAULT 0,
-		sift_pred TEXT NOT NULL DEFAULT '',
-		pp2_score REAL NOT NULL DEFAULT 0,
-		pp2_pred TEXT NOT NULL DEFAULT '',
 		dbsnp_id TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (chrom, pos, ref, alt)
 	) WITHOUT ROWID`)

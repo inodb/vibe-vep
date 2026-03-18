@@ -216,21 +216,8 @@ func benchmarkStudy(t *testing.T, mafFile string, c *cache.Cache, ctx *sourcesCt
 					gnomadHits++
 				}
 
-				// Track SIFT metrics (missense-relevant).
-				if r.SiftScore > 0 || r.SiftPred != "" {
-					siftHits++
-					if r.SiftPred != "" {
-						siftPredCounts[r.SiftPred]++
-					}
-				}
-
-				// Track PolyPhen-2 metrics (missense-relevant).
-				if r.PP2Score > 0 || r.PP2Pred != "" {
-					pp2Hits++
-					if r.PP2Pred != "" {
-						pp2PredCounts[r.PP2Pred]++
-					}
-				}
+				// Note: SIFT/PolyPhen-2 are now protein-level (ensemblpred package),
+				// not in the genomic index. They are tracked via full annotation pipeline.
 
 				// Track dbSNP metrics.
 				if r.DbSnpID != "" {
