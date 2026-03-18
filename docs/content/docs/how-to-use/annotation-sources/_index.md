@@ -19,6 +19,9 @@ aliases:
 | **ClinVar** | Genomic (chr:pos:ref:alt) | GRCh38 | ~182 MB | Clinical significance from [ClinVar](https://www.ncbi.nlm.nih.gov/clinvar/) (4.1M variants) |
 | **Cancer Hotspots** | Protein position (transcript + AA pos) | Any | ~200 KB | Recurrent mutation hotspots from [cancerhotspots.org](https://www.cancerhotspots.org/) |
 | **SIGNAL** | Genomic (chr:pos:ref:alt) | GRCh37 only | ~32 MB | Germline mutation frequencies from [SIGNAL](https://signal.mutationalsignatures.com/) |
+| **SIFT** | Genomic (chr:pos:ref:alt) | GRCh38 | via dbNSFP | SIFT missense prediction scores (0-1, lower = more damaging) via [dbNSFP](https://sites.google.com/site/jpopgen/dbNSFP) |
+| **PolyPhen-2** | Genomic (chr:pos:ref:alt) | GRCh38 | via dbNSFP | PolyPhen-2 HDIV missense prediction scores (0-1, higher = more damaging) via [dbNSFP](https://sites.google.com/site/jpopgen/dbNSFP) |
+| **dbSNP** | Genomic (chr:pos:ref:alt) | GRCh38 | ~17 GB | RS identifiers from [dbSNP](https://www.ncbi.nlm.nih.gov/snp/) |
 
 ## Match Levels
 
@@ -30,7 +33,7 @@ aliases:
 
 ## Storage
 
-Genomic annotation sources (AlphaMissense, ClinVar, SIGNAL) are merged into a single SQLite database (`genomic_annotations.sqlite`) with a `WITHOUT ROWID` clustered primary key on `(chrom, pos, ref, alt)`. This gives ~1-5μs point lookups with near-zero Go heap via mmap — one DB lookup per variant instead of three.
+Genomic annotation sources (AlphaMissense, ClinVar, SIGNAL, gnomAD, SIFT, PolyPhen-2, dbSNP) are merged into a single SQLite database (`genomic_annotations.sqlite`) with a `WITHOUT ROWID` clustered primary key on `(chrom, pos, ref, alt)`. This gives ~1-5μs point lookups with near-zero Go heap via mmap — one DB lookup per variant instead of many.
 
 All variants are stored with normalized coordinates:
 - **Chromosome**: without "chr" prefix (e.g. "12", not "chr12")
@@ -55,6 +58,15 @@ vibe-vep config set annotations.hotspots /path/to/hotspots_v2_and_3d.txt
 
 # SIGNAL (GRCh37 only): enable
 vibe-vep config set annotations.signal true
+
+# SIFT + PolyPhen-2 (via dbNSFP): enable
+# Requires dbNSFP per-chromosome files in ~/.vibe-vep/{assembly}/dbnsfp/
+vibe-vep config set annotations.sift true
+vibe-vep config set annotations.polyphen true
+
+# dbSNP RS IDs: download + enable
+vibe-vep config set annotations.dbsnp true
+vibe-vep download  # fetches ~17 GB dbsnp.vcf.gz
 ```
 
 Use `vibe-vep version` to see which sources are loaded and `vibe-vep version --maf-columns` for the full column mapping.

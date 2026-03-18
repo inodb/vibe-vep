@@ -61,7 +61,7 @@ internal/
     datahub_mismatch_test.go  36 datahub mismatch tests
   cache/            Transcript cache (GENCODE GTF/FASTA loader)
   duckdb/           DuckDB cache for transcripts and variant results
-  genomicindex/     Unified SQLite index for annotation source lookups (AM, ClinVar, SIGNAL)
+  genomicindex/     Unified SQLite index for annotation source lookups (AM, ClinVar, SIGNAL, gnomAD, SIFT/PP2, dbSNP)
   maf/              MAF file parser
   output/           Output formatting and validation comparison
   vcf/              VCF file parser

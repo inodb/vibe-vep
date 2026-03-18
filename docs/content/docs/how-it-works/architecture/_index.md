@@ -63,7 +63,7 @@ flowchart TB
 
     subgraph enrich ["3. Enrich"]
         direction LR
-        S1["Genomic sources<br/><small>AlphaMissense, ClinVar, SIGNAL</small><br/><small>SQLite point lookup, ~1-5 &mu;s</small>"]
+        S1["Genomic sources<br/><small>AlphaMissense, ClinVar, SIGNAL,<br/>gnomAD, SIFT, PolyPhen-2, dbSNP</small><br/><small>SQLite point lookup, ~1-5 &mu;s</small>"]
         S2["Protein sources<br/><small>Cancer Hotspots</small><br/><small>transcript + AA position</small>"]
         S3["Gene sources<br/><small>OncoKB cancer gene list</small>"]
     end
@@ -136,8 +136,8 @@ All data lives under `~/.vibe-vep/{assembly}/`:
   gencode.v46.pc_transcripts.fa.gz      # 47 MB  - protein-coding sequences (source)
   ensembl_biomart_canonical_*.txt        # 26 MB  - canonical transcript overrides (source)
   transcripts.gob                        # 210 MB - serialized transcript cache
-  genomic_annotations.sqlite             # 3.8 GB - AlphaMissense + ClinVar + SIGNAL
-  variant_cache.duckdb                   # var.   - annotation result cache
+  genomic_annotations.sqlite             # 3.8 GB+ - AlphaMissense + ClinVar + SIGNAL + gnomAD + SIFT/PP2 + dbSNP
+  variant_cache.duckdb                   # var.    - annotation result cache
 ```
 
 ### Storage Engines
@@ -145,12 +145,12 @@ All data lives under `~/.vibe-vep/{assembly}/`:
 | Engine | File | Purpose | Access Pattern |
 |--------|------|---------|---------------|
 | **Gob** | `transcripts.gob` | 254K transcripts with exon/CDS/protein data | Full deserialize on startup |
-| **SQLite** | `genomic_annotations.sqlite` | 75M+ annotation records (AM + ClinVar + SIGNAL) | mmap point lookups, ~1-5 &mu;s |
+| **SQLite** | `genomic_annotations.sqlite` | 75M+ annotation records (AM + ClinVar + SIGNAL + gnomAD + SIFT/PP2 + dbSNP) | mmap point lookups, ~1-5 &mu;s |
 | **DuckDB** | `variant_cache.duckdb` | Previously annotated results + Parquet export | Columnar read/write, batch queries |
 
 ### SQLite vs DuckDB: Why Two Databases?
 
-**SQLite** (`genomic_annotations.sqlite`) is a **read-only reference database** used *during* annotation. It holds pre-computed data from external sources (AlphaMissense scores, ClinVar significance, SIGNAL frequencies) and is queried once per variant via a point lookup on `(chrom, pos, ref, alt)`. Built once by `vibe-vep prepare`, it uses a `WITHOUT ROWID` clustered primary key for single B-tree traversals served directly from mmap with near-zero Go heap allocation (~1-5 &mu;s per lookup).
+**SQLite** (`genomic_annotations.sqlite`) is a **read-only reference database** used *during* annotation. It holds pre-computed data from external sources (AlphaMissense scores, ClinVar significance, SIGNAL frequencies, gnomAD allele frequencies, SIFT/PolyPhen-2 predictions, dbSNP RS IDs) and is queried once per variant via a point lookup on `(chrom, pos, ref, alt)`. Built once by `vibe-vep prepare`, it uses a `WITHOUT ROWID` clustered primary key for single B-tree traversals served directly from mmap with near-zero Go heap allocation (~1-5 &mu;s per lookup).
 
 **DuckDB** (`variant_cache.duckdb`) stores **annotation results** written *after* annotation. It serves two purposes:
 
@@ -222,7 +222,7 @@ graph TB
     parquet["internal/parquet<br/><small>Parquet export</small>"]
     mafpkg["internal/maf<br/><small>MAF parser</small>"]
     vcfpkg["internal/vcf<br/><small>VCF parser</small>"]
-    datasource["internal/datasource/*<br/><small>OncoKB, Hotspots,<br/>ClinVar, AlphaMissense,<br/>SIGNAL</small>"]
+    datasource["internal/datasource/*<br/><small>OncoKB, Hotspots,<br/>ClinVar, AlphaMissense,<br/>SIGNAL, gnomAD, dbNSFP, dbSNP</small>"]
 
     output --> annotate
     output --> mafpkg
