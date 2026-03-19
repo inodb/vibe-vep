@@ -1,6 +1,6 @@
 # Annotation Sources Report
 
-Generated: 2026-03-18 16:58 UTC  
+Generated: 2026-03-19 04:28 UTC  
 GENCODE transcripts: 252930  
 Data: unified genomic index (SQLite)  
 Workers: 4 (GOMAXPROCS)
@@ -277,36 +277,36 @@ Workers: 4 (GOMAXPROCS)
 
 | Study | Variants | Base Time | Index Lookup Time | Overhead | Lookups/sec |
 |-------|----------|-----------|-------------------|----------|-------------|
-| acc_tcga_gdc | 8226 | 1.073s | 834ms | 77.7% | 9863 |
-| aml_tcga_gdc | 569 | 141ms | 82ms | 57.7% | 6973 |
-| blca_tcga_gdc | 116684 | 15.116s | 11.259s | 74.5% | 10364 |
-| brca_tcga_gdc | 89012 | 12.586s | 9.081s | 72.2% | 9801 |
-| ccrcc_tcga_gdc | 25507 | 3.965s | 2.725s | 68.7% | 9362 |
-| cesc_tcga_gdc | 68893 | 8.774s | 7.602s | 86.6% | 9063 |
-| chol_tcga_gdc | 3764 | 526ms | 398ms | 75.6% | 9467 |
-| chrcc_tcga_gdc | 2286 | 344ms | 257ms | 74.6% | 8912 |
-| coad_tcga_gdc | 244552 | 29.339s | 26.819s | 91.4% | 9119 |
-| difg_tcga_gdc | 30306 | 4.341s | 3.529s | 81.3% | 8587 |
-| dlbclnos_tcga_gdc | 5111 | 755ms | 721ms | 95.6% | 7084 |
-| esca_tcga_gdc | 29760 | 4.194s | 4.16s | 99.2% | 7154 |
-| gbm_tcga_gdc | 54870 | 7.664s | 7.697s | 100.4% | 7129 |
-| hcc_tcga_gdc | 45290 | 6.581s | 6.608s | 100.4% | 6854 |
-| hgsoc_tcga_gdc | 39499 | 6.064s | 5.223s | 86.1% | 7563 |
-| hnsc_tcga_gdc | 87967 | 11.985s | 11.37s | 94.9% | 7737 |
-| luad_tcga_gdc | 190868 | 24.593s | 22.573s | 91.8% | 8455 |
-| lusc_tcga_gdc | 170943 | 22.178s | 19.378s | 87.4% | 8821 |
-| mnet_tcga_gdc | 1946 | 341ms | 230ms | 67.5% | 8444 |
-| nsgct_tcga_gdc | 2706 | 479ms | 347ms | 72.5% | 7797 |
-| paad_tcga_gdc | 24849 | 3.174s | 2.814s | 88.6% | 8831 |
-| plmeso_tcga_gdc | 2709 | 447ms | 303ms | 67.8% | 8944 |
-| prad_tcga_gdc | 24694 | 3.745s | 2.779s | 74.2% | 8886 |
-| prcc_tcga_gdc | 19284 | 3.104s | 2.304s | 74.2% | 8371 |
-| skcm_tcga_gdc | 353450 | 41.945s | 33.995s | 81.0% | 10397 |
-| soft_tissue_tcga_gdc | 17405 | 2.458s | 1.846s | 75.1% | 9429 |
-| stad_tcga_gdc | 183107 | 22.704s | 20.246s | 89.2% | 9044 |
-| thpa_tcga_gdc | 5834 | 1.016s | 674ms | 66.3% | 8652 |
-| thym_tcga_gdc | 2396 | 370ms | 281ms | 75.9% | 8528 |
-| ucec_tcga_gdc | 626518 | 1m13.686s | 1m8.439s | 92.9% | 9154 |
-| ucs_tcga_gdc | 8774 | 1.164s | 976ms | 83.8% | 8989 |
-| um_tcga_gdc | 1490 | 284ms | 197ms | 69.5% | 7554 |
-| **Total** | **2489269** | **5m15.138s** | **4m35.746s** | **87.5%** | **9027** |
+| acc_tcga_gdc | 8226 | 1.16s | 2.145s | 184.8% | 3836 |
+| aml_tcga_gdc | 569 | 96ms | 132ms | 137.0% | 4309 |
+| blca_tcga_gdc | 116684 | 15.017s | 20.776s | 138.4% | 5616 |
+| brca_tcga_gdc | 89012 | 12.916s | 14.006s | 108.4% | 6355 |
+| ccrcc_tcga_gdc | 25507 | 4.546s | 4.137s | 91.0% | 6165 |
+| cesc_tcga_gdc | 68893 | 9.357s | 10.312s | 110.2% | 6681 |
+| chol_tcga_gdc | 3764 | 568ms | 528ms | 93.0% | 7124 |
+| chrcc_tcga_gdc | 2286 | 396ms | 382ms | 96.6% | 5981 |
+| coad_tcga_gdc | 244552 | 33.031s | 32.183s | 97.4% | 7599 |
+| difg_tcga_gdc | 30306 | 6.308s | 5.713s | 90.6% | 5305 |
+| dlbclnos_tcga_gdc | 5111 | 953ms | 926ms | 97.2% | 5517 |
+| esca_tcga_gdc | 29760 | 5.172s | 5.034s | 97.3% | 5912 |
+| gbm_tcga_gdc | 54870 | 10.733s | 10.693s | 99.6% | 5132 |
+| hcc_tcga_gdc | 45290 | 7.408s | 8.177s | 110.4% | 5539 |
+| hgsoc_tcga_gdc | 39499 | 8.598s | 7.575s | 88.1% | 5215 |
+| hnsc_tcga_gdc | 87967 | 18.959s | 18.393s | 97.0% | 4783 |
+| luad_tcga_gdc | 190868 | 37.682s | 36.694s | 97.4% | 5202 |
+| lusc_tcga_gdc | 170943 | 29.471s | 30.795s | 104.5% | 5551 |
+| mnet_tcga_gdc | 1946 | 400ms | 377ms | 94.3% | 5157 |
+| nsgct_tcga_gdc | 2706 | 608ms | 610ms | 100.3% | 4438 |
+| paad_tcga_gdc | 24849 | 4.073s | 5.034s | 123.6% | 4937 |
+| plmeso_tcga_gdc | 2709 | 511ms | 524ms | 102.6% | 5169 |
+| prad_tcga_gdc | 24694 | 4.446s | 4.507s | 101.4% | 5480 |
+| prcc_tcga_gdc | 19284 | 3.672s | 3.73s | 101.6% | 5169 |
+| skcm_tcga_gdc | 353450 | 51.042s | 53.614s | 105.0% | 6592 |
+| soft_tissue_tcga_gdc | 17405 | 2.827s | 3.902s | 138.0% | 4461 |
+| stad_tcga_gdc | 183107 | 27.341s | 35.764s | 130.8% | 5120 |
+| thpa_tcga_gdc | 5834 | 1.046s | 715ms | 68.4% | 8158 |
+| thym_tcga_gdc | 2396 | 401ms | 305ms | 76.1% | 7847 |
+| ucec_tcga_gdc | 626518 | 1m13.568s | 1m3.22s | 85.9% | 9910 |
+| ucs_tcga_gdc | 8774 | 1.185s | 938ms | 79.2% | 9351 |
+| um_tcga_gdc | 1490 | 264ms | 185ms | 70.1% | 8039 |
+| **Total** | **2489269** | **6m13.755s** | **6m22.029s** | **102.2%** | **6516** |

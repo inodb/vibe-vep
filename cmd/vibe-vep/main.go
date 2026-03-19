@@ -345,16 +345,33 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 		}
 	}
 
-	// Ensembl SIFT/PolyPhen-2 predictions (protein-level, assembly-independent)
+	// Ensembl SIFT/PolyPhen-2 predictions (protein-level)
 	if viper.GetBool("annotations.sift") || viper.GetBool("annotations.polyphen") {
-		predPath := filepath.Join(cacheDir, EnsemblPredFileName)
-		store, err := ensemblpred.Open(predPath)
-		if err != nil {
-			logger.Warn("could not load Ensembl SIFT/PolyPhen predictions (try: vibe-vep download)",
-				zap.String("path", predPath), zap.Error(err))
-		} else {
+		predDBPath := filepath.Join(cacheDir, EnsemblPredDBName)
+		predSources := ensemblpred.BuildSources{
+			TranslationMD5TSV: filepath.Join(cacheDir, EnsemblTranslationMD5Name),
+			PredictionsTSV:    filepath.Join(cacheDir, EnsemblPredictionsName),
+		}
+		if !ensemblpred.Ready(predDBPath, predSources) {
+			// Check if source files exist before trying to build.
+			if _, err := os.Stat(predSources.PredictionsTSV); err == nil {
+				logger.Info("building Ensembl SIFT/PolyPhen index (this may take several minutes)...")
+				start := time.Now()
+				if err := ensemblpred.Build(predDBPath, predSources, func(msg string, args ...any) {
+					logger.Info(fmt.Sprintf(msg, args...))
+				}); err != nil {
+					logger.Warn("could not build Ensembl SIFT/PolyPhen index", zap.Error(err))
+				} else {
+					logger.Info("built Ensembl SIFT/PolyPhen index", zap.Duration("elapsed", time.Since(start)))
+				}
+			}
+		}
+		if store, err := ensemblpred.Open(predDBPath); err == nil {
 			logger.Info("loaded Ensembl SIFT/PolyPhen predictions")
 			sources = append(sources, ensemblpred.NewSource(store))
+		} else {
+			logger.Warn("could not load Ensembl SIFT/PolyPhen predictions (try: vibe-vep download)",
+				zap.String("path", predDBPath), zap.Error(err))
 		}
 	}
 

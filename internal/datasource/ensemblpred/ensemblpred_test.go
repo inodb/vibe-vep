@@ -3,8 +3,12 @@ package ensemblpred
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/md5"
 	"database/sql"
 	"encoding/binary"
+	"encoding/hex"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
@@ -215,5 +219,59 @@ func TestSourceAnnotate(t *testing.T) {
 	// Synonymous should have nothing.
 	if got := anns[1].GetExtraKey("sift.prediction"); got != "" {
 		t.Errorf("synonymous should not have sift.prediction, got %q", got)
+	}
+}
+
+// TestRealEnsemblDB tests against the real Ensembl SIFT/PolyPhen database.
+// Skipped if the database is not present.
+func TestRealEnsemblDB(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping real DB test in short mode")
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("cannot determine home dir")
+	}
+	dbPath := filepath.Join(home, ".vibe-vep", "grch38", "ensembl_sift_polyphen.db")
+	if _, err := os.Stat(dbPath); err != nil {
+		t.Skipf("Ensembl predictions DB not found at %s", dbPath)
+	}
+
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer store.Close()
+
+	// KRAS protein (Ensembl canonical, 189 AA).
+	krasSeq := "MTEYKLVVVGAVGVGKSALTIQLIQNHFVDEYDPTIEDSYNTKQFVQTVDSSSYRKKVDKDLSALLQHSLPEESFRKSVDHAKDDPMVEGSGGAALEEDTAVDFLHRIEMRQKELDKFNSHECSHFQPINNLKGESIPSEPASPAKDCAKDSNRGCTFNSSSSAKRDDSSPFLDSHQPKPNKKNTDCSTRILDTAGQEEFGVEQSGDDNYTEDEESTF"
+	h := md5.Sum([]byte(krasSeq))
+	krasMD5 := hex.EncodeToString(h[:])
+	t.Logf("KRAS MD5: %s", krasMD5)
+
+	// G12C: position 12, alt AA = C — should be deleterious/damaging.
+	sift, ok := store.Lookup(krasMD5, "sift", 12, 'C')
+	if !ok {
+		t.Fatal("expected SIFT hit for KRAS G12C")
+	}
+	t.Logf("SIFT G12C: score=%.3f pred=%s", sift.Score, sift.Pred)
+	if sift.Pred != "deleterious" {
+		t.Errorf("SIFT G12C pred=%q, want deleterious", sift.Pred)
+	}
+
+	pp2, ok := store.Lookup(krasMD5, "polyphen_humdiv", 12, 'C')
+	if !ok {
+		t.Fatal("expected PP2 hit for KRAS G12C")
+	}
+	t.Logf("PP2  G12C: score=%.3f pred=%s", pp2.Score, pp2.Pred)
+	if pp2.Pred != "probably_damaging" {
+		t.Errorf("PP2 G12C pred=%q, want probably_damaging", pp2.Pred)
+	}
+
+	// Miss: nonexistent MD5.
+	_, ok = store.Lookup("0000000000000000000000000000000", "sift", 1, 'A')
+	if ok {
+		t.Error("expected miss for nonexistent MD5")
 	}
 }

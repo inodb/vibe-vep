@@ -1,20 +1,21 @@
 // Package ensemblpred provides SIFT and PolyPhen-2 predictions from Ensembl's
-// pre-computed SQLite database. The database stores compressed prediction matrices
-// keyed by peptide MD5 hash, covering every possible amino acid substitution.
+// variation database. Prediction matrices are downloaded as MySQL dump TSVs and
+// built into a local SQLite database keyed by (peptide_md5, analysis).
 //
-// Database: https://ftp.ensembl.org/pub/current_variation/pangenomes/Human/
-// Format: SQLite with table predictions(md5, analysis, matrix)
+// Source: https://ftp.ensembl.org/pub/release-115/mysql/homo_sapiens_variation_115_38/
 // Binary: gzip-compressed, 3-byte header, then (position * 20 + aa_index) * 2 bytes
 // Each prediction is 16-bit LE: top 2 bits = qualitative, bottom 10 bits = score/1000
 package ensemblpred
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -94,6 +95,270 @@ func (s *Store) Close() error {
 		s.lookupPS.Close()
 	}
 	return s.db.Close()
+}
+
+// BuildSources holds paths to the Ensembl MySQL dump files for building the predictions DB.
+type BuildSources struct {
+	TranslationMD5TSV  string // translation_md5.txt.gz
+	PredictionsTSV     string // protein_function_predictions.txt.gz
+}
+
+// Ready returns true if the SQLite DB exists and is newer than source files.
+func Ready(dbPath string, sources BuildSources) bool {
+	dbInfo, err := os.Stat(dbPath)
+	if err != nil || dbInfo.Size() == 0 {
+		return false
+	}
+	dbMod := dbInfo.ModTime()
+
+	for _, src := range []string{sources.TranslationMD5TSV, sources.PredictionsTSV} {
+		if src == "" {
+			continue
+		}
+		srcInfo, err := os.Stat(src)
+		if err != nil {
+			continue
+		}
+		if srcInfo.ModTime().After(dbMod) {
+			return false
+		}
+	}
+
+	// Quick integrity check.
+	db, err := sql.Open("sqlite", dbPath+"?mode=ro")
+	if err != nil {
+		return false
+	}
+	defer db.Close()
+	var n int
+	return db.QueryRow("SELECT 1 FROM predictions LIMIT 1").Scan(&n) == nil
+}
+
+// Analysis attrib IDs from the Ensembl variation database.
+const (
+	attribSIFT          = 267
+	attribPolyPhenHumVar = 268
+	attribPolyPhenHumDiv = 269
+)
+
+// analysisName maps Ensembl attrib IDs to analysis names.
+var analysisName = map[int]string{
+	attribSIFT:          "sift",
+	attribPolyPhenHumVar: "polyphen_humvar",
+	attribPolyPhenHumDiv: "polyphen_humdiv",
+}
+
+// Build creates the SQLite predictions database from Ensembl MySQL dump files.
+func Build(dbPath string, sources BuildSources, logf func(string, ...any)) error {
+	if sources.TranslationMD5TSV == "" || sources.PredictionsTSV == "" {
+		return fmt.Errorf("both TranslationMD5TSV and PredictionsTSV are required")
+	}
+
+	// Load translation_md5 mapping: id → md5 hex string.
+	logf("loading translation MD5 mapping from %s", sources.TranslationMD5TSV)
+	md5Map, err := loadTranslationMD5(sources.TranslationMD5TSV)
+	if err != nil {
+		return fmt.Errorf("load translation MD5: %w", err)
+	}
+	logf("loaded %d translation MD5 mappings", len(md5Map))
+
+	// Create SQLite.
+	os.Remove(dbPath)
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return fmt.Errorf("create sqlite: %w", err)
+	}
+	defer db.Close()
+
+	for _, pragma := range []string{
+		"PRAGMA journal_mode = OFF",
+		"PRAGMA synchronous = OFF",
+		"PRAGMA temp_store = MEMORY",
+		"PRAGMA cache_size = -64000",
+		"PRAGMA page_size = 8192",
+	} {
+		if _, err := db.Exec(pragma); err != nil {
+			return fmt.Errorf("set pragma %q: %w", pragma, err)
+		}
+	}
+
+	if _, err := db.Exec(`CREATE TABLE predictions (
+		md5 TEXT NOT NULL,
+		analysis TEXT NOT NULL,
+		matrix BLOB NOT NULL,
+		PRIMARY KEY (md5, analysis)
+	) WITHOUT ROWID`); err != nil {
+		return fmt.Errorf("create table: %w", err)
+	}
+
+	// Load predictions.
+	logf("loading predictions from %s", sources.PredictionsTSV)
+	n, err := loadPredictions(db, sources.PredictionsTSV, md5Map)
+	if err != nil {
+		return fmt.Errorf("load predictions: %w", err)
+	}
+	logf("loaded %d prediction matrices", n)
+
+	return nil
+}
+
+// loadTranslationMD5 reads the translation_md5.txt.gz MySQL dump.
+// Format: translation_md5_id\ttranslation_md5
+func loadTranslationMD5(path string) (map[int]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var reader io.Reader = f
+	if strings.HasSuffix(path, ".gz") {
+		gz, err := gzip.NewReader(f)
+		if err != nil {
+			return nil, err
+		}
+		defer gz.Close()
+		reader = gz
+	}
+
+	m := make(map[int]string, 210000)
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		tab := strings.IndexByte(line, '\t')
+		if tab < 0 {
+			continue
+		}
+		id, err := strconv.Atoi(line[:tab])
+		if err != nil {
+			continue
+		}
+		m[id] = line[tab+1:]
+	}
+	return m, scanner.Err()
+}
+
+// loadPredictions reads protein_function_predictions.txt.gz and inserts into SQLite.
+// Format: translation_md5_id\tanalysis_attrib_id\tprediction_matrix_blob
+// The blob is MySQL-escaped binary (backslash sequences: \0, \n, \t, \\).
+func loadPredictions(db *sql.DB, path string, md5Map map[int]string) (int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	var reader io.Reader = f
+	if strings.HasSuffix(path, ".gz") {
+		gz, err := gzip.NewReader(f)
+		if err != nil {
+			return 0, err
+		}
+		defer gz.Close()
+		reader = gz
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO predictions (md5, analysis, matrix) VALUES (?, ?, ?)`)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 16*1024*1024), 16*1024*1024) // large buffer for binary blobs
+
+	var count int64
+	for scanner.Scan() {
+		line := scanner.Bytes()
+
+		// Parse: translation_md5_id \t analysis_attrib_id \t blob
+		tab1 := bytes.IndexByte(line, '\t')
+		if tab1 < 0 {
+			continue
+		}
+		tab2 := bytes.IndexByte(line[tab1+1:], '\t')
+		if tab2 < 0 {
+			continue
+		}
+		tab2 += tab1 + 1
+
+		mdID, err := strconv.Atoi(string(line[:tab1]))
+		if err != nil {
+			continue
+		}
+		attribID, err := strconv.Atoi(string(line[tab1+1 : tab2]))
+		if err != nil {
+			continue
+		}
+
+		md5hex, ok := md5Map[mdID]
+		if !ok {
+			continue
+		}
+		analysis, ok := analysisName[attribID]
+		if !ok {
+			continue // skip polyphen_humvar and unknown analyses
+		}
+		// Only keep sift and polyphen_humdiv.
+		if analysis != "sift" && analysis != "polyphen_humdiv" {
+			continue
+		}
+
+		blob := unescapeMySQL(line[tab2+1:])
+
+		if _, err := stmt.Exec(md5hex, analysis, blob); err != nil {
+			return 0, fmt.Errorf("insert prediction: %w", err)
+		}
+		count++
+	}
+	if err := scanner.Err(); err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// unescapeMySQL decodes MySQL's backslash-escaped binary format in TSV dumps.
+// Sequences: \0 → 0x00, \n → 0x0A, \t → 0x09, \\ → 0x5C, \r → 0x0D
+func unescapeMySQL(data []byte) []byte {
+	if bytes.IndexByte(data, '\\') < 0 {
+		return data // fast path: no escapes
+	}
+
+	out := make([]byte, 0, len(data))
+	for i := 0; i < len(data); i++ {
+		if data[i] == '\\' && i+1 < len(data) {
+			i++
+			switch data[i] {
+			case '0':
+				out = append(out, 0)
+			case 'n':
+				out = append(out, '\n')
+			case 't':
+				out = append(out, '\t')
+			case '\\':
+				out = append(out, '\\')
+			case 'r':
+				out = append(out, '\r')
+			default:
+				out = append(out, data[i])
+			}
+		} else {
+			out = append(out, data[i])
+		}
+	}
+	return out
 }
 
 // Lookup retrieves a prediction for a specific amino acid change.

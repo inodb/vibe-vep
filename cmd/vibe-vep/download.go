@@ -177,12 +177,17 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 		}
 	}
 
-	// Download Ensembl SIFT/PolyPhen predictions if enabled in config
+	// Download Ensembl SIFT/PolyPhen prediction data if enabled in config
 	if viper.GetBool("annotations.sift") || viper.GetBool("annotations.polyphen") {
-		predFile := filepath.Join(destDir, EnsemblPredFileName)
-		fmt.Printf("\nSIFT/PolyPhen annotation enabled in config, downloading Ensembl predictions (~12 GB)...\n")
-		if err := downloadFile(EnsemblPredURL, predFile); err != nil {
-			logger.Warn("could not download Ensembl SIFT/PolyPhen predictions", zap.Error(err))
+		baseURL := getEnsemblVariationBaseURL(assembly)
+		fmt.Printf("\nSIFT/PolyPhen annotation enabled in config, downloading Ensembl prediction data...\n")
+		md5File := filepath.Join(destDir, EnsemblTranslationMD5Name)
+		if err := downloadFile(baseURL+"/"+EnsemblTranslationMD5Name, md5File); err != nil {
+			logger.Warn("could not download Ensembl translation MD5 mapping", zap.Error(err))
+		}
+		predFile := filepath.Join(destDir, EnsemblPredictionsName)
+		if err := downloadFile(baseURL+"/"+EnsemblPredictionsName, predFile); err != nil {
+			logger.Warn("could not download Ensembl protein function predictions", zap.Error(err))
 		}
 	}
 
@@ -298,9 +303,10 @@ func formatSize(bytes int64) string {
 const (
 	ClinVarFileName      = "clinvar.vcf.gz"
 	SignalFileName       = "signaldb_all_variants_frequencies.txt"
-	DbSnpFileName        = "dbsnp.vcf.gz"
-	EnsemblPredFileName  = "ensembl_sift_polyphen.db"
-	EnsemblPredURL       = "https://ftp.ensembl.org/pub/current_variation/pangenomes/Human/homo_sapiens_pangenome_PolyPhen_SIFT_20240502.db"
+	DbSnpFileName              = "dbsnp.vcf.gz"
+	EnsemblPredDBName          = "ensembl_sift_polyphen.sqlite"
+	EnsemblTranslationMD5Name  = "translation_md5.txt.gz"
+	EnsemblPredictionsName     = "protein_function_predictions.txt.gz"
 )
 
 // GnomadFileName returns the expected filename for the given assembly.
@@ -331,6 +337,16 @@ func getAlphaMissenseURL(assembly string) string {
 // AlphaMissenseFileName returns the expected filename for the assembly.
 func AlphaMissenseFileName(assembly string) string {
 	return filepath.Base(getAlphaMissenseURL(assembly))
+}
+
+// getEnsemblVariationBaseURL returns the base URL for the Ensembl variation MySQL dump.
+func getEnsemblVariationBaseURL(assembly string) string {
+	switch strings.ToUpper(assembly) {
+	case "GRCH37":
+		return "https://ftp.ensembl.org/pub/release-115/mysql/homo_sapiens_variation_115_37"
+	default:
+		return "https://ftp.ensembl.org/pub/release-115/mysql/homo_sapiens_variation_115_38"
+	}
 }
 
 // getDbSnpURL returns the download URL for dbSNP VCF.
