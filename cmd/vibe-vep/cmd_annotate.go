@@ -29,6 +29,7 @@ func newAnnotateCmd(verbose *bool) *cobra.Command {
 	cmd.AddCommand(newAnnotateMAFCmd(verbose))
 	cmd.AddCommand(newAnnotateVCFCmd(verbose))
 	cmd.AddCommand(newAnnotateVariantCmd(verbose))
+	cmd.AddCommand(newAnnotateStreamCmd(verbose))
 
 	return cmd
 }
