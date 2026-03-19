@@ -102,7 +102,7 @@ func TestProteinMD5Overlap(t *testing.T) {
 
 	pct := float64(matched) / float64(totalProteins) * 100
 	t.Logf("GENCODE proteins: %d", totalProteins)
-	t.Logf("Matched Ensembl 115: %d (%.1f%%)", matched, pct)
+	t.Logf("Matched Ensembl: %d (%.1f%%)", matched, pct)
 	t.Logf("Missed: %d (%.1f%%)", totalProteins-matched, 100-pct)
 	t.Logf("Canonical: %d matched, %d missed", matchedCanonical, missedCanonical)
 
