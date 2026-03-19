@@ -100,7 +100,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 			CDNAPosition:    result.CDNAPosition,
 			HGVSp:           result.HGVSp,
 			HGVSc:           result.HGVSc,
-			PeptideMD5:      peptideMD5(t.ProteinSequence),
+			PeptideMD5:      peptideMD5(t.CDSSequence),
 		}
 
 		annotations = append(annotations, ann)
@@ -188,12 +188,42 @@ type AnnotationWriter interface {
 	Flush() error
 }
 
-// peptideMD5 returns the lowercase hex MD5 of a protein sequence.
-// Returns "" for empty sequences.
-func peptideMD5(seq string) string {
-	if seq == "" {
+// peptideMD5 returns the lowercase hex MD5 of the protein sequence
+// translated from the given CDS DNA sequence. Returns "" if the CDS
+// is too short to translate.
+func peptideMD5(cds string) string {
+	if len(cds) < 3 {
 		return ""
 	}
-	h := md5.Sum([]byte(seq))
+	// Translate CDS → protein, stopping at first stop codon.
+	var buf [4096]byte // stack-allocated for typical proteins (< 4096 AA)
+	n := 0
+	for i := 0; i+2 < len(cds); i += 3 {
+		aa := TranslateCodon(cds[i : i+3])
+		if aa == '*' {
+			break
+		}
+		if n < len(buf) {
+			buf[n] = aa
+		} else {
+			// Rare: protein > 4096 AA, fall back to heap.
+			protein := make([]byte, n, n+1000)
+			copy(protein, buf[:])
+			for ; i+2 < len(cds); i += 3 {
+				aa = TranslateCodon(cds[i : i+3])
+				if aa == '*' {
+					break
+				}
+				protein = append(protein, aa)
+			}
+			h := md5.Sum(protein)
+			return hex.EncodeToString(h[:])
+		}
+		n++
+	}
+	if n == 0 {
+		return ""
+	}
+	h := md5.Sum(buf[:n])
 	return hex.EncodeToString(h[:])
 }
