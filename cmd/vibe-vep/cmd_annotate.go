@@ -409,9 +409,13 @@ func runAnnotateVariant(logger *zap.Logger, specInput, assembly, specType string
 		fmt.Fprintln(os.Stderr)
 
 	case annotate.SpecHGVSc:
-		variants, err = annotate.ReverseMapHGVSc(cr.cache, spec.TranscriptID, spec.CDSChange)
+		var warning string
+		variants, warning, err = annotate.ReverseMapHGVScWithWarning(cr.cache, spec.TranscriptID, spec.CDSChange)
 		if err != nil {
 			return err
+		}
+		if warning != "" {
+			fmt.Fprintf(os.Stderr, "Warning: %s\n\n", warning)
 		}
 		fmt.Fprintf(os.Stderr, "Query: %s c.%s\n\n", spec.TranscriptID, spec.CDSChange)
 		if len(variants) > 1 {

@@ -117,50 +117,89 @@ var reCDSDeletion = regexp.MustCompile(`^(\d+)(?:_(\d+))?del$`)
 // ReverseMapHGVSc maps an HGVSc notation (e.g. KRAS c.35G>T or KRAS c.34del)
 // back to a genomic variant using the transcript's CDS-to-genomic mapping.
 func ReverseMapHGVSc(c *cache.Cache, geneOrTranscript string, cdsChange string) ([]*vcf.Variant, error) {
+	variants, _, err := ReverseMapHGVScWithWarning(c, geneOrTranscript, cdsChange)
+	return variants, err
+}
+
+// ReverseMapHGVScWithWarning is like ReverseMapHGVSc but also returns a warning
+// string if the exact transcript version was requested but not found.
+func ReverseMapHGVScWithWarning(c *cache.Cache, geneOrTranscript string, cdsChange string) ([]*vcf.Variant, string, error) {
+	// Check for version mismatch warning.
+	result := FindHGVScTranscriptWithWarning(c, geneOrTranscript)
+	warning := result.Warning
+
 	// Try substitution first
 	if m := reCDSChange.FindStringSubmatch(cdsChange); m != nil {
-		return reverseMapHGVScSubstitution(c, geneOrTranscript, m)
+		variants, err := reverseMapHGVScSubstitution(c, geneOrTranscript, m)
+		return variants, warning, err
 	}
 
 	// Try deletion
 	if m := reCDSDeletion.FindStringSubmatch(cdsChange); m != nil {
-		return reverseMapHGVScDeletion(c, geneOrTranscript, m)
+		variants, err := reverseMapHGVScDeletion(c, geneOrTranscript, m)
+		return variants, warning, err
 	}
 
-	return nil, fmt.Errorf("unsupported CDS change notation %q (supported: substitutions like 35G>T, deletions like 923del or 100_102del)", cdsChange)
+	return nil, warning, fmt.Errorf("unsupported CDS change notation %q (supported: substitutions like 35G>T, deletions like 923del or 100_102del)", cdsChange)
 }
 
 // findHGVScTranscript resolves a gene name or transcript ID to a transcript.
+// TranscriptLookupResult holds the found transcript and any warnings.
+type TranscriptLookupResult struct {
+	Transcript *cache.Transcript
+	Warning    string // non-empty if the exact version was not found
+}
+
 func findHGVScTranscript(c *cache.Cache, geneOrTranscript string) (*cache.Transcript, error) {
+	result := FindHGVScTranscriptWithWarning(c, geneOrTranscript)
+	if result.Transcript == nil {
+		return nil, fmt.Errorf("transcript %q not found", geneOrTranscript)
+	}
+	return result.Transcript, nil
+}
+
+// FindHGVScTranscriptWithWarning looks up a transcript by ID (with optional version)
+// or gene name. Returns a warning if the exact version was requested but not found.
+func FindHGVScTranscriptWithWarning(c *cache.Cache, geneOrTranscript string) TranscriptLookupResult {
 	if strings.HasPrefix(geneOrTranscript, "ENST") {
+		// Try exact match first (includes version).
 		transcript := c.GetTranscript(geneOrTranscript)
-		if transcript == nil {
-			transcripts := findTranscriptByPrefix(c, geneOrTranscript)
-			if len(transcripts) > 0 {
-				transcript = transcripts[0]
-			}
+		if transcript != nil {
+			return TranscriptLookupResult{Transcript: transcript}
+		}
+
+		// Fallback: match by base ID (strip version).
+		transcripts := findTranscriptByPrefix(c, geneOrTranscript)
+		if len(transcripts) > 0 {
+			transcript = transcripts[0]
 		}
 		if transcript == nil {
-			return nil, fmt.Errorf("transcript %q not found", geneOrTranscript)
+			return TranscriptLookupResult{}
 		}
-		return transcript, nil
+
+		// Check if a specific version was requested but didn't match.
+		var warning string
+		if strings.Contains(geneOrTranscript, ".") {
+			warning = fmt.Sprintf("requested transcript version %s not found, using %s instead", geneOrTranscript, transcript.ID)
+		}
+		return TranscriptLookupResult{Transcript: transcript, Warning: warning}
 	}
 
 	transcripts := c.FindTranscriptsByGene(geneOrTranscript)
 	if len(transcripts) == 0 {
-		return nil, fmt.Errorf("gene %q not found in transcript cache", geneOrTranscript)
+		return TranscriptLookupResult{}
 	}
 	for _, t := range transcripts {
 		if t.IsCanonicalMSK && t.IsProteinCoding() {
-			return t, nil
+			return TranscriptLookupResult{Transcript: t}
 		}
 	}
 	for _, t := range transcripts {
 		if t.IsProteinCoding() {
-			return t, nil
+			return TranscriptLookupResult{Transcript: t}
 		}
 	}
-	return nil, fmt.Errorf("no protein-coding transcript found for gene %q", geneOrTranscript)
+	return TranscriptLookupResult{}
 }
 
 // reverseMapHGVScSubstitution handles simple CDS substitutions like "35G>T".

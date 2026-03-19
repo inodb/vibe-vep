@@ -61,6 +61,7 @@ type VEPVariantAnnotation struct {
 	AssemblyName           string                     `json:"assembly_name"`
 	MostSevereConsequence  string                     `json:"most_severe_consequence"`
 	TranscriptConsequences []VEPTranscriptConsequence `json:"transcript_consequences"`
+	Warnings               []string                   `json:"warnings,omitempty"`
 }
 
 // VibeVepTranscriptConsequence represents a transcript consequence in vibe-vep native format.
@@ -99,6 +100,7 @@ type VibeVepVariantAnnotation struct {
 	Assembly               string                          `json:"assembly"`
 	MostSevereConsequence  string                          `json:"most_severe_consequence"`
 	TranscriptConsequences []VibeVepTranscriptConsequence  `json:"transcript_consequences"`
+	Warnings               []string                        `json:"warnings,omitempty"`
 }
 
 // JSONLWriter writes annotations in JSONL format (one JSON line per variant).
@@ -106,7 +108,8 @@ type JSONLWriter struct {
 	w        *bufio.Writer
 	format   string // "ensembl-vep-jsonl" or "vibe-vep-jsonl"
 	assembly string
-	input    string // current input line for context
+	input    string   // current input line for context
+	warnings []string // warnings for current variant
 
 	// Buffer annotations for current variant.
 	curVariant *vcf.Variant
@@ -126,6 +129,13 @@ func NewJSONLWriter(w io.Writer, format, assembly string) *JSONLWriter {
 // SetInput sets the original input string for the current variant.
 func (j *JSONLWriter) SetInput(input string) {
 	j.input = input
+}
+
+// AddWarning adds a warning message for the current variant.
+func (j *JSONLWriter) AddWarning(warning string) {
+	if warning != "" {
+		j.warnings = append(j.warnings, warning)
+	}
 }
 
 // WriteHeader is a no-op for JSONL.
@@ -180,6 +190,7 @@ func (j *JSONLWriter) flushVariant() error {
 
 	j.curVariant = nil
 	j.curAnns = nil
+	j.warnings = nil
 	return nil
 }
 
@@ -254,6 +265,8 @@ func (j *JSONLWriter) marshalVEP() ([]byte, error) {
 		result.TranscriptConsequences = append(result.TranscriptConsequences, tc)
 	}
 
+	result.Warnings = j.warnings
+
 	return json.Marshal(result)
 }
 
@@ -311,6 +324,8 @@ func (j *JSONLWriter) marshalVibeVep() ([]byte, error) {
 		}
 		result.TranscriptConsequences = append(result.TranscriptConsequences, tc)
 	}
+
+	result.Warnings = j.warnings
 
 	return json.Marshal(result)
 }

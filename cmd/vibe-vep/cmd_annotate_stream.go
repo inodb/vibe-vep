@@ -159,7 +159,11 @@ func runAnnotateStream(logger *zap.Logger, assembly, inputFmt, outputFmt string,
 			case annotate.SpecGenomic:
 				variants = []*vcf.Variant{{Chrom: spec.Chrom, Pos: spec.Pos, Ref: spec.Ref, Alt: spec.Alt}}
 			case annotate.SpecHGVSc:
-				variants, err = annotate.ReverseMapHGVSc(cr.cache, spec.TranscriptID, spec.CDSChange)
+				var warning string
+				variants, warning, err = annotate.ReverseMapHGVScWithWarning(cr.cache, spec.TranscriptID, spec.CDSChange)
+				if warning != "" {
+					writer.AddWarning(warning)
+				}
 			case annotate.SpecHGVSg:
 				variants, err = annotate.ResolveHGVSg(cr.cache, spec.Chrom, spec.GenomicChange)
 			case annotate.SpecProtein:
