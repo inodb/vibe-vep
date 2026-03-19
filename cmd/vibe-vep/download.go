@@ -16,17 +16,40 @@ import (
 	"github.com/spf13/viper"
 )
 
+// GENCODE ↔ Ensembl version mapping.
+//
+// Each GENCODE release corresponds to a specific Ensembl release since GENCODE
+// gene models are produced by the Ensembl annotation team. This mapping is used
+// to download matching Ensembl data (variation predictions, etc.).
+//
+// Reference: https://www.gencodegenes.org/human/releases.html
+var gencodeEnsemblMap = map[string]int{
+	"v45": 111, // Jul 2023
+	"v46": 112, // May 2024
+	"v47": 113, // Aug 2024
+	"v19": 75,  // GRCh37 native (Dec 2013)
+}
+
 // GENCODE FTP base URL and per-assembly versions.
-// VEP v111 (Ensembl 111) uses GENCODE v45 for GRCh38 and v19 for GRCh37.
 const (
 	gencodeBase = "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human"
 
-	// GencodeVersionGRCh38 is the GENCODE release for GRCh38 (matches VEP v111).
+	// GencodeVersionGRCh38 is the GENCODE release for GRCh38.
 	GencodeVersionGRCh38 = "v45"
 
-	// GencodeVersionGRCh37 is the native GENCODE release for GRCh37 (Ensembl 75).
+	// GencodeVersionGRCh37 is the native GENCODE release for GRCh37.
 	GencodeVersionGRCh37 = "v19"
 )
+
+// EnsemblReleaseForAssembly returns the Ensembl release number matching
+// the GENCODE version used for the given assembly.
+func EnsemblReleaseForAssembly(assembly string) int {
+	ver := GencodeVersionForAssembly(assembly)
+	if rel, ok := gencodeEnsemblMap[ver]; ok {
+		return rel
+	}
+	return 111 // fallback
+}
 
 // GencodeVersionForAssembly returns the GENCODE version for the given assembly.
 func GencodeVersionForAssembly(assembly string) string {
@@ -339,13 +362,15 @@ func AlphaMissenseFileName(assembly string) string {
 	return filepath.Base(getAlphaMissenseURL(assembly))
 }
 
-// getEnsemblVariationBaseURL returns the base URL for the Ensembl variation MySQL dump.
+// getEnsemblVariationBaseURL returns the base URL for the Ensembl variation MySQL dump,
+// using the Ensembl release that matches our GENCODE version.
 func getEnsemblVariationBaseURL(assembly string) string {
+	rel := EnsemblReleaseForAssembly(assembly)
 	switch strings.ToUpper(assembly) {
 	case "GRCH37":
-		return "https://ftp.ensembl.org/pub/release-115/mysql/homo_sapiens_variation_115_37"
+		return fmt.Sprintf("https://ftp.ensembl.org/pub/release-%d/mysql/homo_sapiens_variation_%d_37", rel, rel)
 	default:
-		return "https://ftp.ensembl.org/pub/release-115/mysql/homo_sapiens_variation_115_38"
+		return fmt.Sprintf("https://ftp.ensembl.org/pub/release-%d/mysql/homo_sapiens_variation_%d_38", rel, rel)
 	}
 }
 
