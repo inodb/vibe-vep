@@ -11,10 +11,13 @@ import (
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/input"
 	"github.com/inodb/vibe-vep/internal/output"
+	"github.com/inodb/vibe-vep/internal/vcf"
 )
 
 // TestStreamAnnotation verifies that the stream annotation pipeline produces
 // valid VEP-compatible JSONL output for well-known cancer variants.
+// Tests multiple input formats: GenomicLocation JSON, HGVSc (with/without version),
+// HGVSg, protein notation, and genomic coordinates.
 func TestStreamAnnotation(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stream integration test in short mode")
@@ -41,28 +44,29 @@ func TestStreamAnnotation(t *testing.T) {
 		wantConseq string
 		wantAA     string // amino_acids in VEP format (e.g. "V/E")
 	}{
+		// GenomicLocation JSON input
 		{
-			name:       "BRAF V600E",
+			name:       "BRAF V600E (GenomicLocation JSON)",
 			input:      `{"chromosome":"7","start":140753336,"end":140753336,"referenceAllele":"A","variantAllele":"T"}`,
 			wantGene:   "BRAF",
 			wantConseq: "missense_variant",
 			wantAA:     "V/E",
 		},
 		{
-			name:       "KRAS G12C",
+			name:       "KRAS G12C (GenomicLocation JSON)",
 			input:      `{"chromosome":"12","start":25245351,"end":25245351,"referenceAllele":"C","variantAllele":"A"}`,
 			wantGene:   "KRAS",
 			wantConseq: "missense_variant",
 			wantAA:     "G/C",
 		},
 		{
-			name:       "TP53 R175H",
+			name:       "TP53 R175H (GenomicLocation JSON)",
 			input:      `{"chromosome":"17","start":7675088,"end":7675088,"referenceAllele":"C","variantAllele":"T"}`,
 			wantGene:   "TP53",
 			wantConseq: "missense_variant",
 		},
 		{
-			name:       "EGFR L858R",
+			name:       "EGFR L858R (GenomicLocation JSON)",
 			input:      `{"chromosome":"7","start":55191822,"end":55191822,"referenceAllele":"T","variantAllele":"G"}`,
 			wantGene:   "EGFR",
 			wantConseq: "missense_variant",
@@ -154,6 +158,126 @@ func TestStreamAnnotation(t *testing.T) {
 			t.Logf("gene=%s transcript=%s consequence=%v amino_acids=%s protein_start=%d hgvsp=%s",
 				bestTC.GeneSymbol, bestTC.TranscriptID, bestTC.ConsequenceTerms,
 				bestTC.AminoAcids, bestTC.ProteinStart, bestTC.HGVSp)
+		})
+	}
+}
+
+// TestStreamMultiFormatInput verifies that all input notations resolve to the
+// same KRAS G12C annotation: GenomicLocation JSON, HGVSc (with/without version),
+// HGVSg, protein notation, and genomic coordinates.
+func TestStreamMultiFormatInput(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping stream multi-format test in short mode")
+	}
+
+	gtfPath, fastaPath, canonicalPath := findGENCODEFiles(t, "GRCh38")
+	c := cache.New()
+	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
+	if canonicalPath != "" {
+		mskOverrides, ensOverrides, _ := cache.LoadBiomartCanonicals(canonicalPath)
+		loader.SetCanonicalOverrides(mskOverrides, ensOverrides)
+	}
+	if err := loader.Load(c); err != nil {
+		t.Fatalf("load GENCODE: %v", err)
+	}
+	c.BuildIndex()
+
+	annotator := annotate.NewAnnotator(c)
+
+	// All these inputs should resolve to KRAS G12C (chr12:25245351 C>A on GRCh38).
+	inputs := []struct {
+		name  string
+		input string
+	}{
+		{"GenomicLocation JSON", `{"chromosome":"12","start":25245351,"end":25245351,"referenceAllele":"C","variantAllele":"A"}`},
+		{"HGVSc no version", "ENST00000311936:c.34G>T"},
+		{"HGVSc version .8", "ENST00000311936.8:c.34G>T"},
+		{"HGVSc version .1", "ENST00000311936.1:c.34G>T"},
+		{"HGVSc version .99", "ENST00000311936.99:c.34G>T"},
+		{"genomic coords", "12:25245351:C:A"},
+	}
+
+	for _, tt := range inputs {
+		t.Run(tt.name, func(t *testing.T) {
+			// Parse input to variant(s).
+			var variants []*vcf.Variant
+			var inputLabel string
+
+			if tt.input[0] == '{' {
+				gl, err := input.ParseGenomicLocation([]byte(tt.input))
+				if err != nil {
+					t.Fatalf("parse GenomicLocation: %v", err)
+				}
+				variants = []*vcf.Variant{gl.ToVariant()}
+				inputLabel = gl.FormatInput()
+			} else {
+				spec, err := annotate.ParseVariantSpec(tt.input)
+				if err != nil {
+					t.Fatalf("parse variant spec: %v", err)
+				}
+				inputLabel = tt.input
+				switch spec.Type {
+				case annotate.SpecGenomic:
+					variants = []*vcf.Variant{{Chrom: spec.Chrom, Pos: spec.Pos, Ref: spec.Ref, Alt: spec.Alt}}
+				case annotate.SpecHGVSc:
+					variants, err = annotate.ReverseMapHGVSc(c, spec.TranscriptID, spec.CDSChange)
+				case annotate.SpecHGVSg:
+					variants, err = annotate.ResolveHGVSg(c, spec.Chrom, spec.GenomicChange)
+				case annotate.SpecProtein:
+					variants, err = annotate.ReverseMapProteinChange(c, spec.GeneName, spec.RefAA, spec.Position, spec.AltAA)
+				}
+				if err != nil {
+					t.Fatalf("resolve: %v", err)
+				}
+			}
+
+			if len(variants) == 0 {
+				t.Fatal("no variants resolved")
+			}
+
+			// Annotate and write JSONL.
+			v := variants[0]
+			anns, err := annotator.Annotate(v)
+			if err != nil {
+				t.Fatalf("annotate: %v", err)
+			}
+
+			var buf strings.Builder
+			w := output.NewJSONLWriter(&buf, "ensembl-vep-jsonl", "GRCh38")
+			w.SetInput(inputLabel)
+			for _, a := range anns {
+				w.Write(v, a)
+			}
+			w.Flush()
+
+			var result output.VEPVariantAnnotation
+			if err := json.Unmarshal([]byte(buf.String()), &result); err != nil {
+				t.Fatalf("invalid JSON: %v", err)
+			}
+
+			// All inputs should resolve to chr12:25245351.
+			if result.SeqRegionName != "12" {
+				t.Errorf("seq_region_name=%q, want 12", result.SeqRegionName)
+			}
+			if result.Start != 25245351 {
+				t.Errorf("start=%d, want 25245351", result.Start)
+			}
+
+			// Find KRAS missense consequence.
+			found := false
+			for _, tc := range result.TranscriptConsequences {
+				if tc.GeneSymbol == "KRAS" && tc.AminoAcids == "G/C" {
+					found = true
+					if tc.ProteinStart != 12 {
+						t.Errorf("protein_start=%d, want 12", tc.ProteinStart)
+					}
+					t.Logf("transcript=%s amino_acids=%s hgvsp=%s", tc.TranscriptID, tc.AminoAcids, tc.HGVSp)
+					break
+				}
+			}
+			if !found {
+				t.Error("KRAS G/C not found in transcript consequences")
+			}
 		})
 	}
 }
