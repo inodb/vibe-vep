@@ -11,6 +11,7 @@ import (
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/input"
 	"github.com/inodb/vibe-vep/internal/output"
+	"github.com/inodb/vibe-vep/internal/vcf"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -130,36 +131,71 @@ func runAnnotateStream(logger *zap.Logger, assembly, inputFmt, outputFmt string,
 			continue
 		}
 
-		gl, err := input.ParseGenomicLocation([]byte(lineStr))
-		if err != nil {
-			logger.Warn("parse error", zap.Error(err), zap.String("input", lineStr))
-			writer.WriteError(lineStr, err.Error())
-			continue
-		}
+		// Resolve input to genomic variant(s).
+		var variants []*vcf.Variant
+		var inputLabel string
 
-		v := gl.ToVariant()
-		writer.SetInput(gl.FormatInput())
+		if lineStr[0] == '{' {
+			// JSON input: GenomicLocation
+			gl, err := input.ParseGenomicLocation([]byte(lineStr))
+			if err != nil {
+				logger.Warn("parse error", zap.Error(err), zap.String("input", lineStr))
+				writer.WriteError(lineStr, err.Error())
+				continue
+			}
+			variants = []*vcf.Variant{gl.ToVariant()}
+			inputLabel = gl.FormatInput()
+		} else {
+			// Plain string: try as variant spec (genomic coords, HGVSc, HGVSg, protein)
+			spec, err := annotate.ParseVariantSpec(lineStr)
+			if err != nil {
+				logger.Warn("parse error", zap.Error(err), zap.String("input", lineStr))
+				writer.WriteError(lineStr, err.Error())
+				continue
+			}
+			inputLabel = lineStr
 
-		anns, err := ann.Annotate(v)
-		if err != nil {
-			logger.Warn("annotation error", zap.Error(err), zap.String("input", lineStr))
-			writer.WriteError(lineStr, err.Error())
-			continue
-		}
-
-		// Apply annotation sources.
-		for _, src := range cr.sources {
-			src.Annotate(v, anns)
-		}
-
-		// Write all annotations for this variant.
-		for _, a := range anns {
-			if err := writer.Write(v, a); err != nil {
-				return fmt.Errorf("write annotation: %w", err)
+			switch spec.Type {
+			case annotate.SpecGenomic:
+				variants = []*vcf.Variant{{Chrom: spec.Chrom, Pos: spec.Pos, Ref: spec.Ref, Alt: spec.Alt}}
+			case annotate.SpecHGVSc:
+				variants, err = annotate.ReverseMapHGVSc(cr.cache, spec.TranscriptID, spec.CDSChange)
+			case annotate.SpecHGVSg:
+				variants, err = annotate.ResolveHGVSg(cr.cache, spec.Chrom, spec.GenomicChange)
+			case annotate.SpecProtein:
+				variants, err = annotate.ReverseMapProteinChange(cr.cache, spec.GeneName, spec.RefAA, spec.Position, spec.AltAA)
+			}
+			if err != nil {
+				logger.Warn("resolve error", zap.Error(err), zap.String("input", lineStr))
+				writer.WriteError(lineStr, err.Error())
+				continue
 			}
 		}
-		if err := writer.Flush(); err != nil {
-			return fmt.Errorf("flush: %w", err)
+
+		for _, v := range variants {
+			writer.SetInput(inputLabel)
+
+			anns, err := ann.Annotate(v)
+			if err != nil {
+				logger.Warn("annotation error", zap.Error(err), zap.String("input", lineStr))
+				writer.WriteError(lineStr, err.Error())
+				continue
+			}
+
+			// Apply annotation sources.
+			for _, src := range cr.sources {
+				src.Annotate(v, anns)
+			}
+
+			// Write all annotations for this variant.
+			for _, a := range anns {
+				if err := writer.Write(v, a); err != nil {
+					return fmt.Errorf("write annotation: %w", err)
+				}
+			}
+			if err := writer.Flush(); err != nil {
+				return fmt.Errorf("flush: %w", err)
+			}
 		}
 	}
 
