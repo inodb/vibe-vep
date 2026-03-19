@@ -195,6 +195,8 @@ func TestStreamMultiFormatInput(t *testing.T) {
 		{"HGVSc version .1", "ENST00000311936.1:c.34G>T"},
 		{"HGVSc version .99", "ENST00000311936.99:c.34G>T"},
 		{"genomic coords", "12:25245351:C:A"},
+		{"HGVSg", "12:g.25245351C>A"},
+		{"protein notation", "KRAS G12C"},
 	}
 
 	for _, tt := range inputs {

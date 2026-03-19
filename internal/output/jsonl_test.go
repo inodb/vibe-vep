@@ -171,6 +171,60 @@ func TestJSONLWriterError(t *testing.T) {
 	}
 }
 
+func TestJSONLWriterWarnings(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewJSONLWriter(&buf, "ensembl-vep-jsonl", "GRCh38")
+	w.SetInput("test")
+	w.AddWarning("requested transcript version ENST00000311936.99 not found, using ENST00000311936.8 instead")
+
+	v := &vcf.Variant{Chrom: "12", Pos: 25245351, Ref: "C", Alt: "A"}
+	ann := &annotate.Annotation{
+		TranscriptID: "ENST00000311936.8",
+		GeneName:     "KRAS",
+		Consequence:  "missense_variant",
+		Impact:       "MODERATE",
+		Allele:       "A",
+	}
+	w.Write(v, ann)
+	w.Flush()
+
+	var result VEPVariantAnnotation
+	json.Unmarshal(buf.Bytes(), &result)
+
+	if len(result.Warnings) != 1 {
+		t.Fatalf("got %d warnings, want 1", len(result.Warnings))
+	}
+	if result.Warnings[0] != "requested transcript version ENST00000311936.99 not found, using ENST00000311936.8 instead" {
+		t.Errorf("warning=%q", result.Warnings[0])
+	}
+}
+
+func TestJSONLWriterNoWarnings(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewJSONLWriter(&buf, "ensembl-vep-jsonl", "GRCh38")
+
+	v := &vcf.Variant{Chrom: "12", Pos: 25245351, Ref: "C", Alt: "A"}
+	ann := &annotate.Annotation{
+		TranscriptID: "ENST00000311936.8",
+		Consequence:  "missense_variant",
+		Impact:       "MODERATE",
+		Allele:       "A",
+	}
+	w.Write(v, ann)
+	w.Flush()
+
+	var result VEPVariantAnnotation
+	json.Unmarshal(buf.Bytes(), &result)
+
+	if len(result.Warnings) != 0 {
+		t.Errorf("got %d warnings, want 0", len(result.Warnings))
+	}
+	// Verify warnings field is omitted from JSON (not null).
+	if bytes.Contains(buf.Bytes(), []byte(`"warnings"`)) {
+		t.Error("warnings field should be omitted when empty")
+	}
+}
+
 func TestJSONLWriterSIFTPolyPhen(t *testing.T) {
 	var buf bytes.Buffer
 	w := NewJSONLWriter(&buf, "ensembl-vep-jsonl", "GRCh38")
