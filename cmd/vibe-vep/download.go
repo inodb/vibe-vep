@@ -80,16 +80,29 @@ func newDownloadCmd(verbose *bool) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "download",
-		Short: "Download GENCODE annotation files",
-		Long:  "Download GENCODE annotation files for variant annotation.",
+		Short: "Download GENCODE and annotation source data files",
+		Long: `Download GENCODE annotation files and optional annotation source data.
+
+Core files (always downloaded):
+  GENCODE GTF + FASTA transcripts, canonical transcript overrides
+
+Optional annotation sources (enabled via config):
+  annotations.alphamissense  AlphaMissense pathogenicity scores (~643 MB)
+  annotations.clinvar        ClinVar clinical significance (~182 MB)
+  annotations.gnomad         gnomAD allele frequencies (~17 GB)
+  annotations.sift           SIFT predictions via Ensembl (~4.1 GB, shared with polyphen)
+  annotations.polyphen       PolyPhen-2 predictions via Ensembl (~4.1 GB, shared with sift)
+  annotations.dbsnp          dbSNP RS identifiers (~17 GB)`,
 		Example: `  # Download GRCh38 annotations (default)
   vibe-vep download
 
   # Download GRCh37 annotations
   vibe-vep download --assembly GRCh37
 
-  # Download to a custom directory
-  vibe-vep download --output /data/gencode`,
+  # Enable and download SIFT + PolyPhen-2
+  vibe-vep config set annotations.sift true
+  vibe-vep config set annotations.polyphen true
+  vibe-vep download`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			logger, err := newLogger(*verbose)

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
@@ -63,9 +64,10 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 					[]annotate.ColumnDef{{Name: "gene_type", Description: "Gene classification (ONCOGENE/TSG)"}}})
 			}
 
-			// Genomic index (AlphaMissense + ClinVar + SIGNAL)
+			// Genomic index (AlphaMissense + ClinVar + SIGNAL + gnomAD + dbSNP)
 			needGenomic := viper.GetBool("annotations.alphamissense") || viper.GetBool("annotations.clinvar") ||
-				(viper.GetBool("annotations.signal") && assembly == "grch37")
+				(viper.GetBool("annotations.signal") && assembly == "grch37") ||
+				viper.GetBool("annotations.gnomad") || viper.GetBool("annotations.dbsnp")
 			if needGenomic {
 				dbPath := genomicIndexPath(cacheDir)
 				status := "ready"
@@ -100,6 +102,51 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 								{Name: "frequency", Description: "Overall allele frequency in SIGNAL cohort"},
 							}})
 					}
+				}
+				if viper.GetBool("annotations.gnomad") {
+					infos = append(infos, sourceInfo{"gnomad", string(annotate.MatchGenomic), assembly, ver, status,
+						[]annotate.ColumnDef{
+							{Name: "af", Description: "Overall allele frequency"},
+							{Name: "ac", Description: "Allele count"},
+							{Name: "an", Description: "Allele number"},
+							{Name: "nhomalt", Description: "Homozygous alternate count"},
+							{Name: "version", Description: "gnomAD version"},
+						}})
+				}
+				if viper.GetBool("annotations.dbsnp") {
+					infos = append(infos, sourceInfo{"dbsnp", string(annotate.MatchGenomic), assembly, ver, status,
+						[]annotate.ColumnDef{
+							{Name: "id", Description: "dbSNP RS identifier"},
+						}})
+				}
+			}
+
+			// SIFT + PolyPhen-2 (Ensembl predictions, separate from genomic index)
+			if viper.GetBool("annotations.sift") || viper.GetBool("annotations.polyphen") {
+				predDBPath := filepath.Join(cacheDir, EnsemblPredDBName)
+				status := "ready"
+				ver := fileModDate(predDBPath)
+				if ver == "" {
+					if _, err := os.Stat(filepath.Join(cacheDir, EnsemblPredictionsName)); err == nil {
+						status = "not prepared (run: vibe-vep prepare)"
+					} else {
+						status = "not downloaded (run: vibe-vep download)"
+					}
+				}
+				ensRel := fmt.Sprintf("Ensembl %d", EnsemblReleaseForAssembly(assembly))
+				if viper.GetBool("annotations.sift") {
+					infos = append(infos, sourceInfo{"sift", "protein_md5", "any", ensRel, status,
+						[]annotate.ColumnDef{
+							{Name: "score", Description: "SIFT score (0-1, lower = more damaging)"},
+							{Name: "prediction", Description: "tolerated/deleterious"},
+						}})
+				}
+				if viper.GetBool("annotations.polyphen") {
+					infos = append(infos, sourceInfo{"polyphen", "protein_md5", "any", ensRel, status,
+						[]annotate.ColumnDef{
+							{Name: "score", Description: "PolyPhen-2 HDIV score (0-1, higher = more damaging)"},
+							{Name: "prediction", Description: "probably_damaging/possibly_damaging/benign"},
+						}})
 				}
 			}
 
