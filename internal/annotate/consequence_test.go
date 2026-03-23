@@ -1041,3 +1041,39 @@ func TestPredictConsequence_MNVMultiCodonDelIns(t *testing.T) {
 	assert.Equal(t, "KE", result.InsertedAAs)
 	assert.Equal(t, "p.Gly2_Phe3delinsLysGlu", result.HGVSp)
 }
+
+func TestPredictConsequence_MNVSynonymous(t *testing.T) {
+	transcript := createForwardMNVTranscript()
+
+	// CDS pos 4-6 (codon 2): GGC -> GGT — both encode Gly, synonymous.
+	v := &vcf.Variant{Chrom: "1", Pos: 103, Ref: "GGC", Alt: "GGT"}
+	result := PredictConsequence(v, transcript)
+
+	assert.Equal(t, ConsequenceSynonymousVariant, result.Consequence)
+	assert.Equal(t, ImpactLow, result.Impact)
+}
+
+func TestPredictConsequence_MNVMultiCodonStopGained(t *testing.T) {
+	// CDS: ATG GGC TTT GAA (M G F E)
+	// Mutate codons 2-3: GGC TTT -> TAA AAA (stop, Lys)
+	// insertedAAs should contain '*', so consequence = stop_gained.
+	transcript := createForwardMNVTranscript()
+
+	v := &vcf.Variant{Chrom: "1", Pos: 103, Ref: "GGCTTT", Alt: "TAAAAA"}
+	result := PredictConsequence(v, transcript)
+
+	assert.Equal(t, ConsequenceStopGained, result.Consequence)
+	assert.Equal(t, ImpactHigh, result.Impact)
+	assert.True(t, result.IsDelIns)
+}
+
+func TestPredictConsequence_MNVStartLost(t *testing.T) {
+	transcript := createForwardMNVTranscript()
+
+	// CDS pos 1-3 (codon 1): ATG -> GTG (Met -> Val), start_lost.
+	v := &vcf.Variant{Chrom: "1", Pos: 100, Ref: "ATG", Alt: "GTG"}
+	result := PredictConsequence(v, transcript)
+
+	assert.Equal(t, ConsequenceStartLost, result.Consequence)
+	assert.Equal(t, ImpactHigh, result.Impact)
+}

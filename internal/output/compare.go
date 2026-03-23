@@ -34,7 +34,7 @@ func SelectBestAnnotation(mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotat
 		}
 	}
 
-	// Pass 2: same gene, prefer canonical > protein-coding > higher impact
+	// Pass 2: same gene, prefer protein-coding > canonical > higher impact
 	var sameGene *annotate.Annotation
 	if mafAnn.HugoSymbol != "" {
 		for _, ann := range vepAnns {
@@ -49,7 +49,7 @@ func SelectBestAnnotation(mafAnn *maf.MAFAnnotation, vepAnns []*annotate.Annotat
 		return sameGene
 	}
 
-	// Pass 3: prefer canonical > protein-coding > higher impact
+	// Pass 3: prefer protein-coding > canonical > higher impact
 	for _, ann := range vepAnns {
 		if bestAnn == nil || AnnotationBetter(ann, bestAnn) {
 			bestAnn = ann

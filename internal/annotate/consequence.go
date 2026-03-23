@@ -304,6 +304,7 @@ func predictMNVConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseque
 
 	switch {
 	case startPos == 0 || (len(deletedAAs) == 0 && len(insertedAAs) == 0):
+		// No protein-level change detected: synonymous.
 		result.Consequence = ConsequenceSynonymousVariant
 
 	case len(deletedAAs) == 1 && len(insertedAAs) == 1:
@@ -325,17 +326,6 @@ func predictMNVConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseque
 
 	default:
 		// Multi-codon change: emit as delins.
-		// Check if the MNV creates or removes a stop codon.
-		hasDelStop := containsStop(deletedAAs)
-		hasInsStop := containsStop(insertedAAs)
-		switch {
-		case hasInsStop && !hasDelStop:
-			result.Consequence = ConsequenceStopGained
-		case hasDelStop && !hasInsStop:
-			result.Consequence = ConsequenceStopLost
-		default:
-			result.Consequence = ConsequenceMissenseVariant
-		}
 		result.IsDelIns = true
 		result.ProteinPosition = startPos
 		if len(deletedAAs) > 0 {
@@ -345,6 +335,20 @@ func predictMNVConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseque
 		if len(deletedAAs) > 1 {
 			result.ProteinEndPosition = startPos + int64(len(deletedAAs)) - 1
 			result.EndAA = deletedAAs[len(deletedAAs)-1]
+		}
+
+		// Check for stop/start effects in multi-codon MNV.
+		hasInsStop := containsStop(insertedAAs)
+		hasDelStop := containsStop(deletedAAs)
+		switch {
+		case hasInsStop && !hasDelStop:
+			result.Consequence = ConsequenceStopGained
+		case hasDelStop && !hasInsStop:
+			result.Consequence = ConsequenceStopLost
+		case startPos == 1 && (len(deletedAAs) == 0 || deletedAAs[0] == 'M'):
+			result.Consequence = ConsequenceStartLost
+		default:
+			result.Consequence = ConsequenceMissenseVariant
 		}
 	}
 
