@@ -1,11 +1,14 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -137,79 +140,100 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 		outputDir = filepath.Join(home, ".vibe-vep")
 	}
 
-	// Create assembly-specific subdirectory
+	// Raw downloads go into {assembly}/raw/
 	assemblyLower := strings.ToLower(assembly)
-	destDir := filepath.Join(outputDir, assemblyLower)
+	assemblyDir := filepath.Join(outputDir, assemblyLower)
+	rawDir := filepath.Join(assemblyDir, "raw")
 
-	if err := os.MkdirAll(destDir, 0755); err != nil {
-		return fmt.Errorf("cannot create directory %s: %w", destDir, err)
+	if err := os.MkdirAll(rawDir, 0755); err != nil {
+		return fmt.Errorf("cannot create directory %s: %w", rawDir, err)
 	}
 
 	gtfURL, fastaURL := getGENCODEURLs(assembly)
 
 	fmt.Printf("Downloading GENCODE %s annotations for %s...\n", GencodeVersionForAssembly(assembly), assembly)
-	fmt.Printf("Destination: %s\n\n", destDir)
+	fmt.Printf("Destination: %s\n\n", rawDir)
+
+	// checksums collects sha256 → filename for the checksum manifest.
+	checksums := map[string]string{}
+	addChecksum := func(path, sum string) {
+		if sum != "" {
+			checksums[filepath.Base(path)] = sum
+		}
+	}
 
 	// Download GTF
-	gtfFile := filepath.Join(destDir, filepath.Base(gtfURL))
-	if err := downloadFile(gtfURL, gtfFile); err != nil {
+	gtfFile := filepath.Join(rawDir, filepath.Base(gtfURL))
+	sum, err := downloadFile(gtfURL, gtfFile)
+	if err != nil {
 		return fmt.Errorf("downloading GTF: %w", err)
 	}
+	addChecksum(gtfFile, sum)
 
 	// Download FASTA (unless gtf-only)
 	if !gtfOnly {
-		fastaFile := filepath.Join(destDir, filepath.Base(fastaURL))
-		if err := downloadFile(fastaURL, fastaFile); err != nil {
+		fastaFile := filepath.Join(rawDir, filepath.Base(fastaURL))
+		sum, err := downloadFile(fastaURL, fastaFile)
+		if err != nil {
 			return fmt.Errorf("downloading FASTA: %w", err)
 		}
+		addChecksum(fastaFile, sum)
 	}
 
 	// Download Genome Nexus canonical transcript overrides
 	canonicalURL := cache.CanonicalFileURL(assembly)
-	canonicalFile := filepath.Join(destDir, cache.CanonicalFileName())
-	if err := downloadFile(canonicalURL, canonicalFile); err != nil {
+	canonicalFile := filepath.Join(rawDir, cache.CanonicalFileName())
+	if sum, err := downloadFile(canonicalURL, canonicalFile); err != nil {
 		logger.Warn("could not download canonical transcript overrides", zap.Error(err))
-		// Non-fatal: tool still works without overrides
+	} else {
+		addChecksum(canonicalFile, sum)
 	}
 
 	// Download AlphaMissense data if enabled in config
 	if viper.GetBool("annotations.alphamissense") {
 		amURL := getAlphaMissenseURL(assembly)
-		amFile := filepath.Join(destDir, filepath.Base(amURL))
+		amFile := filepath.Join(rawDir, filepath.Base(amURL))
 		fmt.Printf("\nAlphaMissense annotation enabled in config, downloading...\n")
-		if err := downloadFile(amURL, amFile); err != nil {
+		if sum, err := downloadFile(amURL, amFile); err != nil {
 			logger.Warn("could not download AlphaMissense data", zap.Error(err))
-			// Non-fatal: tool still works without AlphaMissense
+		} else {
+			addChecksum(amFile, sum)
 		}
 	}
 
 	// Download ClinVar data if enabled in config
 	if viper.GetBool("annotations.clinvar") {
 		cvURL := getClinVarURL(assembly)
-		cvFile := filepath.Join(destDir, ClinVarFileName)
+		cvFile := filepath.Join(rawDir, ClinVarFileName)
 		fmt.Printf("\nClinVar annotation enabled in config, downloading...\n")
-		if err := downloadFile(cvURL, cvFile); err != nil {
+		if sum, err := downloadFile(cvURL, cvFile); err != nil {
 			logger.Warn("could not download ClinVar data", zap.Error(err))
+		} else {
+			addChecksum(cvFile, sum)
 		}
 	}
 
 	// Download gnomAD data if enabled in config
 	if viper.GetBool("annotations.gnomad") {
 		gnomadURL := getGnomadURL(assembly)
-		gnomadFile := filepath.Join(destDir, GnomadFileName(assembly))
+		gnomadFile := filepath.Join(rawDir, GnomadFileName(assembly))
 		fmt.Printf("\ngnomAD annotation enabled in config, downloading...\n")
-		if err := downloadFile(gnomadURL, gnomadFile); err != nil {
+		if sum, err := downloadFile(gnomadURL, gnomadFile); err != nil {
 			logger.Warn("could not download gnomAD data", zap.Error(err))
+		} else {
+			addChecksum(gnomadFile, sum)
 		}
 	}
 
 	// Download dbSNP data if enabled in config
 	if viper.GetBool("annotations.dbsnp") {
 		dbsnpURL := getDbSnpURL(assembly)
-		dbsnpFile := filepath.Join(destDir, DbSnpFileName)
+		dbsnpFile := filepath.Join(rawDir, DbSnpFileName)
 		fmt.Printf("\ndbSNP annotation enabled in config, downloading...\n")
-		if err := downloadFile(dbsnpURL, dbsnpFile); err != nil {
+		if sum, err := downloadFile(dbsnpURL, dbsnpFile); err != nil {
 			logger.Warn("could not download dbSNP data", zap.Error(err))
+		} else {
+			addChecksum(dbsnpFile, sum)
 		}
 	}
 
@@ -217,29 +241,61 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 	if viper.GetBool("annotations.sift") || viper.GetBool("annotations.polyphen") {
 		baseURL := getEnsemblVariationBaseURL(assembly)
 		fmt.Printf("\nSIFT/PolyPhen annotation enabled in config, downloading Ensembl prediction data...\n")
-		md5File := filepath.Join(destDir, EnsemblTranslationMD5Name)
-		if err := downloadFile(baseURL+"/"+EnsemblTranslationMD5Name, md5File); err != nil {
+		md5File := filepath.Join(rawDir, EnsemblTranslationMD5Name)
+		if sum, err := downloadFile(baseURL+"/"+EnsemblTranslationMD5Name, md5File); err != nil {
 			logger.Warn("could not download Ensembl translation MD5 mapping", zap.Error(err))
+		} else {
+			addChecksum(md5File, sum)
 		}
-		predFile := filepath.Join(destDir, EnsemblPredictionsName)
-		if err := downloadFile(baseURL+"/"+EnsemblPredictionsName, predFile); err != nil {
+		predFile := filepath.Join(rawDir, EnsemblPredictionsName)
+		if sum, err := downloadFile(baseURL+"/"+EnsemblPredictionsName, predFile); err != nil {
 			logger.Warn("could not download Ensembl protein function predictions", zap.Error(err))
+		} else {
+			addChecksum(predFile, sum)
+		}
+	}
+
+	// Write checksum manifest to assembly dir (not raw/, so it survives clean).
+	if len(checksums) > 0 {
+		if err := writeChecksums(filepath.Join(assemblyDir, "checksums.sha256"), checksums); err != nil {
+			logger.Warn("could not write checksums", zap.Error(err))
 		}
 	}
 
 	fmt.Printf("\nDownload complete!\n")
-	fmt.Printf("To annotate variants, run:\n")
-	fmt.Printf("  vibe-vep annotate input.vcf\n")
+	fmt.Printf("To build indexes, run:\n")
+	fmt.Printf("  vibe-vep prepare --assembly %s\n", assembly)
 
 	return nil
 }
 
-// downloadFile downloads a file from URL to the destination path with progress.
-func downloadFile(url, destPath string) error {
+// writeChecksums writes a sha256sum-compatible manifest file.
+func writeChecksums(path string, checksums map[string]string) error {
+	// Sort by filename for stable output.
+	names := make([]string, 0, len(checksums))
+	for name := range checksums {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	for _, name := range names {
+		fmt.Fprintf(f, "%s  %s\n", checksums[name], name)
+	}
+	return nil
+}
+
+// downloadFile downloads a file from URL to the destination path with progress,
+// computing a SHA-256 checksum along the way. Returns the hex-encoded checksum.
+func downloadFile(url, destPath string) (string, error) {
 	// Check if file already exists
 	if info, err := os.Stat(destPath); err == nil {
 		fmt.Printf("  %s already exists (%s), skipping\n", filepath.Base(destPath), formatSize(info.Size()))
-		return nil
+		return checksumFile(destPath)
 	}
 
 	fmt.Printf("  Downloading %s...\n", filepath.Base(destPath))
@@ -251,48 +307,63 @@ func downloadFile(url, destPath string) error {
 
 	resp, err := client.Get(url)
 	if err != nil {
-		return fmt.Errorf("HTTP request failed: %w", err)
+		return "", fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP error: %s", resp.Status)
+		return "", fmt.Errorf("HTTP error: %s", resp.Status)
 	}
 
 	// Create destination file
 	tmpPath := destPath + ".tmp"
 	f, err := os.Create(tmpPath)
 	if err != nil {
-		return fmt.Errorf("create file: %w", err)
+		return "", fmt.Errorf("create file: %w", err)
 	}
 
-	// Copy with progress
+	// Copy with progress + SHA-256
 	var downloaded int64
 	contentLength := resp.ContentLength
 
-	// Create a progress writer
 	pw := &progressWriter{
 		total:      contentLength,
 		downloaded: &downloaded,
 		lastPrint:  time.Now(),
 	}
 
-	_, err = io.Copy(f, io.TeeReader(resp.Body, pw))
+	h := sha256.New()
+	_, err = io.Copy(f, io.TeeReader(resp.Body, io.MultiWriter(pw, h)))
 	f.Close()
 
 	if err != nil {
 		os.Remove(tmpPath)
-		return fmt.Errorf("download failed: %w", err)
+		return "", fmt.Errorf("download failed: %w", err)
 	}
 
 	// Rename temp file to final destination
 	if err := os.Rename(tmpPath, destPath); err != nil {
 		os.Remove(tmpPath)
-		return fmt.Errorf("rename file: %w", err)
+		return "", fmt.Errorf("rename file: %w", err)
 	}
 
-	fmt.Printf("    Done: %s\n", formatSize(downloaded))
-	return nil
+	checksum := hex.EncodeToString(h.Sum(nil))
+	fmt.Printf("    Done: %s (sha256:%s)\n", formatSize(downloaded), checksum[:12])
+	return checksum, nil
+}
+
+// checksumFile computes the SHA-256 checksum of an existing file.
+func checksumFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // progressWriter tracks download progress.
@@ -417,7 +488,17 @@ func DefaultGENCODEPath(assembly string) string {
 	return filepath.Join(home, ".vibe-vep", strings.ToLower(assembly))
 }
 
+// RawDir returns the path to the raw download subdirectory for an assembly.
+func RawDir(assembly string) string {
+	dir := DefaultGENCODEPath(assembly)
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, "raw")
+}
+
 // FindGENCODEFiles looks for GENCODE files in the default location.
+// Checks raw/ subdirectory first, falls back to flat layout for backward compatibility.
 // Returns gtfPath, fastaPath, canonicalPath, and whether files were found.
 func FindGENCODEFiles(assembly string) (gtfPath, fastaPath, canonicalPath string, found bool) {
 	dir := DefaultGENCODEPath(assembly)
@@ -425,25 +506,28 @@ func FindGENCODEFiles(assembly string) (gtfPath, fastaPath, canonicalPath string
 		return "", "", "", false
 	}
 
-	// Look for GTF file (both assemblies use gencode.v*.annotation.gtf.gz now)
-	matches, err := filepath.Glob(filepath.Join(dir, "gencode.v*.annotation.gtf.gz"))
-	if err != nil || len(matches) == 0 {
-		return "", "", "", false
+	// Try raw/ subdirectory first, fall back to flat layout.
+	searchDirs := []string{filepath.Join(dir, "raw"), dir}
+
+	for _, d := range searchDirs {
+		matches, err := filepath.Glob(filepath.Join(d, "gencode.v*.annotation.gtf.gz"))
+		if err != nil || len(matches) == 0 {
+			continue
+		}
+		gtfPath = matches[0]
+
+		matches, err = filepath.Glob(filepath.Join(d, "gencode.v*.pc_transcripts.fa.gz"))
+		if err == nil && len(matches) > 0 {
+			fastaPath = matches[0]
+		}
+
+		cPath := filepath.Join(d, cache.CanonicalFileName())
+		if _, err := os.Stat(cPath); err == nil {
+			canonicalPath = cPath
+		}
+
+		return gtfPath, fastaPath, canonicalPath, true
 	}
-	gtfPath = matches[0]
 
-	// Look for FASTA file
-
-	matches, err = filepath.Glob(filepath.Join(dir, "gencode.v*.pc_transcripts.fa.gz"))
-	if err == nil && len(matches) > 0 {
-		fastaPath = matches[0]
-	}
-
-	// Look for canonical transcript overrides
-	cPath := filepath.Join(dir, cache.CanonicalFileName())
-	if _, err := os.Stat(cPath); err == nil {
-		canonicalPath = cPath
-	}
-
-	return gtfPath, fastaPath, canonicalPath, true
+	return "", "", "", false
 }

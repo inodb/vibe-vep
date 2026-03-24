@@ -96,12 +96,14 @@ func newRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "Config file (default: $HOME/.vibe-vep.yaml)")
 
 	rootCmd.AddCommand(newAnnotateCmd(&verbose))
+	rootCmd.AddCommand(newCleanCmd())
 	rootCmd.AddCommand(newCompareCmd())
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newConvertCmd(&verbose))
 	rootCmd.AddCommand(newDownloadCmd(&verbose))
 	rootCmd.AddCommand(newExportCmd(&verbose))
 	rootCmd.AddCommand(newPrepareCmd(&verbose))
+	rootCmd.AddCommand(newServeCmd(&verbose))
 	rootCmd.AddCommand(newVersionCmd(&verbose))
 
 	return rootCmd
@@ -347,10 +349,11 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 
 	// Ensembl SIFT/PolyPhen-2 predictions (protein-level)
 	if viper.GetBool("annotations.sift") || viper.GetBool("annotations.polyphen") {
+		raw := rawDirForCache(cacheDir)
 		predDBPath := filepath.Join(cacheDir, EnsemblPredDBName)
 		predSources := ensemblpred.BuildSources{
-			TranslationMD5TSV: filepath.Join(cacheDir, EnsemblTranslationMD5Name),
-			PredictionsTSV:    filepath.Join(cacheDir, EnsemblPredictionsName),
+			TranslationMD5TSV: filepath.Join(raw, EnsemblTranslationMD5Name),
+			PredictionsTSV:    filepath.Join(raw, EnsemblPredictionsName),
 		}
 		if !ensemblpred.Ready(predDBPath, predSources) {
 			// Check if source files exist before trying to build.
@@ -405,15 +408,26 @@ func loadFromGTFFASTA(logger *zap.Logger, c *cache.Cache, gtfPath, fastaPath, ca
 	return nil
 }
 
+// rawDirForCache returns the raw/ subdirectory for a cache dir,
+// falling back to the cache dir itself for backward compatibility.
+func rawDirForCache(cacheDir string) string {
+	raw := filepath.Join(cacheDir, "raw")
+	if info, err := os.Stat(raw); err == nil && info.IsDir() {
+		return raw
+	}
+	return cacheDir
+}
+
 // genomicIndexSources returns the BuildSources config for the given assembly and cache dir.
 func genomicIndexSources(cacheDir, assembly string) genomicindex.BuildSources {
+	raw := rawDirForCache(cacheDir)
 	bs := genomicindex.BuildSources{
-		AlphaMissenseTSV: filepath.Join(cacheDir, AlphaMissenseFileName(assembly)),
-		ClinVarVCF:       filepath.Join(cacheDir, ClinVarFileName),
-		SignalTSV:        filepath.Join(cacheDir, SignalFileName),
-		GnomadVCF:        filepath.Join(cacheDir, GnomadFileName(assembly)),
+		AlphaMissenseTSV: filepath.Join(raw, AlphaMissenseFileName(assembly)),
+		ClinVarVCF:       filepath.Join(raw, ClinVarFileName),
+		SignalTSV:        filepath.Join(raw, SignalFileName),
+		GnomadVCF:        filepath.Join(raw, GnomadFileName(assembly)),
 		GnomadVersion:    gnomadVersionForAssembly(assembly),
-		DbSnpVCF:         filepath.Join(cacheDir, DbSnpFileName),
+		DbSnpVCF:         filepath.Join(raw, DbSnpFileName),
 	}
 	return bs
 }

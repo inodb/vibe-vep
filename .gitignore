@@ -39,6 +39,9 @@ coverage.html
 build/
 dist/
 
+# Data symlink for Docker builds (ln -s ~/.vibe-vep data)
+data
+
 # Temporary files
 *.tmp
 *.log
