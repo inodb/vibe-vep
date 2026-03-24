@@ -82,11 +82,10 @@ func cleanAssembly(assembly string) error {
 }
 
 func cleanAll() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("cannot determine home directory: %w", err)
+	baseDir := DataDir()
+	if baseDir == "" {
+		return fmt.Errorf("cannot determine data directory (set VIBE_VEP_DATA_DIR or HOME)")
 	}
-	baseDir := filepath.Join(home, ".vibe-vep")
 
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {

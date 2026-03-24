@@ -40,7 +40,7 @@ RUN apt-get update && \
 COPY --from=builder /vibe-vep /usr/local/bin/vibe-vep
 COPY data/ /data/
 
-ENV HOME=/data
+ENV VIBE_VEP_DATA_DIR=/data
 EXPOSE 8080
 ENTRYPOINT ["vibe-vep"]
 CMD ["serve", "--assembly=GRCh37,GRCh38", "--port=8080"]

@@ -133,11 +133,10 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 
 	// Determine output directory
 	if outputDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("cannot determine home directory: %w", err)
+		outputDir = DataDir()
+		if outputDir == "" {
+			return fmt.Errorf("cannot determine data directory (set VIBE_VEP_DATA_DIR or HOME)")
 		}
-		outputDir = filepath.Join(home, ".vibe-vep")
 	}
 
 	// Raw downloads go into {assembly}/raw/
@@ -479,13 +478,26 @@ func getGnomadURL(assembly string) string {
 	}
 }
 
-// DefaultGENCODEPath returns the default path for GENCODE cache files.
-func DefaultGENCODEPath(assembly string) string {
+// DataDir returns the base data directory.
+// Uses VIBE_VEP_DATA_DIR if set, otherwise defaults to ~/.vibe-vep.
+func DataDir() string {
+	if dir := os.Getenv("VIBE_VEP_DATA_DIR"); dir != "" {
+		return dir
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".vibe-vep", strings.ToLower(assembly))
+	return filepath.Join(home, ".vibe-vep")
+}
+
+// DefaultGENCODEPath returns the default path for GENCODE cache files.
+func DefaultGENCODEPath(assembly string) string {
+	dir := DataDir()
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, strings.ToLower(assembly))
 }
 
 // RawDir returns the path to the raw download subdirectory for an assembly.
