@@ -1,0 +1,46 @@
+# Multi-arch build for vibe-vep serve with embedded data.
+# Prerequisites:
+#   ln -s ~/.vibe-vep data   # symlink prepared data into build context
+#
+# Build:
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     -t inodb/vibe-vep:latest -f Dockerfile.serve --push .
+
+FROM --platform=$BUILDPLATFORM golang:1.24-bookworm AS builder
+ARG TARGETARCH
+
+# Install cross-compiler + libc headers for CGO when building for a different arch.
+RUN if [ "$TARGETARCH" = "arm64" ] && [ "$(dpkg --print-architecture)" != "arm64" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends \
+        gcc-aarch64-linux-gnu libc6-dev-arm64-cross libstdc++-12-dev-arm64-cross && \
+      rm -rf /var/lib/apt/lists/*; \
+    elif [ "$TARGETARCH" = "amd64" ] && [ "$(dpkg --print-architecture)" != "amd64" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends \
+        gcc-x86-64-linux-gnu libc6-dev-amd64-cross libstdc++-12-dev-amd64-cross && \
+      rm -rf /var/lib/apt/lists/*; \
+    fi
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CC=$(case "$TARGETARCH" in \
+      arm64) [ "$(dpkg --print-architecture)" != "arm64" ] && echo aarch64-linux-gnu-gcc || echo gcc ;; \
+      amd64) [ "$(dpkg --print-architecture)" != "amd64" ] && echo x86_64-linux-gnu-gcc || echo gcc ;; \
+      *) echo gcc ;; \
+    esac) && \
+    CGO_ENABLED=1 GOARCH=$TARGETARCH CC=$CC \
+    go build -ldflags="-s -w" -o /vibe-vep ./cmd/vibe-vep
+
+FROM debian:bookworm-slim
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /vibe-vep /usr/local/bin/vibe-vep
+COPY data/ /data/
+
+ENV HOME=/data
+EXPOSE 8080
+ENTRYPOINT ["vibe-vep"]
+CMD ["serve", "--assembly=GRCh37,GRCh38", "--port=8080"]

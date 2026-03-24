@@ -1,0 +1,6 @@
+.git
+.claude
+testdata
+
+# Raw downloaded source files (not needed at runtime after prepare)
+data/*/raw/
