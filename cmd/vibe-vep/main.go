@@ -199,17 +199,19 @@ func loadCache(logger *zap.Logger, assembly string, noCache, clearCache bool) (*
 		return nil, err
 	}
 	gtfPath, fastaPath, canonicalPath, found := FindGENCODEFiles(assembly)
-	if !found {
-		return nil, fmt.Errorf("no GENCODE cache found for %s\nHint: Download GENCODE annotations with: vibe-vep download --assembly %s", assembly, assembly)
-	}
-
-	logger.Info("using GENCODE cache",
-		zap.String("assembly", assembly),
-		zap.String("gtf", gtfPath),
-		zap.String("fasta", fastaPath))
 
 	c := cache.New()
 	cacheDir := DefaultGENCODEPath(assembly)
+	if cacheDir == "" {
+		return nil, fmt.Errorf("cannot determine data directory for %s (set VIBE_VEP_DATA_DIR or HOME)", assembly)
+	}
+
+	if found {
+		logger.Info("using GENCODE cache",
+			zap.String("assembly", assembly),
+			zap.String("gtf", gtfPath),
+			zap.String("fasta", fastaPath))
+	}
 
 	// Fingerprint source files for cache validation
 	gtfFP, err1 := duckdb.StatFile(gtfPath)
@@ -229,6 +231,7 @@ func loadCache(logger *zap.Logger, assembly string, noCache, clearCache bool) (*
 			logger.Info("cleared transcript cache")
 		}
 	} else if err1 == nil && err2 == nil && tc.Valid(gtfFP, fastaFP, canonicalFP) {
+		// Raw files present and fingerprints match — load validated cache.
 		start := time.Now()
 		if err := tc.Load(c); err != nil {
 			logger.Warn("transcript cache load failed, falling back to GTF/FASTA (try --clear-cache to rebuild)",
@@ -239,9 +242,21 @@ func loadCache(logger *zap.Logger, assembly string, noCache, clearCache bool) (*
 				zap.Duration("elapsed", time.Since(start)))
 			transcriptsLoaded = true
 		}
+	} else if !found || err1 != nil || err2 != nil {
+		// Raw files missing (e.g. Docker image after clean) — load gob cache without validation.
+		start := time.Now()
+		if err := tc.Load(c); err == nil && c.TranscriptCount() > 0 {
+			logger.Info("loaded transcript cache (raw files not present, skipping validation)",
+				zap.Int("count", c.TranscriptCount()),
+				zap.Duration("elapsed", time.Since(start)))
+			transcriptsLoaded = true
+		}
 	}
 
 	if !transcriptsLoaded {
+		if !found {
+			return nil, fmt.Errorf("no GENCODE data or transcript cache found for %s\nHint: Download with: vibe-vep download --assembly %s", assembly, assembly)
+		}
 		// Load from GTF/FASTA
 		if err := loadFromGTFFASTA(logger, c, gtfPath, fastaPath, canonicalPath); err != nil {
 			return nil, err
