@@ -125,7 +125,7 @@ func initConfig(configFile string) error {
 
 	viper.SetEnvPrefix("VIBE_VEP")
 	viper.AutomaticEnv()
-	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
 
 	// Read config file if it exists (not an error if missing)
 	if err := viper.ReadInConfig(); err != nil {
