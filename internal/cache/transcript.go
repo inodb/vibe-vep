@@ -16,6 +16,8 @@ type Transcript struct {
 	ID              string // Transcript ID (e.g., ENST00000311936)
 	GeneID          string // Parent gene ID
 	GeneName        string // Parent gene symbol
+	ProteinID       string // Ensembl protein ID (e.g., ENSP00000493376), empty if non-coding
+	HGNCId          string // HGNC identifier (e.g., HGNC:14825), empty if not available
 	Chrom           string // Chromosome
 	Start           int64  // Transcript start (1-based)
 	End             int64  // Transcript end (1-based, inclusive)

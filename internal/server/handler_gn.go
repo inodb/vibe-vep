@@ -187,6 +187,8 @@ func parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions {
 	fields := r.URL.Query().Get("fields")
 	return output.GNMarshalOptions{
 		IncludeAnnotationSummary: strings.Contains(fields, "annotation_summary"),
+		IncludeClinVar:           strings.Contains(fields, "clinvar"),
+		IncludeHotspots:          strings.Contains(fields, "hotspots"),
 	}
 }
 

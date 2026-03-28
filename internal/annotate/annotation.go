@@ -58,6 +58,8 @@ type Annotation struct {
 	TranscriptID    string            // Affected transcript
 	GeneName        string            // Gene symbol
 	GeneID          string            // Gene identifier
+	ProteinID       string            // Ensembl protein ID (e.g., ENSP00000493376)
+	HGNCId          string            // HGNC identifier (e.g., HGNC:14825)
 	Consequence     string            // SO consequence term
 	Impact          string            // HIGH, MODERATE, LOW, MODIFIER
 	CDSPosition     int64             // Position in CDS, 0 if not in CDS

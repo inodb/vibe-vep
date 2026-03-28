@@ -13,6 +13,8 @@ import (
 // GNMarshalOptions controls which fields to include in the GN response.
 type GNMarshalOptions struct {
 	IncludeAnnotationSummary bool
+	IncludeClinVar           bool
+	IncludeHotspots          bool
 }
 
 // MarshalGNAnnotation builds a GNAnnotation from a variant and its annotations,
@@ -66,6 +68,8 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 			TranscriptID:     stripVersion(ann.TranscriptID),
 			GeneSymbol:       ann.GeneName,
 			GeneID:           ann.GeneID,
+			HGNCId:           ann.HGNCId,
+			ProteinID:        ann.ProteinID,
 			ConsequenceTerms: splitConsequence(ann.Consequence),
 			Impact:           ann.Impact,
 			VariantAllele:    ann.Allele,
@@ -102,13 +106,47 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 		result.TranscriptConsequences = append(result.TranscriptConsequences, tc)
 	}
 
-	// Build annotation_summary if requested.
+	// Build optional enrichments.
 	var opt GNMarshalOptions
 	if len(opts) > 0 {
 		opt = opts[0]
 	}
 	if opt.IncludeAnnotationSummary {
 		result.AnnotationSummary = buildAnnotationSummary(variant, v, anns, canonicalAnn, assembly)
+	}
+
+	// Source fields are populated from annotation extras (same for all transcripts).
+	src := firstAnnotationWithExtras(anns)
+
+	// dbSNP → colocatedVariants (always included when available).
+	if src != nil {
+		if rsID := src.GetExtraKey("dbsnp.id"); rsID != "" {
+			result.ColocatedVariants = []GNColocatedVariant{{DbSnpID: rsID}}
+		}
+	}
+
+	// ClinVar
+	if opt.IncludeClinVar && src != nil {
+		if clnsig := src.GetExtraKey("clinvar.clnsig"); clnsig != "" {
+			result.ClinVar = &GNClinVar{
+				Annotation: &GNClinVarAnnotation{
+					ClinicalSignificance: clnsig,
+					ReviewStatus:         src.GetExtraKey("clinvar.clnrevstat"),
+					DiseaseName:          src.GetExtraKey("clinvar.clndn"),
+				},
+			}
+		}
+	}
+
+	// Hotspots
+	if opt.IncludeHotspots && src != nil {
+		if src.GetExtraKey("hotspots.hotspot") == "Y" {
+			result.Hotspots = &GNHotspots{
+				Annotation: []GNHotspotEntry{{
+					Type: src.GetExtraKey("hotspots.type"),
+				}},
+			}
+		}
 	}
 
 	return json.Marshal(result)
@@ -265,6 +303,19 @@ func hgvspStripTranscript(hgvsp string) string {
 		return hgvsp[idx+1:]
 	}
 	return hgvsp
+}
+
+// firstAnnotationWithExtras returns the first annotation that has extras populated.
+func firstAnnotationWithExtras(anns []*annotate.Annotation) *annotate.Annotation {
+	for _, ann := range anns {
+		if len(ann.Extra) > 0 {
+			return ann
+		}
+	}
+	if len(anns) > 0 {
+		return anns[0]
+	}
+	return nil
 }
 
 // splitAminoAcids splits "V/E" into ref "V" and alt "E".

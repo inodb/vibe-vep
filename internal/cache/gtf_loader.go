@@ -125,6 +125,8 @@ func (l *GTFLoader) parseGTF(reader io.Reader, filterChrom string) (map[string]*
 				ID:                 transcriptID,
 				GeneID:             stripVersion(feat.attributes["gene_id"]),
 				GeneName:           feat.attributes["gene_name"],
+				ProteinID:          stripVersion(feat.attributes["protein_id"]),
+				HGNCId:             feat.attributes["hgnc_id"],
 				Chrom:              feat.chrom,
 				Start:              feat.start,
 				End:                feat.end,

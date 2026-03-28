@@ -25,6 +25,37 @@ type GNAnnotation struct {
 	TranscriptConsequences []GNTranscriptConsequence `json:"transcript_consequences"`
 	SuccessfullyAnnotated bool                      `json:"successfully_annotated"`
 	AnnotationSummary     *GNAnnotationSummary      `json:"annotation_summary,omitempty"`
+	ClinVar               *GNClinVar                `json:"clinvar,omitempty"`
+	ColocatedVariants     []GNColocatedVariant       `json:"colocatedVariants,omitempty"`
+	Hotspots              *GNHotspots               `json:"hotspots,omitempty"`
+}
+
+// GNClinVar represents ClinVar annotation in the GN response.
+type GNClinVar struct {
+	Annotation *GNClinVarAnnotation `json:"annotation,omitempty"`
+}
+
+// GNClinVarAnnotation contains ClinVar details.
+type GNClinVarAnnotation struct {
+	ClinicalSignificance string `json:"clinicalSignificance,omitempty"`
+	ReviewStatus         string `json:"reviewStatus,omitempty"`
+	DiseaseName          string `json:"diseaseName,omitempty"`
+}
+
+// GNColocatedVariant represents a dbSNP/COSMIC ID at the same position.
+type GNColocatedVariant struct {
+	DbSnpID string `json:"dbSnpId,omitempty"`
+}
+
+// GNHotspots represents cancer hotspot annotation.
+type GNHotspots struct {
+	Annotation []GNHotspotEntry `json:"annotation,omitempty"`
+}
+
+// GNHotspotEntry represents a single hotspot hit.
+type GNHotspotEntry struct {
+	Type   string  `json:"type,omitempty"`
+	QValue float64 `json:"qValue,omitempty"`
 }
 
 // GNAnnotationSummary is the enriched annotation summary returned when
@@ -82,6 +113,8 @@ type GNTranscriptConsequence struct {
 	TranscriptID       string   `json:"transcript_id"`
 	GeneSymbol         string   `json:"gene_symbol"`
 	GeneID             string   `json:"gene_id"`
+	HGNCId             string   `json:"hgnc_id,omitempty"`
+	ProteinID          string   `json:"protein_id,omitempty"`
 	ConsequenceTerms   []string `json:"consequence_terms"`
 	Impact             string   `json:"impact"`
 	VariantAllele      string   `json:"variant_allele"`
