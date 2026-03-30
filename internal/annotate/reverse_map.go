@@ -360,9 +360,18 @@ var reGenomicSubstitution = regexp.MustCompile(`^(\d+)([ACGT])>([ACGT])$`)
 // reGenomicDeletion parses a genomic deletion like "1293968del" or "1293968_1293970del".
 var reGenomicDeletion = regexp.MustCompile(`^(\d+)(?:_(\d+))?del$`)
 
+// reGenomicInsertion parses a genomic insertion like "41242962_41242963insGA".
+var reGenomicInsertion = regexp.MustCompile(`^(\d+)_(\d+)ins([ACGTacgt]+)$`)
+
+// reGenomicDelIns parses a genomic deletion-insertion like "7_8delinsAA" or "7del1insAA".
+var reGenomicDelIns = regexp.MustCompile(`^(\d+)(?:_(\d+))?delins([ACGTacgt]+)$`)
+
+// reGenomicDup parses a genomic duplication like "41242962dup" or "41242962_41242964dup".
+var reGenomicDup = regexp.MustCompile(`^(\d+)(?:_(\d+))?dup$`)
+
 // ResolveHGVSg resolves an HGVSg notation (e.g. "1293968del") on a given chromosome
-// to a VCF-convention variant. For deletions, it looks up reference bases from a
-// transcript's CDS sequence.
+// to a VCF-convention variant. For deletions, insertions, and other notations, it
+// looks up reference bases from a transcript's CDS sequence.
 func ResolveHGVSg(c *cache.Cache, chrom string, genomicChange string) ([]*vcf.Variant, error) {
 	// Try substitution first (bases are given, no lookup needed)
 	if m := reGenomicSubstitution.FindStringSubmatch(genomicChange); m != nil {
@@ -375,12 +384,136 @@ func ResolveHGVSg(c *cache.Cache, chrom string, genomicChange string) ([]*vcf.Va
 		}}, nil
 	}
 
+	// Try insertion (e.g. "41242962_41242963insGA")
+	if m := reGenomicInsertion.FindStringSubmatch(genomicChange); m != nil {
+		return resolveHGVSgInsertion(c, chrom, m)
+	}
+
+	// Try deletion-insertion (e.g. "7_8delinsAA")
+	if m := reGenomicDelIns.FindStringSubmatch(genomicChange); m != nil {
+		return resolveHGVSgDelIns(c, chrom, m)
+	}
+
+	// Try duplication (e.g. "41242962dup" or "41242962_41242964dup")
+	if m := reGenomicDup.FindStringSubmatch(genomicChange); m != nil {
+		return resolveHGVSgDup(c, chrom, m)
+	}
+
 	// Try deletion
 	if m := reGenomicDeletion.FindStringSubmatch(genomicChange); m != nil {
 		return resolveHGVSgDeletion(c, chrom, m)
 	}
 
-	return nil, fmt.Errorf("unsupported genomic change notation %q (supported: substitutions like 1293968C>T, deletions like 1293968del or 1293968_1293970del)", genomicChange)
+	return nil, fmt.Errorf("unsupported genomic change notation %q", genomicChange)
+}
+
+// resolveHGVSgInsertion resolves "pos1_pos2insSeq" to a VCF-convention variant.
+// VCF convention: ref = base at pos1, alt = base at pos1 + inserted sequence.
+func resolveHGVSgInsertion(c *cache.Cache, chrom string, m []string) ([]*vcf.Variant, error) {
+	pos1, _ := strconv.ParseInt(m[1], 10, 64)
+	insertedSeq := strings.ToUpper(m[3])
+
+	// Look up the reference base at pos1 from a transcript
+	refBase, err := lookupRefBase(c, chrom, pos1)
+	if err != nil {
+		return nil, fmt.Errorf("insertion at %s:%s: %w", chrom, m[1], err)
+	}
+
+	return []*vcf.Variant{{
+		Chrom: chrom,
+		Pos:   pos1,
+		Ref:   refBase,
+		Alt:   refBase + insertedSeq,
+	}}, nil
+}
+
+// resolveHGVSgDelIns resolves "pos1_pos2delinsSeq" or "pos1delinsSeq".
+func resolveHGVSgDelIns(c *cache.Cache, chrom string, m []string) ([]*vcf.Variant, error) {
+	start, _ := strconv.ParseInt(m[1], 10, 64)
+	end := start
+	if m[2] != "" {
+		end, _ = strconv.ParseInt(m[2], 10, 64)
+	}
+	insertedSeq := strings.ToUpper(m[3])
+
+	// Look up padding base and deleted reference bases
+	padPos := start - 1
+	padBase, err := lookupRefBase(c, chrom, padPos)
+	if err != nil {
+		return nil, fmt.Errorf("delins at %s:%d: %w", chrom, start, err)
+	}
+
+	refBases := padBase
+	for pos := start; pos <= end; pos++ {
+		b, err := lookupRefBase(c, chrom, pos)
+		if err != nil {
+			return nil, fmt.Errorf("delins at %s:%d: %w", chrom, pos, err)
+		}
+		refBases += b
+	}
+
+	return []*vcf.Variant{{
+		Chrom: chrom,
+		Pos:   padPos,
+		Ref:   refBases,
+		Alt:   padBase + insertedSeq,
+	}}, nil
+}
+
+// resolveHGVSgDup resolves "posdup" or "pos1_pos2dup".
+func resolveHGVSgDup(c *cache.Cache, chrom string, m []string) ([]*vcf.Variant, error) {
+	start, _ := strconv.ParseInt(m[1], 10, 64)
+	end := start
+	if m[2] != "" {
+		end, _ = strconv.ParseInt(m[2], 10, 64)
+	}
+
+	// Look up the duplicated bases
+	dupBases := ""
+	for pos := start; pos <= end; pos++ {
+		b, err := lookupRefBase(c, chrom, pos)
+		if err != nil {
+			return nil, fmt.Errorf("dup at %s:%d: %w", chrom, pos, err)
+		}
+		dupBases += b
+	}
+
+	// VCF: position before the dup, ref = pad base, alt = pad base + dup bases
+	padPos := start - 1
+	padBase, err := lookupRefBase(c, chrom, padPos)
+	if err != nil {
+		return nil, fmt.Errorf("dup at %s:%d: %w", chrom, padPos, err)
+	}
+
+	return []*vcf.Variant{{
+		Chrom: chrom,
+		Pos:   padPos,
+		Ref:   padBase,
+		Alt:   padBase + dupBases,
+	}}, nil
+}
+
+// lookupRefBase looks up a single reference base at a genomic position
+// by finding a transcript covering that position.
+func lookupRefBase(c *cache.Cache, chrom string, pos int64) (string, error) {
+	transcripts := c.FindTranscripts(chrom, pos)
+	for _, t := range transcripts {
+		if len(t.CDSSequence) == 0 {
+			continue
+		}
+		cdsPos := GenomicToCDS(pos, t)
+		if cdsPos == 0 {
+			continue
+		}
+		idx := int(cdsPos) - 1
+		if idx >= 0 && idx < len(t.CDSSequence) {
+			if t.IsReverseStrand() {
+				return string(Complement(t.CDSSequence[idx])), nil
+			}
+			return string(t.CDSSequence[idx]), nil
+		}
+	}
+	return "", fmt.Errorf("could not resolve reference base at %s:%d (no CDS coverage)", chrom, pos)
 }
 
 // resolveHGVSgDeletion resolves a genomic deletion by looking up reference bases
