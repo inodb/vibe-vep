@@ -16,7 +16,7 @@ func TestParseBiomartCanonicals(t *testing.T) {
 	row3 := "EMPTY\tENSG00000000001\tENST00000000001\tensembl\tENST00000000001\tgn\tENST00000000001\tuniprot\tENST00000000001\toncokb\tother\tnan\n"
 	input := header + row1 + row2 + row3
 
-	mskcc, ensembl, err := parseBiomartCanonicals(strings.NewReader(input))
+	mskcc, ensembl, _, err := parseBiomartCanonicals(strings.NewReader(input))
 	require.NoError(t, err)
 
 	// MSK canonicals (col 11)
@@ -84,7 +84,7 @@ func TestBiomartCanonicals_CancerGenesDiffer(t *testing.T) {
 		input.WriteByte('\n')
 	}
 
-	mskcc, ensembl, err := parseBiomartCanonicals(strings.NewReader(input.String()))
+	mskcc, ensembl, _, err := parseBiomartCanonicals(strings.NewReader(input.String()))
 	require.NoError(t, err)
 
 	for _, g := range genes {

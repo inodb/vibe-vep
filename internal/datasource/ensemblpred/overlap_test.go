@@ -64,7 +64,7 @@ func TestProteinMD5Overlap(t *testing.T) {
 	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
 	canonicalPath := filepath.Join(cacheDir, "ensembl_biomart_canonical_transcripts_per_hgnc.txt")
 	if _, err := os.Stat(canonicalPath); err == nil {
-		msk, ens, _ := cache.LoadBiomartCanonicals(canonicalPath)
+		msk, ens, _, _ := cache.LoadBiomartCanonicals(canonicalPath)
 		loader.SetCanonicalOverrides(msk, ens)
 	}
 	if err := loader.Load(c); err != nil {

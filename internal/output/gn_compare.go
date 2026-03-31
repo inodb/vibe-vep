@@ -94,6 +94,7 @@ type GNTranscriptConsequenceSummary struct {
 	AminoAcids            string            `json:"aminoAcids,omitempty"`
 	AminoAcidRef          string            `json:"aminoAcidRef,omitempty"`
 	AminoAcidAlt          string            `json:"aminoAcidAlt,omitempty"`
+	EntrezGeneID          string            `json:"entrezGeneId,omitempty"`
 	HugoGeneSymbol        string            `json:"hugoGeneSymbol,omitempty"`
 	HGVSpShort            string            `json:"hgvspShort,omitempty"`
 	HGVSp                 string            `json:"hgvsp,omitempty"`

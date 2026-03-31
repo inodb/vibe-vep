@@ -403,14 +403,16 @@ func loadFromGTFFASTA(logger *zap.Logger, c *cache.Cache, gtfPath, fastaPath, ca
 
 	if canonicalPath != "" {
 		logger.Info("loading biomart canonicals", zap.String("path", canonicalPath))
-		mskOverrides, ensOverrides, err := cache.LoadBiomartCanonicals(canonicalPath)
+		mskOverrides, ensOverrides, entrezMap, err := cache.LoadBiomartCanonicals(canonicalPath)
 		if err != nil {
 			logger.Warn("could not load biomart canonicals", zap.Error(err))
 		} else {
 			loader.SetCanonicalOverrides(mskOverrides, ensOverrides)
+			loader.SetEntrezGeneIDs(entrezMap)
 			logger.Info("loaded biomart canonicals",
 				zap.Int("msk", len(mskOverrides)),
-				zap.Int("ensembl", len(ensOverrides)))
+				zap.Int("ensembl", len(ensOverrides)),
+				zap.Int("entrez", len(entrezMap)))
 		}
 	}
 

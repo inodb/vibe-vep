@@ -56,7 +56,7 @@ func TestAnnotationSourcesBenchmark(t *testing.T) {
 	c := cache.New()
 	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
 	if canonicalPath != "" {
-		mskOverrides, ensOverrides, err := cache.LoadBiomartCanonicals(canonicalPath)
+		mskOverrides, ensOverrides, _, err := cache.LoadBiomartCanonicals(canonicalPath)
 		if err != nil {
 			t.Logf("warning: could not load biomart canonicals: %v", err)
 		} else {

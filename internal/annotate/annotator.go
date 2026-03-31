@@ -86,6 +86,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 			GeneID:          t.GeneID,
 			ProteinID:       t.ProteinID,
 			HGNCId:          t.HGNCId,
+			EntrezGeneID:    t.EntrezGeneID,
 			Consequence:     consequence,
 			Impact:          result.Impact,
 			CDSPosition:     result.CDSPosition,

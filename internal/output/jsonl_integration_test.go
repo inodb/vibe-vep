@@ -27,7 +27,7 @@ func TestStreamAnnotation(t *testing.T) {
 	c := cache.New()
 	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
 	if canonicalPath != "" {
-		mskOverrides, ensOverrides, _ := cache.LoadBiomartCanonicals(canonicalPath)
+		mskOverrides, ensOverrides, _, _ := cache.LoadBiomartCanonicals(canonicalPath)
 		loader.SetCanonicalOverrides(mskOverrides, ensOverrides)
 	}
 	if err := loader.Load(c); err != nil {
@@ -174,7 +174,7 @@ func TestStreamMultiFormatInput(t *testing.T) {
 	c := cache.New()
 	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
 	if canonicalPath != "" {
-		mskOverrides, ensOverrides, _ := cache.LoadBiomartCanonicals(canonicalPath)
+		mskOverrides, ensOverrides, _, _ := cache.LoadBiomartCanonicals(canonicalPath)
 		loader.SetCanonicalOverrides(mskOverrides, ensOverrides)
 	}
 	if err := loader.Load(c); err != nil {

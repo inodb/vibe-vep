@@ -35,37 +35,41 @@ func CanonicalFileName() string {
 }
 
 // LoadBiomartCanonicals loads both MSK and Ensembl canonical transcripts
-// from a Genome Nexus biomart TSV file.
-// Col 11 = mskcc_canonical_transcript, Col 2 = ensembl_canonical_transcript.
-func LoadBiomartCanonicals(path string) (mskcc, ensembl CanonicalOverrides, err error) {
+// and Entrez gene IDs from a Genome Nexus biomart TSV file.
+func LoadBiomartCanonicals(path string) (mskcc, ensembl CanonicalOverrides, entrez GeneEntrezMap, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, nil, fmt.Errorf("open biomart canonical file: %w", err)
+		return nil, nil, nil, fmt.Errorf("open biomart canonical file: %w", err)
 	}
 	defer f.Close()
 
 	return parseBiomartCanonicals(f)
 }
 
+// GeneEntrezMap maps gene symbol -> Entrez gene ID (as string).
+type GeneEntrezMap map[string]string
+
 // Biomart TSV column indices (0-indexed).
 const (
 	biomartGeneCol    = 0
 	biomartEnsemblCol = 2  // ensembl_canonical_transcript
 	biomartMSKCol     = 11 // mskcc_canonical_transcript
+	biomartEntrezCol  = 27 // entrez_gene_id
 )
 
 // parseBiomartCanonicals parses a Genome Nexus biomart TSV, extracting
 // the gene symbol (col 0), Ensembl canonical transcript (col 2),
-// and MSKCC canonical transcript (col 11).
-func parseBiomartCanonicals(reader io.Reader) (mskcc, ensembl CanonicalOverrides, err error) {
+// MSKCC canonical transcript (col 11), and Entrez gene ID (col 27).
+func parseBiomartCanonicals(reader io.Reader) (mskcc, ensembl CanonicalOverrides, entrez GeneEntrezMap, err error) {
 	mskcc = make(CanonicalOverrides)
 	ensembl = make(CanonicalOverrides)
+	entrez = make(GeneEntrezMap)
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024) // 1MB line buffer for wide biomart files
 
 	// Skip header line
 	if !scanner.Scan() {
-		return mskcc, ensembl, nil
+		return mskcc, ensembl, entrez, nil
 	}
 
 	for scanner.Scan() {
@@ -93,13 +97,20 @@ func parseBiomartCanonicals(reader io.Reader) (mskcc, ensembl CanonicalOverrides
 		if mskTx := fields[biomartMSKCol]; mskTx != "" && mskTx != "nan" {
 			mskcc[hgnc] = stripVersion(mskTx)
 		}
+
+		// Entrez gene ID (col 27)
+		if len(fields) > biomartEntrezCol {
+			if eid := fields[biomartEntrezCol]; eid != "" && eid != "nan" {
+				entrez[hgnc] = eid
+			}
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, nil, fmt.Errorf("scan biomart canonicals: %w", err)
+		return nil, nil, nil, fmt.Errorf("scan biomart canonicals: %w", err)
 	}
 
-	return mskcc, ensembl, nil
+	return mskcc, ensembl, entrez, nil
 }
 
 // LoadMSKCCOverrides loads MSKCC isoform overrides from the genome-nexus-importer format.

@@ -363,6 +363,7 @@ type GENCODELoader struct {
 	fasta                  *FASTALoader
 	mskCanonicalOverrides  CanonicalOverrides
 	ensCanonicalOverrides  CanonicalOverrides
+	entrezGeneIDs          GeneEntrezMap
 }
 
 // NewGENCODELoader creates a loader for GENCODE GTF + FASTA files.
@@ -381,6 +382,11 @@ func (l *GENCODELoader) SetCanonicalOverrides(mskcc, ensembl CanonicalOverrides)
 	l.ensCanonicalOverrides = ensembl
 }
 
+// SetEntrezGeneIDs sets the gene symbol -> Entrez gene ID mapping.
+func (l *GENCODELoader) SetEntrezGeneIDs(entrez GeneEntrezMap) {
+	l.entrezGeneIDs = entrez
+}
+
 // Load loads all transcripts and sequences into the cache.
 func (l *GENCODELoader) Load(c *Cache) error {
 	// Load GTF annotations
@@ -391,6 +397,17 @@ func (l *GENCODELoader) Load(c *Cache) error {
 	// Apply canonical overrides if set
 	if len(l.mskCanonicalOverrides) > 0 || len(l.ensCanonicalOverrides) > 0 {
 		l.applyCanonicalOverrides(c)
+	}
+
+	// Apply Entrez gene IDs if loaded
+	if len(l.entrezGeneIDs) > 0 {
+		for _, chrom := range c.Chromosomes() {
+			for _, t := range c.FindTranscriptsByChrom(chrom) {
+				if eid, ok := l.entrezGeneIDs[t.GeneName]; ok {
+					t.EntrezGeneID = eid
+				}
+			}
+		}
 	}
 
 	// Load FASTA sequences if provided

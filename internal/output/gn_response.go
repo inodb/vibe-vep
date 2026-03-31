@@ -220,6 +220,7 @@ func buildTranscriptConsequenceSummary(ann *annotate.Annotation, v *vcf.Variant)
 		AminoAcids:            aminoAcids,
 		AminoAcidRef:          aaRef,
 		AminoAcidAlt:          aaAlt,
+		EntrezGeneID:          ann.EntrezGeneID,
 		HugoGeneSymbol:        ann.GeneName,
 		HGVSpShort:            hgvspToShort(ann.HGVSp),
 		HGVSp:                 hgvspStripTranscript(ann.HGVSp),
