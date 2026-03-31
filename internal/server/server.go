@@ -95,6 +95,22 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /genome-nexus/{assembly}/pfam/domain", s.handlePfamDomainPost)
 	mux.HandleFunc("GET /genome-nexus/{assembly}/pfam/domain/{pfamAccession}", s.handlePfamDomainGet)
 
+	// Stub endpoints — return empty responses so the frontend mutation mapper
+	// doesn't hang waiting for data we don't have yet.
+	emptyArray := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte("[]\n"))
+	}
+	emptyObject := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte("{}\n"))
+	}
+	mux.HandleFunc("GET /genome-nexus/{assembly}/cancer_hotspots/transcript/{transcriptId}", emptyArray)
+	mux.HandleFunc("POST /genome-nexus/{assembly}/cancer_hotspots/genomic", emptyArray)
+	mux.HandleFunc("GET /genome-nexus/{assembly}/ptm/experimental", emptyArray)
+	mux.HandleFunc("POST /genome-nexus/{assembly}/ptm/experimental", emptyArray)
+	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/canonical-gene/entrez/{entrezGeneId}", emptyObject)
+
 	return corsMiddleware(mux)
 }
 
