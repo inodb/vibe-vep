@@ -254,6 +254,24 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 		}
 	}
 
+	// Download PFAM domain data (always, used by frontend lollipop plot)
+	{
+		pfamAURL, biomartURL := getPfamURLs(assembly)
+		fmt.Printf("\nDownloading PFAM domain data...\n")
+		pfamAFile := filepath.Join(rawDir, PfamAFileName)
+		if sum, err := downloadFile(pfamAURL, pfamAFile); err != nil {
+			logger.Warn("could not download pfamA.txt", zap.Error(err))
+		} else {
+			addChecksum(pfamAFile, sum)
+		}
+		biomartFile := filepath.Join(rawDir, PfamBiomartFileName)
+		if sum, err := downloadFile(biomartURL, biomartFile); err != nil {
+			logger.Warn("could not download ensembl_biomart_pfam.txt", zap.Error(err))
+		} else {
+			addChecksum(biomartFile, sum)
+		}
+	}
+
 	// Write checksum manifest to assembly dir (not raw/, so it survives clean).
 	if len(checksums) > 0 {
 		if err := writeChecksums(filepath.Join(assemblyDir, "checksums.sha256"), checksums); err != nil {
@@ -413,6 +431,8 @@ const (
 	EnsemblPredDBName          = "ensembl_sift_polyphen.sqlite"
 	EnsemblTranslationMD5Name  = "translation_md5.txt.gz"
 	EnsemblPredictionsName     = "protein_function_predictions.txt.gz"
+	PfamAFileName              = "pfamA.txt"
+	PfamBiomartFileName        = "ensembl_biomart_pfam.txt"
 )
 
 // GnomadFileName returns the expected filename for the given assembly.
@@ -507,6 +527,22 @@ func RawDir(assembly string) string {
 		return ""
 	}
 	return filepath.Join(dir, "raw")
+}
+
+// getPfamURLs returns the download URLs for pfamA.txt and ensembl_biomart_pfam.txt.
+// Uses genome-nexus-importer repository on GitHub.
+func getPfamURLs(assembly string) (pfamAURL, biomartURL string) {
+	const base = "https://raw.githubusercontent.com/genome-nexus/genome-nexus-importer/master/data"
+
+	switch strings.ToUpper(assembly) {
+	case "GRCH37":
+		pfamAURL = base + "/grch37_ensembl92/export/pfamA.txt"
+		biomartURL = base + "/grch37_ensembl92/input/ensembl_biomart_pfam.txt"
+	default:
+		pfamAURL = base + "/grch38_ensembl95/export/pfamA.txt"
+		biomartURL = base + "/grch38_ensembl95/input/ensembl_biomart_pfam.txt"
+	}
+	return
 }
 
 // FindGENCODEFiles looks for GENCODE files in the default location.

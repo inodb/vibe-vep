@@ -11,6 +11,7 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/datasource/pfam"
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
 
@@ -19,6 +20,7 @@ type assemblyContext struct {
 	annotator *annotate.Annotator
 	sources   []annotate.AnnotationSource
 	cache     *cache.Cache
+	pfam      *pfam.Store
 	assembly  string // normalized: "GRCh38"
 }
 
@@ -51,6 +53,15 @@ func (s *Server) AddAssembly(assembly string, c *cache.Cache, ann *annotate.Anno
 	}
 }
 
+// SetPfamStore sets the PFAM store for the given assembly.
+func (s *Server) SetPfamStore(assembly string, store *pfam.Store) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ctx, ok := s.assemblies[strings.ToLower(assembly)]; ok {
+		ctx.pfam = store
+	}
+}
+
 // getAssembly returns the assembly context for the given name (case-insensitive).
 func (s *Server) getAssembly(name string) *assemblyContext {
 	s.mu.RLock()
@@ -77,6 +88,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /genome-nexus/{assembly}/annotation/genomic", s.handleGNGenomicPost)
 	mux.HandleFunc("GET /genome-nexus/{assembly}/annotation/{variant...}", s.handleGNHGVSGet)
 	mux.HandleFunc("POST /genome-nexus/{assembly}/annotation", s.handleGNHGVSPost)
+
+	// Ensembl internal endpoints (transcript/PFAM lookups for frontend).
+	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/canonical-transcript/hgnc/{hugoSymbol}", s.handleEnsemblCanonicalByHugo)
+	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/transcript/{transcriptId}", s.handleEnsemblTranscriptByID)
+	mux.HandleFunc("POST /genome-nexus/{assembly}/pfam/domain", s.handlePfamDomainPost)
+	mux.HandleFunc("GET /genome-nexus/{assembly}/pfam/domain/{pfamAccession}", s.handlePfamDomainGet)
 
 	return corsMiddleware(mux)
 }

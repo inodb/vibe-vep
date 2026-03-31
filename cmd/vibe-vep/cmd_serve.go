@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
+	"github.com/inodb/vibe-vep/internal/datasource/pfam"
 	"github.com/inodb/vibe-vep/internal/server"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -152,6 +154,11 @@ func runServe(logger *zap.Logger, cfg runServeConfig) error {
 
 		srv.AddAssembly(normalized, cr.cache, ann, cr.sources)
 
+		// Load PFAM domain data if available.
+		if pfamStore := loadPfamStore(logger, normalized); pfamStore != nil {
+			srv.SetPfamStore(normalized, pfamStore)
+		}
+
 		logger.Info("assembly loaded",
 			zap.String("assembly", normalized),
 			zap.Int("transcripts", cr.cache.TranscriptCount()),
@@ -203,4 +210,39 @@ func runServe(logger *zap.Logger, cfg runServeConfig) error {
 	}
 
 	return nil
+}
+
+// loadPfamStore loads PFAM domain data from the raw download directory.
+func loadPfamStore(logger *zap.Logger, assembly string) *pfam.Store {
+	rawDir := RawDir(assembly)
+	if rawDir == "" {
+		return nil
+	}
+
+	pfamAPath := filepath.Join(rawDir, PfamAFileName)
+	biomartPath := filepath.Join(rawDir, PfamBiomartFileName)
+
+	// Check if both files exist.
+	if _, err := os.Stat(pfamAPath); err != nil {
+		logger.Debug("PFAM pfamA.txt not found, skipping", zap.String("path", pfamAPath))
+		return nil
+	}
+	if _, err := os.Stat(biomartPath); err != nil {
+		logger.Debug("PFAM ensembl_biomart_pfam.txt not found, skipping", zap.String("path", biomartPath))
+		return nil
+	}
+
+	start := time.Now()
+	store, err := pfam.Load(pfamAPath, biomartPath)
+	if err != nil {
+		logger.Warn("could not load PFAM data", zap.Error(err))
+		return nil
+	}
+
+	logger.Info("loaded PFAM domain data",
+		zap.Int("domains", store.DomainCount()),
+		zap.Int("transcripts", store.TranscriptCount()),
+		zap.Duration("elapsed", time.Since(start)))
+
+	return store
 }
