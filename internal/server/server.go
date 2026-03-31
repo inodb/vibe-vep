@@ -155,6 +155,19 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
+// writeGNError writes a genome-nexus style error response that includes
+// assembly_name and variant fields. This allows clients (like the frontend)
+// to detect the genome build even when annotation fails.
+func writeGNError(w http.ResponseWriter, variant, assembly, msg string) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"variant":                variant,
+		"originalVariantQuery":   variant,
+		"assembly_name":          assembly,
+		"successfully_annotated": false,
+		"errorMessage":           msg,
+	})
+}
+
 // requireAssembly extracts and validates the assembly from the URL path.
 func (s *Server) requireAssembly(w http.ResponseWriter, r *http.Request) *assemblyContext {
 	name := r.PathValue("assembly")

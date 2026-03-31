@@ -104,13 +104,15 @@ func (s *Server) handleGNHGVSGet(w http.ResponseWriter, r *http.Request) {
 	notation := r.PathValue("variant")
 	variants, err := s.resolveHGVS(ctx, notation)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		// Return a partial response with assembly_name (like genome-nexus does)
+		// so that clients can still detect the genome build.
+		writeGNError(w, notation, ctx.assembly, err.Error())
 		return
 	}
 
 	// GN returns a single annotation object for single-variant GET.
 	if len(variants) == 0 {
-		writeError(w, http.StatusNotFound, "could not resolve variant: "+notation)
+		writeGNError(w, notation, ctx.assembly, "could not resolve variant: "+notation)
 		return
 	}
 
@@ -118,7 +120,7 @@ func (s *Server) handleGNHGVSGet(w http.ResponseWriter, r *http.Request) {
 	anns, err := s.annotateVariant(ctx, v)
 	if err != nil {
 		s.logger.Error("annotation error", zap.Error(err), zap.String("input", notation))
-		writeError(w, http.StatusInternalServerError, "annotation failed: "+err.Error())
+		writeGNError(w, notation, ctx.assembly, "annotation failed: "+err.Error())
 		return
 	}
 
