@@ -3,6 +3,7 @@ package output
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -105,6 +106,9 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 
 		result.TranscriptConsequences = append(result.TranscriptConsequences, tc)
 	}
+
+	// Sort transcript consequences: canonical first (genome-nexus convention).
+	sortCanonicalFirst(result.TranscriptConsequences)
 
 	// Build optional enrichments.
 	var opt GNMarshalOptions
@@ -316,6 +320,20 @@ func firstAnnotationWithExtras(anns []*annotate.Annotation) *annotate.Annotation
 		return anns[0]
 	}
 	return nil
+}
+
+// sortCanonicalFirst sorts transcript consequences so the canonical transcript
+// comes first, matching genome-nexus convention. The frontend reads [0] for
+// SIFT/PolyPhen scores.
+func sortCanonicalFirst(tcs []GNTranscriptConsequence) {
+	sort.SliceStable(tcs, func(i, j int) bool {
+		ci := tcs[i].Canonical == "1"
+		cj := tcs[j].Canonical == "1"
+		if ci != cj {
+			return ci
+		}
+		return false
+	})
 }
 
 // splitAminoAcids splits "V/E" into ref "V" and alt "E".
