@@ -422,6 +422,11 @@ func (l *GENCODELoader) Load(c *Cache) error {
 			for _, t := range c.FindTranscriptsByChrom(chrom) {
 				if seq := l.fasta.GetSequence(t.ID); seq != "" {
 					t.CDSSequence = seq
+					// Compute protein length from CDS (number of complete codons, minus stop).
+					t.ProteinLength = len(seq) / 3
+					if t.ProteinLength > 0 {
+						t.ProteinLength-- // subtract stop codon
+					}
 				}
 				// Load CDS + up to 300bp of 3'UTR for stop-codon scanning
 				// (frameshifts and stop-lost need to scan past the CDS end)

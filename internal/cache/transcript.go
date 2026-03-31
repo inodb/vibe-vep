@@ -32,6 +32,7 @@ type Transcript struct {
 	CDSEnd          int64  // CDS end (genomic, 1-based), 0 if non-coding
 	CDSSequence     string // Coding DNA sequence (loaded on demand)
 	UTR3Sequence    string // 3'UTR sequence immediately following CDSSequence (for stop scanning)
+	ProteinLength   int    // Protein length in amino acids (persisted, unlike ProteinSequence)
 	ProteinSequence string // Translated protein sequence (loaded on demand)
 	CDSRegions      []CDSRegion // Pre-computed CDS regions sorted ascending by GenomicStart
 	ExonCumBases    []int64     // Cumulative exonic bases before each exon (transcript order)

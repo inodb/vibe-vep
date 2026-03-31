@@ -219,7 +219,7 @@ func buildTranscriptResponse(tx *cache.Transcript, pfamStore *pfam.Store) ensemb
 		GeneID:        tx.GeneID,
 		ProteinID:     tx.ProteinID,
 		HugoSymbols:   []string{tx.GeneName},
-		ProteinLength: len(tx.ProteinSequence),
+		ProteinLength: tx.ProteinLength,
 		EntrezGeneID:  tx.EntrezGeneID,
 	}
 
