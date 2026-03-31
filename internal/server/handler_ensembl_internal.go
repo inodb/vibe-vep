@@ -215,7 +215,7 @@ func pickCanonical(transcripts []*cache.Transcript, isoformSource string) *cache
 // buildTranscriptResponse constructs the JSON response for a transcript.
 func buildTranscriptResponse(tx *cache.Transcript, pfamStore *pfam.Store) ensemblTranscriptResponse {
 	resp := ensemblTranscriptResponse{
-		TranscriptID:  tx.ID,
+		TranscriptID:  stripTxVersion(tx.ID),
 		GeneID:        tx.GeneID,
 		ProteinID:     tx.ProteinID,
 		HugoSymbols:   []string{tx.GeneName},
@@ -307,4 +307,12 @@ func buildUTRs(tx *cache.Transcript) []utrJSON {
 	}
 
 	return utrs
+}
+
+// stripTxVersion removes the version suffix from a transcript ID (e.g. "ENST00000357654.9" → "ENST00000357654").
+func stripTxVersion(id string) string {
+	if i := strings.IndexByte(id, '.'); i >= 0 {
+		return id[:i]
+	}
+	return id
 }
