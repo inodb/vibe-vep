@@ -134,6 +134,11 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 		if clnsig := src.GetExtraKey("clinvar.clnsig"); clnsig != "" {
 			result.ClinVar = &GNClinVar{
 				Annotation: &GNClinVarAnnotation{
+					Chromosome:           v.Chrom,
+					StartPosition:        v.Pos,
+					EndPosition:          end,
+					ReferenceAllele:      ref,
+					AlternateAllele:      alt,
 					ClinicalSignificance: clnsig,
 					ReviewStatus:         src.GetExtraKey("clinvar.clnrevstat"),
 					DiseaseName:          src.GetExtraKey("clinvar.clndn"),

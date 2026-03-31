@@ -37,9 +37,15 @@ type GNClinVar struct {
 
 // GNClinVarAnnotation contains ClinVar details.
 type GNClinVarAnnotation struct {
-	ClinicalSignificance string `json:"clinicalSignificance,omitempty"`
-	ReviewStatus         string `json:"reviewStatus,omitempty"`
-	DiseaseName          string `json:"diseaseName,omitempty"`
+	Chromosome                      string `json:"chromosome,omitempty"`
+	StartPosition                   int64  `json:"startPosition,omitempty"`
+	EndPosition                     int64  `json:"endPosition,omitempty"`
+	ReferenceAllele                 string `json:"referenceAllele,omitempty"`
+	AlternateAllele                 string `json:"alternateAllele,omitempty"`
+	ClinicalSignificance            string `json:"clinicalSignificance,omitempty"`
+	ConflictingClinicalSignificance string `json:"conflictingClinicalSignificance,omitempty"`
+	ReviewStatus                    string `json:"reviewStatus,omitempty"`
+	DiseaseName                     string `json:"diseaseName,omitempty"`
 }
 
 // GNColocatedVariant represents a dbSNP/COSMIC ID at the same position.
