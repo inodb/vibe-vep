@@ -287,27 +287,28 @@ func loadCache(logger *zap.Logger, assembly string, noCache, clearCache bool) (*
 		return &cacheResult{cache: c}, nil
 	}
 
+	cr := &cacheResult{cache: c}
+
+	// --- Build annotation sources (before DuckDB, so they load even if DuckDB fails) ---
+	cr.sources = buildSources(logger, cacheDir, assembly)
+
+	// --- Variant cache (DuckDB) ---
 	dbPath := filepath.Join(cacheDir, "variant_cache.duckdb")
 	store, err := duckdb.Open(dbPath)
 	if err != nil {
 		logger.Warn("could not open variant cache (try --clear-cache or delete "+dbPath+")",
 			zap.Error(err))
-		return &cacheResult{cache: c}, nil
-	}
-
-	// Clear variant cache when transcripts changed (annotations depend on transcript data)
-	if clearCache || !transcriptsLoaded {
-		if err := store.ClearVariantResults(); err != nil {
-			logger.Warn("could not clear variant cache", zap.Error(err))
-		} else if clearCache {
-			logger.Info("cleared variant cache")
+	} else {
+		// Clear variant cache when transcripts changed (annotations depend on transcript data)
+		if clearCache || !transcriptsLoaded {
+			if err := store.ClearVariantResults(); err != nil {
+				logger.Warn("could not clear variant cache", zap.Error(err))
+			} else if clearCache {
+				logger.Info("cleared variant cache")
+			}
 		}
+		cr.store = store
 	}
-
-	cr := &cacheResult{cache: c, store: store}
-
-	// --- Build annotation sources ---
-	cr.sources = buildSources(logger, cacheDir, assembly)
 
 	if len(cr.sources) > 0 {
 		names := make([]string, len(cr.sources))

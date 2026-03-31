@@ -99,10 +99,9 @@ func (s *Server) handleEnsemblTranscriptByID(w http.ResponseWriter, r *http.Requ
 
 	tx := ctx.cache.GetTranscript(txID)
 	if tx == nil {
-		// Try without version suffix
-		if idx := strings.IndexByte(txID, '.'); idx >= 0 {
-			tx = ctx.cache.GetTranscript(txID[:idx])
-		}
+		// Input is likely unversioned (e.g. "ENST00000357654") but cache
+		// stores versioned IDs (e.g. "ENST00000357654.9"). Try prefix match.
+		tx = ctx.cache.GetTranscriptByPrefix(txID)
 	}
 	if tx == nil {
 		writeError(w, http.StatusNotFound, "transcript not found: "+txID)

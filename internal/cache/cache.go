@@ -80,6 +80,20 @@ func (c *Cache) GetTranscript(id string) *Transcript {
 	return nil
 }
 
+// GetTranscriptByPrefix returns the first transcript whose ID starts with the given prefix
+// followed by a dot or end of string. This supports unversioned ID lookups
+// (e.g. "ENST00000357654" matches "ENST00000357654.9").
+func (c *Cache) GetTranscriptByPrefix(prefix string) *Transcript {
+	for _, transcripts := range c.transcripts {
+		for _, t := range transcripts {
+			if t.ID == prefix || (len(t.ID) > len(prefix) && t.ID[:len(prefix)] == prefix && t.ID[len(prefix)] == '.') {
+				return t
+			}
+		}
+	}
+	return nil
+}
+
 // TranscriptCount returns the total number of transcripts in the cache.
 func (c *Cache) TranscriptCount() int {
 	count := 0
