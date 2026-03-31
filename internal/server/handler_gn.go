@@ -185,8 +185,9 @@ func (s *Server) handleGNHGVSPost(w http.ResponseWriter, r *http.Request) {
 }
 
 // parseGNMarshalOptions extracts GN marshal options from query parameters.
+// Supports both comma-separated (?fields=a,b) and repeated (?fields=a&fields=b).
 func parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions {
-	fields := r.URL.Query().Get("fields")
+	fields := strings.Join(r.URL.Query()["fields"], ",")
 	return output.GNMarshalOptions{
 		IncludeAnnotationSummary: strings.Contains(fields, "annotation_summary"),
 		IncludeClinVar:           strings.Contains(fields, "clinvar"),

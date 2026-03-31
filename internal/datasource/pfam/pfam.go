@@ -38,6 +38,14 @@ func NewStore() *Store {
 	}
 }
 
+// NewEmptyStore is an alias for NewStore (for test readability).
+func NewEmptyStore() *Store { return NewStore() }
+
+// AddDomain adds a domain definition (for testing).
+func (s *Store) AddDomain(accession, name, description string) {
+	s.domains[accession] = Domain{Accession: accession, Name: name, Description: description}
+}
+
 // Load reads both pfamA.txt and ensembl_biomart_pfam.txt files and returns a populated Store.
 func Load(pfamAPath, biomartPath string) (*Store, error) {
 	s := NewStore()
