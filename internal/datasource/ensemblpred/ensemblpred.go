@@ -59,9 +59,10 @@ type Store struct {
 	db       *sql.DB
 	lookupPS *sql.Stmt
 
-	mu        sync.Mutex
-	cache     map[cacheKey][]byte // decompressed matrix
-	preloaded bool                // true if all matrices are in cache (no SQLite needed)
+	mu         sync.Mutex
+	cache      map[cacheKey][]byte // decompressed matrix (LRU)
+	compressed map[cacheKey][]byte // preloaded compressed data (nil if not preloaded)
+	preloaded  bool                // true if compressed data is in memory
 }
 
 type cacheKey struct {
@@ -93,6 +94,9 @@ func Open(dbPath string) (*Store, error) {
 // subsequent lookups don't hit the database. This trades ~200-500MB RAM
 // for instant lookups, which is critical on networked filesystems like EFS
 // where each SQLite read has high latency.
+// Preload reads all compressed prediction matrices from SQLite into memory.
+// Subsequent lookups decompress on demand (fast) instead of hitting SQLite (slow on EFS).
+// Compressed data is ~100-200MB; decompression happens per-lookup with an LRU cache.
 func (s *Store) Preload() (int, error) {
 	rows, err := s.db.Query(`SELECT md5, analysis, matrix FROM predictions`)
 	if err != nil {
@@ -100,19 +104,16 @@ func (s *Store) Preload() (int, error) {
 	}
 	defer rows.Close()
 
-	cache := make(map[cacheKey][]byte, 200000)
+	compressed := make(map[cacheKey][]byte, 200000)
 	n := 0
 	for rows.Next() {
 		var md5, analysis string
-		var compressed []byte
-		if err := rows.Scan(&md5, &analysis, &compressed); err != nil {
+		var data []byte
+		if err := rows.Scan(&md5, &analysis, &data); err != nil {
 			return n, fmt.Errorf("scan row %d: %w", n, err)
 		}
-		matrix, err := decompress(compressed)
-		if err != nil {
-			continue // skip corrupt entries
-		}
-		cache[cacheKey{md5, analysis}] = matrix
+		// Store compressed data as-is (no decompression yet).
+		compressed[cacheKey{md5, analysis}] = data
 		n++
 	}
 	if err := rows.Err(); err != nil {
@@ -120,7 +121,7 @@ func (s *Store) Preload() (int, error) {
 	}
 
 	s.mu.Lock()
-	s.cache = cache
+	s.compressed = compressed
 	s.preloaded = true
 	s.mu.Unlock()
 
@@ -456,16 +457,33 @@ func (s *Store) Lookup(md5, analysis string, position int, altAA byte) (Predicti
 func (s *Store) getMatrix(md5, analysis string) ([]byte, bool) {
 	key := cacheKey{md5, analysis}
 
+	// Check decompressed cache first.
 	s.mu.Lock()
 	m, ok := s.cache[key]
-	preloaded := s.preloaded
 	s.mu.Unlock()
-
 	if ok {
 		return m, true
 	}
-	if preloaded {
-		return nil, false // all data is in memory, nothing to query
+
+	// Try preloaded compressed data (fast — in-memory decompress).
+	if s.preloaded {
+		s.mu.Lock()
+		comp, ok := s.compressed[key]
+		s.mu.Unlock()
+		if !ok {
+			return nil, false
+		}
+		matrix, err := decompress(comp)
+		if err != nil {
+			return nil, false
+		}
+		s.mu.Lock()
+		if len(s.cache) > 10000 {
+			s.cache = make(map[cacheKey][]byte, 1000)
+		}
+		s.cache[key] = matrix
+		s.mu.Unlock()
+		return matrix, true
 	}
 
 	// Fallback: query SQLite (slow on EFS).
