@@ -357,6 +357,92 @@ func (s *Server) handleEnsemblTranscriptPost(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, results)
 }
 
+// ensemblGeneResponse is the JSON response for canonical gene lookups.
+type ensemblGeneResponse struct {
+	GeneID       string `json:"geneId"`
+	HugoSymbol   string `json:"hugoSymbol"`
+	EntrezGeneID string `json:"entrezGeneId,omitempty"`
+}
+
+// handleEnsemblCanonicalGeneByHugo handles GET /genome-nexus/{assembly}/ensembl/canonical-gene/hgnc/{hugoSymbol}
+func (s *Server) handleEnsemblCanonicalGeneByHugo(w http.ResponseWriter, r *http.Request) {
+	ctx := s.requireAssembly(w, r)
+	if ctx == nil {
+		return
+	}
+
+	symbol := r.PathValue("hugoSymbol")
+	tx := findCanonicalByGene(ctx.cache, symbol)
+	if tx == nil {
+		writeError(w, http.StatusNotFound, "gene not found: "+symbol)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, ensemblGeneResponse{
+		GeneID:       tx.GeneID,
+		HugoSymbol:   tx.GeneName,
+		EntrezGeneID: tx.EntrezGeneID,
+	})
+}
+
+// handleEnsemblCanonicalGeneByEntrez handles GET /genome-nexus/{assembly}/ensembl/canonical-gene/entrez/{entrezGeneId}
+func (s *Server) handleEnsemblCanonicalGeneByEntrez(w http.ResponseWriter, r *http.Request) {
+	ctx := s.requireAssembly(w, r)
+	if ctx == nil {
+		return
+	}
+
+	entrezID := r.PathValue("entrezGeneId")
+	var found *cache.Transcript
+	for _, chrom := range ctx.cache.Chromosomes() {
+		for _, t := range ctx.cache.FindTranscriptsByChrom(chrom) {
+			if t.EntrezGeneID == entrezID && t.IsCanonicalMSK {
+				found = t
+				break
+			}
+		}
+		if found != nil {
+			break
+		}
+	}
+	if found == nil {
+		writeError(w, http.StatusNotFound, "gene not found for entrez ID: "+entrezID)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, ensemblGeneResponse{
+		GeneID:       found.GeneID,
+		HugoSymbol:   found.GeneName,
+		EntrezGeneID: found.EntrezGeneID,
+	})
+}
+
+// handleCancerHotspotsTranscript handles GET /genome-nexus/{assembly}/cancer_hotspots/transcript/{transcriptId}
+// Returns hotspot positions on the protein for the given transcript.
+func (s *Server) handleCancerHotspotsTranscript(w http.ResponseWriter, r *http.Request) {
+	ctx := s.requireAssembly(w, r)
+	if ctx == nil {
+		return
+	}
+
+	// TODO: look up hotspots from the hotspot store by transcript ID
+	// For now return empty array (matches GN behavior for most transcripts).
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte("[]\n"))
+}
+
+// findCanonicalByGene finds the MSK canonical transcript for a gene symbol.
+func findCanonicalByGene(c *cache.Cache, geneName string) *cache.Transcript {
+	for _, chrom := range c.Chromosomes() {
+		for _, t := range c.FindTranscriptsByChrom(chrom) {
+			if t.GeneName == geneName && t.IsCanonicalMSK {
+				return t
+			}
+		}
+	}
+	return nil
+}
+
 // stripTxVersion removes the version suffix from a transcript ID (e.g. "ENST00000357654.9" → "ENST00000357654").
 func stripTxVersion(id string) string {
 	if i := strings.IndexByte(id, '.'); i >= 0 {

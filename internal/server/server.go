@@ -104,16 +104,14 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte("[]\n"))
 	}
-	emptyObject := func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("{}\n"))
-	}
-	mux.HandleFunc("GET /genome-nexus/{assembly}/cancer_hotspots/transcript/{transcriptId}", emptyArray)
+	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/canonical-gene/hgnc/{hugoSymbol}", s.handleEnsemblCanonicalGeneByHugo)
+	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/canonical-gene/entrez/{entrezGeneId}", s.handleEnsemblCanonicalGeneByEntrez)
+	mux.HandleFunc("GET /genome-nexus/{assembly}/cancer_hotspots/transcript/{transcriptId}", s.handleCancerHotspotsTranscript)
+
+	// Stub endpoints — return empty responses for data we don't have yet.
 	mux.HandleFunc("POST /genome-nexus/{assembly}/cancer_hotspots/genomic", emptyArray)
 	mux.HandleFunc("GET /genome-nexus/{assembly}/ptm/experimental", emptyArray)
 	mux.HandleFunc("POST /genome-nexus/{assembly}/ptm/experimental", emptyArray)
-	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/canonical-gene/entrez/{entrezGeneId}", emptyObject)
-	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/canonical-gene/hgnc/{hugoSymbol}", emptyObject)
 	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/xrefs", emptyArray)
 
 	return corsMiddleware(mux)
