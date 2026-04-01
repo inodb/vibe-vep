@@ -45,17 +45,21 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 		SuccessfullyAnnotated: true,
 	}
 
-	// Find most severe consequence and canonical transcript.
+	// Find most severe consequence and best canonical transcript.
+	// When multiple genes overlap (e.g. EGFR + EGFR-AS1), pick the canonical
+	// with highest impact (protein-coding missense > non-coding).
 	bestImpact := -1
 	var canonicalAnn *annotate.Annotation
+	canonicalImpact := -1
 	for _, ann := range anns {
 		impact := annotate.ImpactRank(ann.Impact)
 		if impact > bestImpact {
 			bestImpact = impact
 			result.MostSevereConsequence = firstConsequence(ann.Consequence)
 		}
-		if ann.IsCanonicalEnsembl && canonicalAnn == nil {
+		if ann.IsCanonicalEnsembl && impact > canonicalImpact {
 			canonicalAnn = ann
+			canonicalImpact = impact
 		}
 	}
 
@@ -328,15 +332,19 @@ func firstAnnotationWithExtras(anns []*annotate.Annotation) *annotate.Annotation
 	return nil
 }
 
-// sortCanonicalFirst sorts transcript consequences so the canonical transcript
-// comes first, matching genome-nexus convention. The frontend reads [0] for
-// SIFT/PolyPhen scores.
+// sortCanonicalFirst sorts transcript consequences so the highest-impact
+// canonical transcript comes first, matching genome-nexus convention.
+// The frontend reads [0] for SIFT/PolyPhen scores and gene symbol.
 func sortCanonicalFirst(tcs []GNTranscriptConsequence) {
 	sort.SliceStable(tcs, func(i, j int) bool {
 		ci := tcs[i].Canonical == "1"
 		cj := tcs[j].Canonical == "1"
 		if ci != cj {
 			return ci
+		}
+		// Among canonicals, prefer higher impact (protein-coding > non-coding).
+		if ci && cj {
+			return annotate.ImpactRank(tcs[i].Impact) > annotate.ImpactRank(tcs[j].Impact)
 		}
 		return false
 	})
