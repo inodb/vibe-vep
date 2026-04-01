@@ -12,6 +12,8 @@ import (
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/datasource/pfam"
+	"github.com/inodb/vibe-vep/internal/datasource/ptm"
+	"github.com/inodb/vibe-vep/internal/datasource/uniprot"
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
 
@@ -21,6 +23,8 @@ type assemblyContext struct {
 	sources   []annotate.AnnotationSource
 	cache     *cache.Cache
 	pfam      *pfam.Store
+	ptm       *ptm.Store
+	uniprot   *uniprot.Store
 	assembly  string // normalized: "GRCh38"
 }
 
@@ -59,6 +63,24 @@ func (s *Server) SetPfamStore(assembly string, store *pfam.Store) {
 	defer s.mu.Unlock()
 	if ctx, ok := s.assemblies[strings.ToLower(assembly)]; ok {
 		ctx.pfam = store
+	}
+}
+
+// SetPtmStore sets the PTM store for the given assembly.
+func (s *Server) SetPtmStore(assembly string, store *ptm.Store) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ctx, ok := s.assemblies[strings.ToLower(assembly)]; ok {
+		ctx.ptm = store
+	}
+}
+
+// SetUniprotStore sets the UniProt mapping store for the given assembly.
+func (s *Server) SetUniprotStore(assembly string, store *uniprot.Store) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ctx, ok := s.assemblies[strings.ToLower(assembly)]; ok {
+		ctx.uniprot = store
 	}
 }
 
@@ -108,10 +130,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/canonical-gene/entrez/{entrezGeneId}", s.handleEnsemblCanonicalGeneByEntrez)
 	mux.HandleFunc("GET /genome-nexus/{assembly}/cancer_hotspots/transcript/{transcriptId}", s.handleCancerHotspotsTranscript)
 
+	// PTM endpoints.
+	mux.HandleFunc("GET /genome-nexus/{assembly}/ptm/experimental", s.handlePtmExperimentalGet)
+	mux.HandleFunc("POST /genome-nexus/{assembly}/ptm/experimental", s.handlePtmExperimentalPost)
+
 	// Stub endpoints — return empty responses for data we don't have yet.
 	mux.HandleFunc("POST /genome-nexus/{assembly}/cancer_hotspots/genomic", emptyArray)
-	mux.HandleFunc("GET /genome-nexus/{assembly}/ptm/experimental", emptyArray)
-	mux.HandleFunc("POST /genome-nexus/{assembly}/ptm/experimental", emptyArray)
 	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/xrefs", emptyArray)
 
 	return corsMiddleware(mux)

@@ -16,6 +16,8 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/datasource/pfam"
+	"github.com/inodb/vibe-vep/internal/datasource/ptm"
+	"github.com/inodb/vibe-vep/internal/datasource/uniprot"
 	"github.com/inodb/vibe-vep/internal/server"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -159,6 +161,16 @@ func runServe(logger *zap.Logger, cfg runServeConfig) error {
 			srv.SetPfamStore(normalized, pfamStore)
 		}
 
+		// Load PTM data if available.
+		if ptmStore := loadPtmStore(logger, normalized); ptmStore != nil {
+			srv.SetPtmStore(normalized, ptmStore)
+		}
+
+		// Load UniProt mapping if available.
+		if uniprotStore := loadUniprotStore(logger, normalized); uniprotStore != nil {
+			srv.SetUniprotStore(normalized, uniprotStore)
+		}
+
 		logger.Info("assembly loaded",
 			zap.String("assembly", normalized),
 			zap.Int("transcripts", cr.cache.TranscriptCount()),
@@ -242,6 +254,60 @@ func loadPfamStore(logger *zap.Logger, assembly string) *pfam.Store {
 	logger.Info("loaded PFAM domain data",
 		zap.Int("domains", store.DomainCount()),
 		zap.Int("transcripts", store.TranscriptCount()),
+		zap.Duration("elapsed", time.Since(start)))
+
+	return store
+}
+
+// loadPtmStore loads PTM data from the raw download directory.
+func loadPtmStore(logger *zap.Logger, assembly string) *ptm.Store {
+	rawDir := RawDir(assembly)
+	if rawDir == "" {
+		return nil
+	}
+
+	ptmPath := filepath.Join(rawDir, PtmFileName)
+	if _, err := os.Stat(ptmPath); err != nil {
+		logger.Debug("PTM data not found, skipping", zap.String("path", ptmPath))
+		return nil
+	}
+
+	start := time.Now()
+	store, err := ptm.Load(ptmPath)
+	if err != nil {
+		logger.Warn("could not load PTM data", zap.Error(err))
+		return nil
+	}
+
+	logger.Info("loaded PTM data",
+		zap.Int("transcripts", store.TranscriptCount()),
+		zap.Duration("elapsed", time.Since(start)))
+
+	return store
+}
+
+// loadUniprotStore loads UniProt transcript mapping from the raw download directory.
+func loadUniprotStore(logger *zap.Logger, assembly string) *uniprot.Store {
+	rawDir := RawDir(assembly)
+	if rawDir == "" {
+		return nil
+	}
+
+	uniprotPath := filepath.Join(rawDir, UniprotMappingFileName)
+	if _, err := os.Stat(uniprotPath); err != nil {
+		logger.Debug("UniProt mapping not found, skipping", zap.String("path", uniprotPath))
+		return nil
+	}
+
+	start := time.Now()
+	store, err := uniprot.Load(uniprotPath)
+	if err != nil {
+		logger.Warn("could not load UniProt mapping", zap.Error(err))
+		return nil
+	}
+
+	logger.Info("loaded UniProt transcript mapping",
+		zap.Int("mappings", store.Count()),
 		zap.Duration("elapsed", time.Since(start)))
 
 	return store

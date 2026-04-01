@@ -272,6 +272,30 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 		}
 	}
 
+	// Download PTM data (same file for both assemblies, protein-level data).
+	{
+		ptmURL := getPtmURL()
+		fmt.Printf("\nDownloading PTM data...\n")
+		ptmFile := filepath.Join(rawDir, PtmFileName)
+		if sum, err := downloadFile(ptmURL, ptmFile); err != nil {
+			logger.Warn("could not download PTM data", zap.Error(err))
+		} else {
+			addChecksum(ptmFile, sum)
+		}
+	}
+
+	// Download UniProt transcript mapping.
+	{
+		uniprotURL := getUniprotMappingURL(assembly)
+		fmt.Printf("\nDownloading UniProt transcript mapping...\n")
+		uniprotFile := filepath.Join(rawDir, UniprotMappingFileName)
+		if sum, err := downloadFile(uniprotURL, uniprotFile); err != nil {
+			logger.Warn("could not download UniProt mapping", zap.Error(err))
+		} else {
+			addChecksum(uniprotFile, sum)
+		}
+	}
+
 	// Write checksum manifest to assembly dir (not raw/, so it survives clean).
 	if len(checksums) > 0 {
 		if err := writeChecksums(filepath.Join(assemblyDir, "checksums.sha256"), checksums); err != nil {
@@ -433,6 +457,8 @@ const (
 	EnsemblPredictionsName     = "protein_function_predictions.txt.gz"
 	PfamAFileName              = "pfamA.txt"
 	PfamBiomartFileName        = "ensembl_biomart_pfam.txt"
+	PtmFileName                = "ptm.json.gz"
+	UniprotMappingFileName     = "enst_to_uniprot_mapping_id.txt"
 )
 
 // GnomadFileName returns the expected filename for the given assembly.
@@ -527,6 +553,22 @@ func RawDir(assembly string) string {
 		return ""
 	}
 	return filepath.Join(dir, "raw")
+}
+
+// getPtmURL returns the download URL for PTM data.
+func getPtmURL() string {
+	return "https://raw.githubusercontent.com/genome-nexus/genome-nexus-importer/master/data/ptm/export/ptm.json.gz"
+}
+
+// getUniprotMappingURL returns the download URL for the UniProt transcript mapping.
+func getUniprotMappingURL(assembly string) string {
+	const base = "https://raw.githubusercontent.com/genome-nexus/genome-nexus-importer/master/data/uniprot/export"
+	switch strings.ToUpper(assembly) {
+	case "GRCH37":
+		return base + "/grch37_enst_to_uniprot_mapping_id.txt"
+	default:
+		return base + "/grch38_ensembl95_enst_to_uniprot_mapping_id.txt"
+	}
 }
 
 // getPfamURLs returns the download URLs for pfamA.txt and ensembl_biomart_pfam.txt.

@@ -7,6 +7,8 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/datasource/pfam"
+	"github.com/inodb/vibe-vep/internal/datasource/ptm"
+	"github.com/inodb/vibe-vep/internal/datasource/uniprot"
 )
 
 // ensemblTranscriptResponse is the JSON response for canonical transcript / transcript lookup endpoints.
@@ -79,7 +81,7 @@ func (s *Server) handleEnsemblCanonicalByHugo(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	resp := buildTranscriptResponse(tx, ctx.pfam)
+	resp := buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
@@ -108,7 +110,7 @@ func (s *Server) handleEnsemblTranscriptByID(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	resp := buildTranscriptResponse(tx, ctx.pfam)
+	resp := buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
@@ -212,7 +214,7 @@ func pickCanonical(transcripts []*cache.Transcript, isoformSource string) *cache
 }
 
 // buildTranscriptResponse constructs the JSON response for a transcript.
-func buildTranscriptResponse(tx *cache.Transcript, pfamStore *pfam.Store) ensemblTranscriptResponse {
+func buildTranscriptResponse(tx *cache.Transcript, pfamStore *pfam.Store, uniprotStore ...*uniprot.Store) ensemblTranscriptResponse {
 	resp := ensemblTranscriptResponse{
 		TranscriptID:  stripTxVersion(tx.ID),
 		GeneID:        tx.GeneID,
@@ -220,6 +222,11 @@ func buildTranscriptResponse(tx *cache.Transcript, pfamStore *pfam.Store) ensemb
 		HugoSymbols:   []string{tx.GeneName},
 		ProteinLength: tx.ProteinLength,
 		EntrezGeneID:  tx.EntrezGeneID,
+	}
+
+	// UniProt ID
+	if len(uniprotStore) > 0 && uniprotStore[0] != nil {
+		resp.UniprotID = uniprotStore[0].LookupByTranscript(tx.ID)
 	}
 
 	// PFAM domains
@@ -329,6 +336,7 @@ func (s *Server) handleEnsemblTranscriptPost(w http.ResponseWriter, r *http.Requ
 	}
 
 	pfamStore := ctx.pfam
+	uniprotStore := ctx.uniprot
 	var results []ensemblTranscriptResponse
 
 	// Lookup by transcript IDs
@@ -338,7 +346,7 @@ func (s *Server) handleEnsemblTranscriptPost(w http.ResponseWriter, r *http.Requ
 			tx = ctx.cache.GetTranscriptByPrefix(txID)
 		}
 		if tx != nil {
-			results = append(results, buildTranscriptResponse(tx, pfamStore))
+			results = append(results, buildTranscriptResponse(tx, pfamStore, uniprotStore))
 		}
 	}
 
@@ -347,7 +355,7 @@ func (s *Server) handleEnsemblTranscriptPost(w http.ResponseWriter, r *http.Requ
 		for _, chrom := range ctx.cache.Chromosomes() {
 			for _, t := range ctx.cache.FindTranscriptsByChrom(chrom) {
 				if t.GeneName == symbol && t.IsCanonicalMSK {
-					results = append(results, buildTranscriptResponse(t, pfamStore))
+					results = append(results, buildTranscriptResponse(t, pfamStore, uniprotStore))
 				}
 			}
 		}
@@ -441,6 +449,66 @@ func findCanonicalByGene(c *cache.Cache, geneName string) *cache.Transcript {
 		}
 	}
 	return nil
+}
+
+// handlePtmExperimentalGet handles GET /genome-nexus/{assembly}/ptm/experimental?ensemblTranscriptId={id}
+func (s *Server) handlePtmExperimentalGet(w http.ResponseWriter, r *http.Request) {
+	ctx := s.requireAssembly(w, r)
+	if ctx == nil {
+		return
+	}
+
+	txID := r.URL.Query().Get("ensemblTranscriptId")
+	if txID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte("[]\n"))
+		return
+	}
+
+	ptms := lookupPtms(ctx.ptm, txID)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ptms)
+}
+
+// handlePtmExperimentalPost handles POST /genome-nexus/{assembly}/ptm/experimental
+// Body: JSON object with ensemblTranscriptId field, or array of transcript IDs.
+func (s *Server) handlePtmExperimentalPost(w http.ResponseWriter, r *http.Request) {
+	ctx := s.requireAssembly(w, r)
+	if ctx == nil {
+		return
+	}
+
+	var body struct {
+		EnsemblTranscriptIds []string `json:"ensemblTranscriptIds"`
+		EnsemblTranscriptId  string   `json:"ensemblTranscriptId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+
+	var allPtms []ptm.PTM
+	if body.EnsemblTranscriptId != "" {
+		allPtms = append(allPtms, lookupPtms(ctx.ptm, body.EnsemblTranscriptId)...)
+	}
+	for _, txID := range body.EnsemblTranscriptIds {
+		allPtms = append(allPtms, lookupPtms(ctx.ptm, txID)...)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(allPtms)
+}
+
+// lookupPtms returns PTMs for a transcript, falling back to an empty slice.
+func lookupPtms(store *ptm.Store, transcriptID string) []ptm.PTM {
+	if store == nil {
+		return []ptm.PTM{}
+	}
+	result := store.LookupByTranscript(transcriptID)
+	if result == nil {
+		return []ptm.PTM{}
+	}
+	return result
 }
 
 // stripTxVersion removes the version suffix from a transcript ID (e.g. "ENST00000357654.9" → "ENST00000357654").
