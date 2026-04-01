@@ -197,7 +197,8 @@ func buildAnnotationSummary(variant string, v *vcf.Variant, anns []*annotate.Ann
 	for _, ann := range anns {
 		tcs := buildTranscriptConsequenceSummary(ann, v)
 		summaries = append(summaries, tcs)
-		if ann.IsCanonicalEnsembl && canonicalSummary == nil {
+		// Use the same canonical annotation selected by impact in the caller.
+		if canonical != nil && ann.TranscriptID == canonical.TranscriptID && canonicalSummary == nil {
 			cp := tcs
 			canonicalSummary = &cp
 		}
