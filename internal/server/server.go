@@ -11,6 +11,7 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/datasource/myvariantinfo"
 	"github.com/inodb/vibe-vep/internal/datasource/pfam"
 	"github.com/inodb/vibe-vep/internal/datasource/ptm"
 	"github.com/inodb/vibe-vep/internal/datasource/uniprot"
@@ -30,18 +31,20 @@ type assemblyContext struct {
 
 // Server is the HTTP annotation server.
 type Server struct {
-	mu         sync.RWMutex
-	assemblies map[string]*assemblyContext // keyed by lowercase: "grch38"
-	logger     *zap.Logger
-	version    string
+	mu              sync.RWMutex
+	assemblies      map[string]*assemblyContext // keyed by lowercase: "grch38"
+	logger          *zap.Logger
+	version         string
+	myVariantClient *myvariantinfo.Client
 }
 
 // New creates a new Server.
 func New(logger *zap.Logger, version string) *Server {
 	return &Server{
-		assemblies: make(map[string]*assemblyContext),
-		logger:     logger,
-		version:    version,
+		assemblies:      make(map[string]*assemblyContext),
+		logger:          logger,
+		version:         version,
+		myVariantClient: myvariantinfo.NewClient(),
 	}
 }
 

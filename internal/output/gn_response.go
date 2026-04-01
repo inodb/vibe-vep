@@ -17,6 +17,11 @@ type GNMarshalOptions struct {
 	IncludeClinVar           bool
 	IncludeHotspots          bool
 	IncludeSignal            bool
+	IncludeMyVariantInfo     bool
+
+	// MyVariantInfoData holds pre-fetched myvariant.info data to include in the response.
+	// The handler populates this before calling MarshalGNAnnotation.
+	MyVariantInfoData *GNMyVariantInfoAnnotation
 }
 
 // MarshalGNAnnotation builds a GNAnnotation from a variant and its annotations,
@@ -190,6 +195,11 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 				Annotation: []GNSignalMutation{},
 			}
 		}
+	}
+
+	// MyVariantInfo (pre-fetched by handler).
+	if opt.IncludeMyVariantInfo && opt.MyVariantInfoData != nil {
+		result.MyVariantInfo = opt.MyVariantInfoData
 	}
 
 	return json.Marshal(result)

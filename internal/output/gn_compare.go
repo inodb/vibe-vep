@@ -28,7 +28,44 @@ type GNAnnotation struct {
 	ClinVar               *GNClinVar                `json:"clinvar,omitempty"`
 	ColocatedVariants     []GNColocatedVariant       `json:"colocatedVariants,omitempty"`
 	Hotspots              *GNHotspots               `json:"hotspots,omitempty"`
-	SignalAnnotation      *GNSignalAnnotation       `json:"signalAnnotation,omitempty"`
+	SignalAnnotation      *GNSignalAnnotation        `json:"signalAnnotation,omitempty"`
+	MyVariantInfo         *GNMyVariantInfoAnnotation `json:"my_variant_info,omitempty"`
+}
+
+// GNMyVariantInfoAnnotation wraps the myvariant.info annotation in genome-nexus format.
+type GNMyVariantInfoAnnotation struct {
+	Annotation *GNMyVariantInfo `json:"annotation,omitempty"`
+}
+
+// GNMyVariantInfo holds the transformed myvariant.info data.
+type GNMyVariantInfo struct {
+	Dbsnp        *GNDbsnp               `json:"dbsnp,omitempty"`
+	GnomadExome  *GNGnomad              `json:"gnomadExome,omitempty"`
+	GnomadGenome *GNGnomad              `json:"gnomadGenome,omitempty"`
+	Vcf          *GNVcf                 `json:"vcf,omitempty"`
+	Variant      string                 `json:"variant,omitempty"`
+	Query        string                 `json:"query,omitempty"`
+	Hgvs         string                 `json:"hgvs,omitempty"`
+}
+
+// GNDbsnp holds dbSNP rsid.
+type GNDbsnp struct {
+	Rsid string `json:"rsid,omitempty"`
+}
+
+// GNGnomad holds gnomAD frequency data.
+type GNGnomad struct {
+	AlleleCount     map[string]interface{} `json:"alleleCount,omitempty"`
+	AlleleFrequency map[string]interface{} `json:"alleleFrequency,omitempty"`
+	AlleleNumber    map[string]interface{} `json:"alleleNumber,omitempty"`
+	Homozygotes     map[string]interface{} `json:"homozygotes,omitempty"`
+}
+
+// GNVcf holds VCF-level variant info from myvariant.info.
+type GNVcf struct {
+	Ref      string `json:"ref,omitempty"`
+	Alt      string `json:"alt,omitempty"`
+	Position string `json:"position,omitempty"`
 }
 
 // GNSignalAnnotation represents SIGNAL annotation in the GN response.
