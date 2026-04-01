@@ -380,6 +380,7 @@ type ensemblGeneResponse struct {
 	GeneID       string `json:"geneId"`
 	HugoSymbol   string `json:"hugoSymbol"`
 	EntrezGeneID string `json:"entrezGeneId,omitempty"`
+	UniprotID    string `json:"uniprotId,omitempty"`
 }
 
 // handleEnsemblCanonicalGeneByHugo handles GET /genome-nexus/{assembly}/ensembl/canonical-gene/hgnc/{hugoSymbol}
@@ -396,10 +397,15 @@ func (s *Server) handleEnsemblCanonicalGeneByHugo(w http.ResponseWriter, r *http
 		return
 	}
 
+	uniprotID := ""
+	if ctx.uniprot != nil {
+		uniprotID = ctx.uniprot.LookupByTranscript(tx.ID)
+	}
 	writeJSON(w, http.StatusOK, ensemblGeneResponse{
 		GeneID:       tx.GeneID,
 		HugoSymbol:   tx.GeneName,
 		EntrezGeneID: tx.EntrezGeneID,
+		UniprotID:    uniprotID,
 	})
 }
 
@@ -428,10 +434,15 @@ func (s *Server) handleEnsemblCanonicalGeneByEntrez(w http.ResponseWriter, r *ht
 		return
 	}
 
+	entrezUniprotID := ""
+	if ctx.uniprot != nil {
+		entrezUniprotID = ctx.uniprot.LookupByTranscript(found.ID)
+	}
 	writeJSON(w, http.StatusOK, ensemblGeneResponse{
 		GeneID:       found.GeneID,
 		HugoSymbol:   found.GeneName,
 		EntrezGeneID: found.EntrezGeneID,
+		UniprotID:    entrezUniprotID,
 	})
 }
 
