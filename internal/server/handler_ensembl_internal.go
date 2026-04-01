@@ -360,11 +360,11 @@ func (s *Server) handleEnsemblTranscriptPost(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	// Lookup by hugo symbols (find canonical)
+	// Lookup by hugo symbols (all transcripts for the gene).
 	for _, symbol := range filter.HugoSymbols {
 		for _, chrom := range ctx.cache.Chromosomes() {
 			for _, t := range ctx.cache.FindTranscriptsByChrom(chrom) {
-				if t.GeneName == symbol && t.IsCanonicalMSK {
+				if t.GeneName == symbol {
 					results = append(results, buildTranscriptResponse(t, pfamStore, uniprotStore))
 				}
 			}
