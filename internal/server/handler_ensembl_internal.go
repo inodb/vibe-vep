@@ -308,6 +308,55 @@ func buildUTRs(tx *cache.Transcript) []utrJSON {
 	return utrs
 }
 
+// handleEnsemblTranscriptPost handles POST /genome-nexus/{assembly}/ensembl/transcript
+// Body: {"transcriptIds":["ENST..."], "geneIds":[], "hugoSymbols":[], "proteinIds":[]}
+// Returns an array of transcript responses matching any of the filter criteria.
+func (s *Server) handleEnsemblTranscriptPost(w http.ResponseWriter, r *http.Request) {
+	ctx := s.requireAssembly(w, r)
+	if ctx == nil {
+		return
+	}
+
+	var filter struct {
+		TranscriptIDs []string `json:"transcriptIds"`
+		GeneIDs       []string `json:"geneIds"`
+		HugoSymbols   []string `json:"hugoSymbols"`
+		ProteinIDs    []string `json:"proteinIds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&filter); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+
+	pfamStore := ctx.pfam
+	var results []ensemblTranscriptResponse
+
+	// Lookup by transcript IDs
+	for _, txID := range filter.TranscriptIDs {
+		tx := ctx.cache.GetTranscript(txID)
+		if tx == nil {
+			tx = ctx.cache.GetTranscriptByPrefix(txID)
+		}
+		if tx != nil {
+			results = append(results, buildTranscriptResponse(tx, pfamStore))
+		}
+	}
+
+	// Lookup by hugo symbols (find canonical)
+	for _, symbol := range filter.HugoSymbols {
+		for _, chrom := range ctx.cache.Chromosomes() {
+			for _, t := range ctx.cache.FindTranscriptsByChrom(chrom) {
+				if t.GeneName == symbol && t.IsCanonicalMSK {
+					results = append(results, buildTranscriptResponse(t, pfamStore))
+				}
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	writeJSON(w, http.StatusOK, results)
+}
+
 // stripTxVersion removes the version suffix from a transcript ID (e.g. "ENST00000357654.9" → "ENST00000357654").
 func stripTxVersion(id string) string {
 	if i := strings.IndexByte(id, '.'); i >= 0 {

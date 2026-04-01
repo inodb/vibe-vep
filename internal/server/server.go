@@ -95,6 +95,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /genome-nexus/{assembly}/pfam/domain", s.handlePfamDomainPost)
 	mux.HandleFunc("GET /genome-nexus/{assembly}/pfam/domain/{pfamAccession}", s.handlePfamDomainGet)
 
+	// POST ensembl/transcript filter (used by mutation mapper to fetch transcript details).
+	mux.HandleFunc("POST /genome-nexus/{assembly}/ensembl/transcript", s.handleEnsemblTranscriptPost)
+
 	// Stub endpoints — return empty responses so the frontend mutation mapper
 	// doesn't hang waiting for data we don't have yet.
 	emptyArray := func(w http.ResponseWriter, r *http.Request) {
