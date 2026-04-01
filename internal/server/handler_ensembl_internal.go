@@ -264,51 +264,61 @@ func buildTranscriptResponse(tx *cache.Transcript, pfamStore *pfam.Store, unipro
 	return resp
 }
 
-// buildUTRs derives UTR regions from the transcript CDS and exon boundaries.
+// buildUTRs derives per-exon UTR regions from the transcript CDS and exon boundaries.
+// UTRs are the non-coding exonic portions before/after the CDS.
 func buildUTRs(tx *cache.Transcript) []utrJSON {
 	if !tx.IsProteinCoding() || len(tx.Exons) == 0 {
 		return []utrJSON{}
 	}
 
 	var utrs []utrJSON
+	strand := tx.Strand
 
-	// 5' UTR: region before CDS start (in transcript orientation).
-	// 3' UTR: region after CDS end (in transcript orientation).
-	if tx.Strand == 1 {
-		// Forward strand: 5'UTR is tx.Start..CDSStart-1, 3'UTR is CDSEnd+1..tx.End
-		if tx.CDSStart > tx.Start {
+	for _, exon := range tx.Exons {
+		// Determine if this exon has a UTR portion.
+		// UTR is the part of the exon outside the CDS.
+		if exon.End < tx.CDSStart || exon.Start > tx.CDSEnd {
+			// Entire exon is outside CDS — it's a UTR exon.
+			utrType := "three_prime_UTR"
+			if strand == 1 && exon.End < tx.CDSStart {
+				utrType = "five_prime_UTR"
+			} else if strand == -1 && exon.Start > tx.CDSEnd {
+				utrType = "five_prime_UTR"
+			}
 			utrs = append(utrs, utrJSON{
-				Type:   "five_prime_UTR",
-				Start:  tx.Start,
-				End:    tx.CDSStart - 1,
-				Strand: tx.Strand,
+				Type:   utrType,
+				Start:  exon.Start,
+				End:    exon.End,
+				Strand: strand,
 			})
-		}
-		if tx.CDSEnd < tx.End {
-			utrs = append(utrs, utrJSON{
-				Type:   "three_prime_UTR",
-				Start:  tx.CDSEnd + 1,
-				End:    tx.End,
-				Strand: tx.Strand,
-			})
-		}
-	} else {
-		// Reverse strand: 5'UTR is CDSEnd+1..tx.End, 3'UTR is tx.Start..CDSStart-1
-		if tx.CDSEnd < tx.End {
-			utrs = append(utrs, utrJSON{
-				Type:   "five_prime_UTR",
-				Start:  tx.CDSEnd + 1,
-				End:    tx.End,
-				Strand: tx.Strand,
-			})
-		}
-		if tx.CDSStart > tx.Start {
-			utrs = append(utrs, utrJSON{
-				Type:   "three_prime_UTR",
-				Start:  tx.Start,
-				End:    tx.CDSStart - 1,
-				Strand: tx.Strand,
-			})
+		} else {
+			// Exon partially overlaps CDS — split into UTR + CDS portions.
+			if exon.Start < tx.CDSStart {
+				// Left portion is UTR.
+				utrType := "five_prime_UTR"
+				if strand == -1 {
+					utrType = "three_prime_UTR"
+				}
+				utrs = append(utrs, utrJSON{
+					Type:   utrType,
+					Start:  exon.Start,
+					End:    tx.CDSStart - 1,
+					Strand: strand,
+				})
+			}
+			if exon.End > tx.CDSEnd {
+				// Right portion is UTR.
+				utrType := "three_prime_UTR"
+				if strand == -1 {
+					utrType = "five_prime_UTR"
+				}
+				utrs = append(utrs, utrJSON{
+					Type:   utrType,
+					Start:  tx.CDSEnd + 1,
+					End:    exon.End,
+					Strand: strand,
+				})
+			}
 		}
 	}
 
