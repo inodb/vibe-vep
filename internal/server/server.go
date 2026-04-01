@@ -113,6 +113,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /genome-nexus/{assembly}/ptm/experimental", emptyArray)
 	mux.HandleFunc("POST /genome-nexus/{assembly}/ptm/experimental", emptyArray)
 	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/canonical-gene/entrez/{entrezGeneId}", emptyObject)
+	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/canonical-gene/hgnc/{hugoSymbol}", emptyObject)
+	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/xrefs", emptyArray)
 
 	return corsMiddleware(mux)
 }
