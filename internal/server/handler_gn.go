@@ -9,6 +9,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/datasource/myvariantinfo"
 	"github.com/inodb/vibe-vep/internal/input"
 	"github.com/inodb/vibe-vep/internal/output"
@@ -41,7 +42,7 @@ func (s *Server) handleGNGenomicGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	opts := parseGNMarshalOptions(r)
-	s.enrichMyVariantInfo(&opts, v, ctx.assembly)
+	s.enrichMyVariantInfo(&opts, v, ctx.assembly, anns)
 	data, err := output.MarshalGNAnnotation(inputLabel, v, anns, ctx.assembly, opts)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "marshal error: "+err.Error())
@@ -85,7 +86,7 @@ func (s *Server) handleGNGenomicPost(w http.ResponseWriter, r *http.Request) {
 		}
 
 		opts := baseOpts
-		s.enrichMyVariantInfo(&opts, v, ctx.assembly)
+		s.enrichMyVariantInfo(&opts, v, ctx.assembly, anns)
 		data, err := output.MarshalGNAnnotation(inputLabel, v, anns, ctx.assembly, opts)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "marshal error: "+err.Error())
@@ -130,7 +131,7 @@ func (s *Server) handleGNHGVSGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	opts := parseGNMarshalOptions(r)
-	s.enrichMyVariantInfo(&opts, v, ctx.assembly)
+	s.enrichMyVariantInfo(&opts, v, ctx.assembly, anns)
 	data, err := output.MarshalGNAnnotation(notation, v, anns, ctx.assembly, opts)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "marshal error: "+err.Error())
@@ -178,7 +179,7 @@ func (s *Server) handleGNHGVSPost(w http.ResponseWriter, r *http.Request) {
 			}
 
 			opts := baseOpts
-			s.enrichMyVariantInfo(&opts, v, ctx.assembly)
+			s.enrichMyVariantInfo(&opts, v, ctx.assembly, anns)
 			data, err := output.MarshalGNAnnotation(notation, v, anns, ctx.assembly, opts)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "marshal error: "+err.Error())
@@ -192,10 +193,11 @@ func (s *Server) handleGNHGVSPost(w http.ResponseWriter, r *http.Request) {
 	writeJSONArray(w, results)
 }
 
-// enrichMyVariantInfo fetches myvariant.info data and populates opts.MyVariantInfoData
-// when IncludeMyVariantInfo is true. Errors are logged but do not fail the request.
-func (s *Server) enrichMyVariantInfo(opts *output.GNMarshalOptions, v *vcf.Variant, assembly string) {
-	if !opts.IncludeMyVariantInfo || s.myVariantClient == nil {
+// enrichMyVariantInfo populates opts.MyVariantInfoData from local annotation extras
+// (gnomAD, dbSNP) when available, falling back to myvariant.info API when local data
+// is not available.
+func (s *Server) enrichMyVariantInfo(opts *output.GNMarshalOptions, v *vcf.Variant, assembly string, anns []*annotate.Annotation) {
+	if !opts.IncludeMyVariantInfo {
 		return
 	}
 
@@ -207,20 +209,90 @@ func (s *Server) enrichMyVariantInfo(opts *output.GNMarshalOptions, v *vcf.Varia
 	if alt == "" {
 		alt = "-"
 	}
-	hgvsg := fmt.Sprintf("%s:g.%d%s>%s", v.Chrom, v.Pos, ref, alt)
 
+	// Try local data first (from genomic index extras).
+	src := firstAnnotationWithExtras(anns)
+	if src != nil {
+		gnomadAF := src.GetExtraKey("gnomad.af")
+		dbsnpID := src.GetExtraKey("dbsnp.id")
+		if gnomadAF != "" || dbsnpID != "" {
+			mvi := &output.GNMyVariantInfo{
+				Variant: fmt.Sprintf("chr%s:g.%d%s>%s", v.Chrom, v.Pos, ref, alt),
+				Query:   fmt.Sprintf("chr%s:g.%d%s>%s", v.Chrom, v.Pos, ref, alt),
+				Hgvs:    fmt.Sprintf("chr%s:g.%d%s>%s", v.Chrom, v.Pos, ref, alt),
+				Vcf: &output.GNVcf{
+					Ref:      ref,
+					Alt:      alt,
+					Position: fmt.Sprintf("%d", v.Pos),
+				},
+			}
+			if dbsnpID != "" {
+				mvi.Dbsnp = &output.GNDbsnp{Rsid: dbsnpID}
+			}
+			if gnomadAF != "" {
+				gnomadAC := src.GetExtraKey("gnomad.ac")
+				gnomadAN := src.GetExtraKey("gnomad.an")
+				gnomadNhomalt := src.GetExtraKey("gnomad.nhomalt")
+				mvi.GnomadExome = buildLocalGnomad(gnomadAF, gnomadAC, gnomadAN, gnomadNhomalt)
+			}
+			opts.MyVariantInfoData = &output.GNMyVariantInfoAnnotation{Annotation: mvi}
+			return
+		}
+	}
+
+	// Fall back to myvariant.info API.
+	if s.myVariantClient == nil {
+		return
+	}
+	hgvsg := fmt.Sprintf("%s:g.%d%s>%s", v.Chrom, v.Pos, ref, alt)
 	resp, err := s.myVariantClient.Fetch(hgvsg, assembly)
 	if err != nil {
 		s.logger.Warn("myvariant.info fetch failed", zap.Error(err), zap.String("hgvsg", hgvsg))
 		return
 	}
 	if resp == nil {
-		return // variant not found (404)
+		return
 	}
-
 	opts.MyVariantInfoData = &output.GNMyVariantInfoAnnotation{
 		Annotation: convertMyVariantInfo(resp.Annotation),
 	}
+}
+
+// buildLocalGnomad constructs a GNGnomad from local genomic index values.
+// Only overall frequency is available locally (not per-population).
+func buildLocalGnomad(af, ac, an, nhomalt string) *output.GNGnomad {
+	g := &output.GNGnomad{
+		AlleleFrequency: map[string]interface{}{},
+		AlleleCount:     map[string]interface{}{},
+		AlleleNumber:    map[string]interface{}{},
+		Homozygotes:     map[string]interface{}{},
+	}
+	if v, err := strconv.ParseFloat(af, 64); err == nil {
+		g.AlleleFrequency["af"] = v
+	}
+	if v, err := strconv.Atoi(ac); err == nil {
+		g.AlleleCount["ac"] = v
+	}
+	if v, err := strconv.Atoi(an); err == nil {
+		g.AlleleNumber["an"] = v
+	}
+	if v, err := strconv.Atoi(nhomalt); err == nil {
+		g.Homozygotes["hom"] = v
+	}
+	return g
+}
+
+// firstAnnotationWithExtras returns the first annotation with extras populated.
+func firstAnnotationWithExtras(anns []*annotate.Annotation) *annotate.Annotation {
+	for _, ann := range anns {
+		if len(ann.Extra) > 0 {
+			return ann
+		}
+	}
+	if len(anns) > 0 {
+		return anns[0]
+	}
+	return nil
 }
 
 // convertMyVariantInfo converts from the myvariantinfo package types to the output package types.
