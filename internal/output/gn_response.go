@@ -229,7 +229,7 @@ func buildTranscriptConsequenceSummary(ann *annotate.Annotation, v *vcf.Variant)
 		HugoGeneSymbol:        ann.GeneName,
 		HGVSpShort:            hgvspToShort(ann.HGVSp),
 		HGVSp:                 hgvspStripTranscript(ann.HGVSp),
-		HGVSc:                 ann.HGVSc,
+		HGVSc:                 prefixTranscript(ann.TranscriptID, ann.HGVSc),
 		ConsequenceTerms:      firstConsequence(ann.Consequence),
 		VariantClassification: SOToMAFClassification(ann.Consequence, v),
 		Exon:                  ann.ExonNumber,
@@ -309,6 +309,19 @@ func hgvspToShort(hgvsp string) string {
 	// Handle Ter→*
 	result = strings.ReplaceAll(result, "Ter", "*")
 	return result
+}
+
+// prefixTranscript prepends the transcript ID to an HGVSc/HGVSp notation
+// (e.g. "c.2369C>T" → "ENST00000275493.7:c.2369C>T").
+func prefixTranscript(txID, notation string) string {
+	if notation == "" || txID == "" {
+		return notation
+	}
+	// Don't double-prefix if already has a transcript prefix.
+	if strings.Contains(notation, ":") {
+		return notation
+	}
+	return txID + ":" + notation
 }
 
 // hgvspStripTranscript strips the transcript prefix from HGVSp,
