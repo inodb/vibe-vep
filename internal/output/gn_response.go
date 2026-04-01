@@ -132,10 +132,18 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 	// Source fields are populated from annotation extras (same for all transcripts).
 	src := firstAnnotationWithExtras(anns)
 
-	// dbSNP → colocatedVariants (always included when available).
+	// dbSNP → colocatedVariants (from local index or myvariant.info).
 	if src != nil {
 		if rsID := src.GetExtraKey("dbsnp.id"); rsID != "" {
 			result.ColocatedVariants = []GNColocatedVariant{{DbSnpID: rsID}}
+		}
+	}
+	// Fall back to myvariant.info dbSNP rsid for colocatedVariants.
+	if len(result.ColocatedVariants) == 0 && opt.MyVariantInfoData != nil &&
+		opt.MyVariantInfoData.Annotation != nil && opt.MyVariantInfoData.Annotation.Dbsnp != nil {
+		rsid := opt.MyVariantInfoData.Annotation.Dbsnp.Rsid
+		if rsid != "" {
+			result.ColocatedVariants = []GNColocatedVariant{{DbSnpID: rsid}}
 		}
 	}
 
@@ -157,14 +165,24 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 		}
 	}
 
-	// Hotspots
-	if opt.IncludeHotspots && src != nil {
-		if src.GetExtraKey("hotspots.hotspot") == "Y" {
-			result.Hotspots = &GNHotspots{
-				Annotation: []GNHotspotEntry{{
-					Type: src.GetExtraKey("hotspots.type"),
-				}},
+	// Hotspots — build per-transcript arrays matching genome-nexus format.
+	if opt.IncludeHotspots {
+		hotspotAnnotation := make([][]GNHotspotEntry, 0, len(anns))
+		for _, ann := range anns {
+			if ann.GetExtraKey("hotspots.hotspot") == "Y" {
+				hotspotAnnotation = append(hotspotAnnotation, []GNHotspotEntry{{
+					HugoSymbol:   ann.GeneName,
+					TranscriptID: stripVersion(ann.TranscriptID),
+					Residue:      formatResidue(ann.AminoAcidChange, ann.ProteinPosition),
+					Type:         ann.GetExtraKey("hotspots.type"),
+				}})
+			} else {
+				hotspotAnnotation = append(hotspotAnnotation, []GNHotspotEntry{})
 			}
+		}
+		result.Hotspots = &GNHotspots{
+			License:    "https://opendatacommons.org/licenses/odbl/1.0/",
+			Annotation: hotspotAnnotation,
 		}
 	}
 
@@ -349,6 +367,18 @@ func hgvspToShort(hgvsp string) string {
 	// Handle Ter→*
 	result = strings.ReplaceAll(result, "Ter", "*")
 	return result
+}
+
+// formatResidue builds a residue string like "T790" from amino acid change and position.
+func formatResidue(aaChange string, proteinPos int64) string {
+	if aaChange == "" || proteinPos == 0 {
+		return ""
+	}
+	// aaChange is like "T790M" — take the first character (ref AA) + position.
+	if len(aaChange) > 0 {
+		return string(aaChange[0]) + strconv.FormatInt(proteinPos, 10)
+	}
+	return ""
 }
 
 // prefixTranscript prepends the transcript ID to an HGVSc/HGVSp notation

@@ -118,13 +118,17 @@ type GNColocatedVariant struct {
 
 // GNHotspots represents cancer hotspot annotation.
 type GNHotspots struct {
-	Annotation []GNHotspotEntry `json:"annotation,omitempty"`
+	License    string              `json:"license,omitempty"`
+	Annotation [][]GNHotspotEntry  `json:"annotation"`
 }
 
 // GNHotspotEntry represents a single hotspot hit.
 type GNHotspotEntry struct {
-	Type   string  `json:"type,omitempty"`
-	QValue float64 `json:"qValue,omitempty"`
+	HugoSymbol   string `json:"hugoSymbol,omitempty"`
+	TranscriptID string `json:"transcriptId,omitempty"`
+	Residue      string `json:"residue,omitempty"`
+	Type         string `json:"type,omitempty"`
+	TumorCount   int    `json:"tumorCount,omitempty"`
 }
 
 // GNAnnotationSummary is the enriched annotation summary returned when
