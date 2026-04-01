@@ -59,9 +59,9 @@ type Store struct {
 	db       *sql.DB
 	lookupPS *sql.Stmt
 
-	// LRU cache: variants often hit the same transcript repeatedly.
-	mu    sync.Mutex
-	cache map[cacheKey][]byte // decompressed matrix
+	mu        sync.Mutex
+	cache     map[cacheKey][]byte // decompressed matrix
+	preloaded bool                // true if all matrices are in cache (no SQLite needed)
 }
 
 type cacheKey struct {
@@ -89,12 +89,59 @@ func Open(dbPath string) (*Store, error) {
 	}, nil
 }
 
-// Close closes the database.
+// Preload reads all prediction matrices from SQLite into memory so that
+// subsequent lookups don't hit the database. This trades ~200-500MB RAM
+// for instant lookups, which is critical on networked filesystems like EFS
+// where each SQLite read has high latency.
+func (s *Store) Preload() (int, error) {
+	rows, err := s.db.Query(`SELECT md5, analysis, matrix FROM predictions`)
+	if err != nil {
+		return 0, fmt.Errorf("query predictions: %w", err)
+	}
+	defer rows.Close()
+
+	cache := make(map[cacheKey][]byte, 200000)
+	n := 0
+	for rows.Next() {
+		var md5, analysis string
+		var compressed []byte
+		if err := rows.Scan(&md5, &analysis, &compressed); err != nil {
+			return n, fmt.Errorf("scan row %d: %w", n, err)
+		}
+		matrix, err := decompress(compressed)
+		if err != nil {
+			continue // skip corrupt entries
+		}
+		cache[cacheKey{md5, analysis}] = matrix
+		n++
+	}
+	if err := rows.Err(); err != nil {
+		return n, fmt.Errorf("iterate predictions: %w", err)
+	}
+
+	s.mu.Lock()
+	s.cache = cache
+	s.preloaded = true
+	s.mu.Unlock()
+
+	// Close the database — no longer needed.
+	s.lookupPS.Close()
+	s.db.Close()
+	s.db = nil
+	s.lookupPS = nil
+
+	return n, nil
+}
+
+// Close closes the database (no-op if preloaded).
 func (s *Store) Close() error {
 	if s.lookupPS != nil {
 		s.lookupPS.Close()
 	}
-	return s.db.Close()
+	if s.db != nil {
+		return s.db.Close()
+	}
+	return nil
 }
 
 // BuildSources holds paths to the Ensembl MySQL dump files for building the predictions DB.
@@ -410,12 +457,21 @@ func (s *Store) getMatrix(md5, analysis string) ([]byte, bool) {
 	key := cacheKey{md5, analysis}
 
 	s.mu.Lock()
-	if m, ok := s.cache[key]; ok {
-		s.mu.Unlock()
-		return m, true
-	}
+	m, ok := s.cache[key]
+	preloaded := s.preloaded
 	s.mu.Unlock()
 
+	if ok {
+		return m, true
+	}
+	if preloaded {
+		return nil, false // all data is in memory, nothing to query
+	}
+
+	// Fallback: query SQLite (slow on EFS).
+	if s.lookupPS == nil {
+		return nil, false
+	}
 	var compressed []byte
 	err := s.lookupPS.QueryRow(md5, analysis).Scan(&compressed)
 	if err != nil {
@@ -428,7 +484,6 @@ func (s *Store) getMatrix(md5, analysis string) ([]byte, bool) {
 	}
 
 	s.mu.Lock()
-	// Simple bounded cache: evict all if too large.
 	if len(s.cache) > 200 {
 		s.cache = make(map[cacheKey][]byte, 128)
 	}

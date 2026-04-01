@@ -386,7 +386,12 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 			}
 		}
 		if store, err := ensemblpred.Open(predDBPath); err == nil {
-			logger.Info("loaded Ensembl SIFT/PolyPhen predictions")
+			// Preload all matrices into memory for fast lookups (critical on EFS).
+			if n, err := store.Preload(); err != nil {
+				logger.Warn("could not preload SIFT/PolyPhen matrices, falling back to SQLite", zap.Error(err))
+			} else {
+				logger.Info("preloaded SIFT/PolyPhen prediction matrices", zap.Int("matrices", n))
+			}
 			sources = append(sources, ensemblpred.NewSource(store))
 		} else {
 			logger.Warn("could not load Ensembl SIFT/PolyPhen predictions (try: vibe-vep download)",
