@@ -262,6 +262,10 @@ func buildAnnotationSummary(variant string, v *vcf.Variant, anns []*annotate.Ann
 		}
 	}
 
+	// Sort by transcript ID to match genome-nexus convention.
+	sort.Slice(summaries, func(i, j int) bool {
+		return summaries[i].TranscriptID < summaries[j].TranscriptID
+	})
 	summary.TranscriptConsequenceSummaries = summaries
 	summary.TranscriptConsequenceSummary = canonicalSummary
 	// Deprecated field: only canonical transcript.
