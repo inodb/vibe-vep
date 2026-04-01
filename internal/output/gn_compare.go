@@ -28,6 +28,32 @@ type GNAnnotation struct {
 	ClinVar               *GNClinVar                `json:"clinvar,omitempty"`
 	ColocatedVariants     []GNColocatedVariant       `json:"colocatedVariants,omitempty"`
 	Hotspots              *GNHotspots               `json:"hotspots,omitempty"`
+	SignalAnnotation      *GNSignalAnnotation       `json:"signalAnnotation,omitempty"`
+}
+
+// GNSignalAnnotation represents SIGNAL annotation in the GN response.
+type GNSignalAnnotation struct {
+	License    string            `json:"license"`
+	Annotation []GNSignalMutation `json:"annotation"`
+}
+
+// GNSignalMutation represents a SIGNAL mutation entry.
+type GNSignalMutation struct {
+	HugoGeneSymbol  string              `json:"hugoGeneSymbol,omitempty"`
+	Chromosome      string              `json:"chromosome,omitempty"`
+	StartPosition   int64               `json:"startPosition,omitempty"`
+	EndPosition     int64               `json:"endPosition,omitempty"`
+	ReferenceAllele string              `json:"referenceAllele,omitempty"`
+	VariantAllele   string              `json:"variantAllele,omitempty"`
+	MutationStatus  string              `json:"mutationStatus,omitempty"`
+	CountsByTumorType []GNCountByTumorType `json:"countsByTumorType,omitempty"`
+}
+
+// GNCountByTumorType represents a count by tumor type entry.
+type GNCountByTumorType struct {
+	TumorType      string `json:"tumorType"`
+	TumorTypeCount int    `json:"tumorTypeCount"`
+	VariantCount   int    `json:"variantCount"`
 }
 
 // GNClinVar represents ClinVar annotation in the GN response.

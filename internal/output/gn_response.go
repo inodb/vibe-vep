@@ -16,6 +16,7 @@ type GNMarshalOptions struct {
 	IncludeAnnotationSummary bool
 	IncludeClinVar           bool
 	IncludeHotspots          bool
+	IncludeSignal            bool
 }
 
 // MarshalGNAnnotation builds a GNAnnotation from a variant and its annotations,
@@ -158,6 +159,35 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 				Annotation: []GNHotspotEntry{{
 					Type: src.GetExtraKey("hotspots.type"),
 				}},
+			}
+		}
+	}
+
+	// SIGNAL
+	if opt.IncludeSignal && src != nil {
+		if mutStatus := src.GetExtraKey("signal.mutation_status"); mutStatus != "" {
+			// Find gene name from canonical annotation.
+			geneName := ""
+			if canonicalAnn != nil {
+				geneName = canonicalAnn.GeneName
+			}
+			result.SignalAnnotation = &GNSignalAnnotation{
+				License: "https://www.signaldb.org/about",
+				Annotation: []GNSignalMutation{{
+					HugoGeneSymbol:  geneName,
+					Chromosome:      v.Chrom,
+					StartPosition:   v.Pos,
+					EndPosition:     end,
+					ReferenceAllele: ref,
+					VariantAllele:   alt,
+					MutationStatus:  mutStatus,
+				}},
+			}
+		} else {
+			// Return empty annotation array (not null) so frontend doesn't show N/A.
+			result.SignalAnnotation = &GNSignalAnnotation{
+				License:    "https://www.signaldb.org/about",
+				Annotation: []GNSignalMutation{},
 			}
 		}
 	}

@@ -214,3 +214,84 @@ func TestPfamDomainGet(t *testing.T) {
 		t.Errorf("name: got %q", domain["name"])
 	}
 }
+
+// TestSignalFieldIncluded tests that ?fields=signal returns signalAnnotation.
+func TestSignalFieldIncluded(t *testing.T) {
+	srv := newTestServerWithKRAS(t)
+	handler := srv.Handler()
+
+	// With signal field
+	req := httptest.NewRequest(http.MethodGet,
+		"/genome-nexus/grch38/annotation/genomic/12,25245351,25245351,C,A?fields=signal",
+		nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]json.RawMessage
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	// signalAnnotation should be present (even if empty annotation array)
+	sigRaw, ok := resp["signalAnnotation"]
+	if !ok {
+		t.Fatal("expected signalAnnotation in response when ?fields=signal")
+	}
+
+	var sig output.GNSignalAnnotation
+	if err := json.Unmarshal(sigRaw, &sig); err != nil {
+		t.Fatalf("decode signalAnnotation: %v", err)
+	}
+	if sig.License == "" {
+		t.Error("expected non-empty license in signalAnnotation")
+	}
+	// Annotation should be an array (possibly empty)
+	if sig.Annotation == nil {
+		t.Error("expected annotation array, got nil")
+	}
+}
+
+// TestSignalFieldNotIncludedByDefault tests that signalAnnotation is absent without ?fields=signal.
+func TestSignalFieldNotIncludedByDefault(t *testing.T) {
+	srv := newTestServerWithKRAS(t)
+	handler := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/genome-nexus/grch38/annotation/genomic/12,25245351,25245351,C,A",
+		nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	var resp map[string]json.RawMessage
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	if _, ok := resp["signalAnnotation"]; ok {
+		t.Error("signalAnnotation should not be present without ?fields=signal")
+	}
+}
+
+// TestSignalFieldWithRepeatedParams tests signal with repeated ?fields= params.
+func TestSignalFieldWithRepeatedParams(t *testing.T) {
+	srv := newTestServerWithKRAS(t)
+	handler := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/genome-nexus/grch38/annotation/genomic/12,25245351,25245351,C,A?fields=annotation_summary&fields=signal&fields=clinvar",
+		nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	var resp map[string]json.RawMessage
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	if _, ok := resp["signalAnnotation"]; !ok {
+		t.Error("expected signalAnnotation with repeated ?fields= including signal")
+	}
+	if _, ok := resp["annotation_summary"]; !ok {
+		t.Error("expected annotation_summary with repeated ?fields=")
+	}
+}
