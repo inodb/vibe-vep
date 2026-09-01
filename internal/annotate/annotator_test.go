@@ -163,6 +163,95 @@ func TestAnnotator_AnnotateAll(t *testing.T) {
 	assert.Contains(t, output, "missense_variant")
 }
 
+// TestAnnotator_Distance_UpstreamDownstream verifies that variants just
+// outside a transcript body but within the configured --distance padding are
+// annotated as upstream_gene_variant / downstream_gene_variant instead of
+// intergenic. Regression: variants in the TERT promoter (~9 bp downstream in
+// genomic coords of the reverse-strand transcript end) used to be reported as
+// intergenic. Ensembl VEP's --distance default is 5000 bp.
+func TestAnnotator_Distance_UpstreamDownstream(t *testing.T) {
+	newCache := func(strand int8) *cache.Cache {
+		t.Helper()
+		c := cache.New()
+		c.AddTranscript(&cache.Transcript{
+			ID:       "ENSTFAKE01",
+			GeneName: "FAKE",
+			Chrom:    "1",
+			Start:    1000,
+			End:      2000,
+			Strand:   strand,
+			Biotype:  "protein_coding",
+			Exons: []cache.Exon{
+				{Number: 1, Start: 1000, End: 2000},
+			},
+		})
+		c.BuildIndex()
+		return c
+	}
+
+	tests := []struct {
+		name     string
+		strand   int8
+		pos      int64
+		distance int64
+		want     string
+	}{
+		// Forward strand: lower coord = upstream, higher coord = downstream.
+		{"forward 100bp below → upstream", +1, 900, 5000, ConsequenceUpstreamGene},
+		{"forward 100bp above → downstream", +1, 2100, 5000, ConsequenceDownstreamGene},
+		// Reverse strand: transcript 5' end is at high coord, so above end
+		// = upstream and below start = downstream.
+		{"reverse 100bp above → upstream", -1, 2100, 5000, ConsequenceUpstreamGene},
+		{"reverse 100bp below → downstream", -1, 900, 5000, ConsequenceDownstreamGene},
+		// Just outside the padding: intergenic.
+		{"forward beyond padding → intergenic", +1, 8000, 5000, ConsequenceIntergenicVariant},
+		// Padding disabled: near-transcript variant reverts to intergenic.
+		{"forward padding=0 → intergenic", +1, 900, 0, ConsequenceIntergenicVariant},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ann := NewAnnotator(newCache(tc.strand))
+			ann.SetDistance(tc.distance)
+
+			v := &vcf.Variant{Chrom: "1", Pos: tc.pos, Ref: "A", Alt: "T"}
+			anns, err := ann.Annotate(v)
+			require.NoError(t, err)
+			require.Len(t, anns, 1)
+			assert.Equal(t, tc.want, anns[0].Consequence)
+		})
+	}
+}
+
+// TestAnnotator_DefaultDistance verifies that a freshly constructed annotator
+// uses the VEP-compatible 5 kb padding by default (no explicit SetDistance).
+func TestAnnotator_DefaultDistance(t *testing.T) {
+	c := cache.New()
+	c.AddTranscript(&cache.Transcript{
+		ID:       "ENSTFAKE02",
+		GeneName: "FAKE2",
+		Chrom:    "1",
+		Start:    10000,
+		End:      20000,
+		Strand:   -1,
+		Biotype:  "protein_coding",
+		Exons:    []cache.Exon{{Number: 1, Start: 10000, End: 20000}},
+	})
+	c.BuildIndex()
+
+	ann := NewAnnotator(c)
+
+	// 9 bp downstream of transcript end (mimics TERT promoter distance): on a
+	// reverse-strand transcript, positions above End are upstream.
+	v := &vcf.Variant{Chrom: "1", Pos: 20009, Ref: "G", Alt: "C"}
+	anns, err := ann.Annotate(v)
+	require.NoError(t, err)
+	require.Len(t, anns, 1)
+	assert.Equal(t, ConsequenceUpstreamGene, anns[0].Consequence)
+	assert.Equal(t, "ENSTFAKE02", anns[0].TranscriptID)
+	assert.Equal(t, "FAKE2", anns[0].GeneName)
+}
+
 // mockWriter implements AnnotationWriter for testing.
 type mockWriter struct {
 	buf *bytes.Buffer

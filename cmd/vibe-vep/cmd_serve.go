@@ -110,6 +110,7 @@ Endpoints:
 	cmd.Flags().DurationVar(&readTimeout, "read-timeout", 30*time.Second, "HTTP read timeout")
 	cmd.Flags().DurationVar(&writeTimeout, "write-timeout", 60*time.Second, "HTTP write timeout")
 	addCacheFlags(cmd)
+	addAnnotateFlags(cmd)
 
 	return cmd
 }
@@ -152,6 +153,7 @@ func runServe(logger *zap.Logger, cfg runServeConfig) error {
 		cacheResults = append(cacheResults, cr)
 
 		ann := annotate.NewAnnotator(cr.cache)
+		ann.SetDistance(configuredDistance())
 		ann.SetLogger(logger)
 
 		srv.AddAssembly(normalized, cr.cache, ann, cr.sources)

@@ -94,6 +94,7 @@ transcripts or annotation sources into memory.`,
 	cmd.Flags().IntVar(&rowGroupSize, "row-group-size", pqexport.DefaultRowGroupSize, "Rows per row group")
 	cmd.Flags().BoolVar(&fromCache, "from-cache", false, "Export directly from DuckDB cache (no transcript loading)")
 	addCacheFlags(cmd)
+	addAnnotateFlags(cmd)
 
 	return cmd
 }
@@ -110,6 +111,7 @@ func runExportParquet(logger *zap.Logger, inputPath, assembly, outputFile string
 
 	ann := annotate.NewAnnotator(cr.cache)
 	ann.SetCanonicalOnly(canonicalOnly)
+	ann.SetDistance(configuredDistance())
 	ann.SetLogger(logger)
 
 	// Auto-detect input format by extension

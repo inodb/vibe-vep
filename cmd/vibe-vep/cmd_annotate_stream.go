@@ -70,6 +70,7 @@ Supported output formats:
 	cmd.Flags().StringVar(&inputFormat, "input-format", "genome-nexus-genomic-location-jsonl", "Input format")
 	cmd.Flags().StringVar(&outputFormat, "output-format", "ensembl-vep-jsonl", "Output format: ensembl-vep-jsonl or vibe-vep-jsonl")
 	addCacheFlags(cmd)
+	addAnnotateFlags(cmd)
 
 	return cmd
 }
@@ -105,6 +106,7 @@ func runAnnotateStream(logger *zap.Logger, assembly, inputFmt, outputFmt string,
 	defer cr.closeSources()
 
 	ann := annotate.NewAnnotator(cr.cache)
+	ann.SetDistance(configuredDistance())
 	ann.SetLogger(logger)
 
 	writer := output.NewJSONLWriter(os.Stdout, outputFmt, assembly)

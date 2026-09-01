@@ -45,27 +45,37 @@ func BuildIntervalTree(transcripts []*Transcript) *IntervalTree {
 
 // FindOverlaps returns all transcripts whose [Start, End] range contains pos.
 func (t *IntervalTree) FindOverlaps(pos int64) []*Transcript {
+	return t.FindOverlapsWithinDistance(pos, 0)
+}
+
+// FindOverlapsWithinDistance returns all transcripts whose
+// [Start-distance, End+distance] range contains pos. Passing distance=0 is
+// equivalent to FindOverlaps. Mirrors Ensembl VEP's --distance flag, which
+// defaults to 5000 bp upstream/downstream padding.
+func (t *IntervalTree) FindOverlapsWithinDistance(pos, distance int64) []*Transcript {
 	if len(t.intervals) == 0 {
 		return nil
+	}
+	if distance < 0 {
+		distance = 0
 	}
 
 	var result []*Transcript
 
-	// Binary search: find rightmost interval with start <= pos.
-	// All candidates must have start <= pos, so we only need to scan
-	// from index 0 to that boundary.
+	// Binary search: find rightmost interval with start-distance <= pos.
+	// Candidates must satisfy start <= pos+distance.
 	hi := sort.Search(len(t.intervals), func(i int) bool {
-		return t.intervals[i].start > pos
+		return t.intervals[i].start > pos+distance
 	})
-	// hi is the first index with start > pos; candidates are [0, hi).
+	// hi is the first index with start > pos+distance; candidates are [0, hi).
 
 	for i := hi - 1; i >= 0; i-- {
 		// Prune: maxEnd[i] is the max end for intervals[i:].
-		// If maxEnd[i] < pos, no interval from 0..i can contain pos.
-		if t.maxEnd[i] < pos {
+		// If maxEnd[i]+distance < pos, no interval from 0..i can reach pos.
+		if t.maxEnd[i]+distance < pos {
 			break
 		}
-		if t.intervals[i].end >= pos {
+		if t.intervals[i].end+distance >= pos {
 			result = append(result, t.intervals[i].transcript)
 		}
 	}

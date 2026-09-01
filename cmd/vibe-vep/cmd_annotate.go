@@ -108,6 +108,7 @@ Transcript_ID, HGVSc, HGVSp, HGVSp_Short) are overwritten in-place.`,
 	cmd.Flags().BoolVar(&replace, "replace", false, "Overwrite core MAF columns in-place instead of appending vibe.* columns")
 	cmd.Flags().StringVar(&excludeColumns, "exclude-columns", "", "Comma-separated list of output columns to exclude (e.g. canonical_ensembl,all_effects)")
 	addCacheFlags(cmd)
+	addAnnotateFlags(cmd)
 
 	return cmd
 }
@@ -163,6 +164,7 @@ func newAnnotateVCFCmd(verbose *bool) *cobra.Command {
 	cmd.Flags().BoolVar(&pick, "pick", false, "One annotation per variant (best transcript)")
 	cmd.Flags().BoolVar(&mostSevere, "most-severe", false, "One annotation per variant (highest impact)")
 	addCacheFlags(cmd)
+	addAnnotateFlags(cmd)
 
 	return cmd
 }
@@ -210,6 +212,7 @@ Supported formats:
 	cmd.Flags().StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
 	cmd.Flags().StringVar(&specType, "type", "", "Force variant type: genomic, protein, hgvsc, or hgvsg (auto-detected if not specified)")
 	addCacheFlags(cmd)
+	addAnnotateFlags(cmd)
 
 	return cmd
 }
@@ -235,6 +238,7 @@ func runAnnotateMAF(logger *zap.Logger, inputPath, assembly, outputFile string, 
 
 	ann := annotate.NewAnnotator(cr.cache)
 	ann.SetCanonicalOnly(canonicalOnly)
+	ann.SetDistance(configuredDistance())
 	ann.SetLogger(logger)
 
 	var out *os.File
@@ -293,6 +297,7 @@ func runAnnotateVCF(logger *zap.Logger, inputPath, assembly, outputFile string, 
 
 	ann := annotate.NewAnnotator(cr.cache)
 	ann.SetCanonicalOnly(canonicalOnly)
+	ann.SetDistance(configuredDistance())
 	ann.SetLogger(logger)
 
 	var out *os.File
@@ -383,6 +388,7 @@ func runAnnotateVariant(logger *zap.Logger, specInput, assembly, specType string
 	defer cr.closeSources()
 
 	ann := annotate.NewAnnotator(cr.cache)
+	ann.SetDistance(configuredDistance())
 	ann.SetLogger(logger)
 
 	// Convert spec to genomic variant(s)
