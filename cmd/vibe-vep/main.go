@@ -159,6 +159,30 @@ func addCacheFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("clear-cache", false, "Clear and rebuild transcript and variant caches")
 }
 
+// addAnnotateFlags adds annotation-related flags that are shared across the
+// annotate subcommands (maf, vcf, variant, stream) and other commands that
+// invoke the annotator (serve, convert, export).
+func addAnnotateFlags(cmd *cobra.Command) {
+	cmd.Flags().Int64("distance", annotate.DefaultDistance,
+		"Upstream/downstream padding in bp for transcript lookup. Variants "+
+			"within this distance of a transcript body are annotated as "+
+			"upstream_gene_variant or downstream_gene_variant instead of "+
+			"intergenic. Matches Ensembl VEP's --distance flag.")
+}
+
+// configuredDistance returns the annotator distance from viper, clamping
+// negative values to 0.
+func configuredDistance() int64 {
+	if !viper.IsSet("distance") {
+		return annotate.DefaultDistance
+	}
+	d := viper.GetInt64("distance")
+	if d < 0 {
+		d = 0
+	}
+	return d
+}
+
 // cacheResult holds the loaded transcript cache and optional DuckDB variant store.
 type cacheResult struct {
 	cache   *cache.Cache

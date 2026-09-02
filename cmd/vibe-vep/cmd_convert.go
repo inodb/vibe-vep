@@ -68,6 +68,7 @@ func newVCF2MAFCmd(verbose *bool) *cobra.Command {
 	cmd.Flags().BoolVar(&canonicalOnly, "canonical", false, "Only report canonical transcript annotations")
 	cmd.Flags().BoolVar(&saveResults, "save-results", false, "Save annotation results to DuckDB for later lookup")
 	addCacheFlags(cmd)
+	addAnnotateFlags(cmd)
 
 	return cmd
 }
@@ -93,6 +94,7 @@ func runConvertVCF2MAF(logger *zap.Logger, inputPath, assembly, outputFile strin
 
 	ann := annotate.NewAnnotator(cr.cache)
 	ann.SetCanonicalOnly(canonicalOnly)
+	ann.SetDistance(configuredDistance())
 	ann.SetLogger(logger)
 
 	var out *os.File

@@ -13,29 +13,49 @@ import (
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
 
-// TranscriptLookup defines the interface for finding transcripts at a position.
+// DefaultDistance is the upstream/downstream padding (bp) applied to transcript
+// lookups when no explicit distance is configured. Matches Ensembl VEP's
+// --distance default so variants within 5 kb of a transcript body are emitted
+// as upstream_gene_variant / downstream_gene_variant instead of intergenic.
+const DefaultDistance int64 = 5000
+
+// TranscriptLookup defines the interface for finding transcripts near a variant.
+// Implementations must honour `distance` as an upstream/downstream padding.
 type TranscriptLookup interface {
-	FindTranscripts(chrom string, pos int64) []*cache.Transcript
+	FindTranscriptsInRange(chrom string, start, end, distance int64) []*cache.Transcript
 }
 
 // Annotator annotates variants with consequence predictions.
 type Annotator struct {
 	cache         TranscriptLookup
 	canonicalOnly bool
+	distance      int64
 	logger        *zap.Logger
 }
 
 // NewAnnotator creates a new annotator with the given cache.
 func NewAnnotator(c TranscriptLookup) *Annotator {
 	return &Annotator{
-		cache:  c,
-		logger: zap.NewNop(),
+		cache:    c,
+		distance: DefaultDistance,
+		logger:   zap.NewNop(),
 	}
 }
 
 // SetCanonicalOnly configures whether to only report canonical transcript annotations.
 func (a *Annotator) SetCanonicalOnly(canonical bool) {
 	a.canonicalOnly = canonical
+}
+
+// SetDistance sets the upstream/downstream padding (bp) applied to transcript
+// lookups. Variants within this distance of a transcript body are annotated as
+// upstream_gene_variant or downstream_gene_variant instead of intergenic.
+// Negative values are clamped to 0.
+func (a *Annotator) SetDistance(distance int64) {
+	if distance < 0 {
+		distance = 0
+	}
+	a.distance = distance
 }
 
 // SetLogger sets the logger for warning and info messages.
@@ -48,8 +68,10 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 	// Normalize chromosome
 	chrom := v.NormalizeChrom()
 
-	// Find overlapping transcripts
-	transcripts := a.cache.FindTranscripts(chrom, v.Pos)
+	// For multi-position variants (deletions, MNPs), query the full genomic range
+	// [v.Pos, varEnd] so transcripts within --distance of either endpoint are found.
+	varEnd := v.Pos + int64(len(v.Ref)) - 1
+	transcripts := a.cache.FindTranscriptsInRange(chrom, v.Pos, varEnd, a.distance)
 
 	if len(transcripts) == 0 {
 		// Intergenic variant

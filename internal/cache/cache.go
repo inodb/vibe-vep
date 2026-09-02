@@ -45,10 +45,23 @@ func (c *Cache) BuildIndex() {
 
 // FindTranscripts returns all transcripts that overlap a given genomic position.
 func (c *Cache) FindTranscripts(chrom string, pos int64) []*Transcript {
+	return c.FindTranscriptsWithinDistance(chrom, pos, 0)
+}
+
+// FindTranscriptsWithinDistance returns all transcripts whose body extended by
+// `distance` bp on either side contains pos. Passing distance=0 is equivalent
+// to FindTranscripts. Used to emit upstream_gene_variant / downstream_gene_variant
+// consequences for variants outside but near a transcript body, matching
+// Ensembl VEP's --distance behaviour (default 5000 bp).
+func (c *Cache) FindTranscriptsWithinDistance(chrom string, pos, distance int64) []*Transcript {
+	if distance < 0 {
+		distance = 0
+	}
+
 	// Use interval tree if built
 	if c.trees != nil {
 		if tree, ok := c.trees[chrom]; ok {
-			return tree.FindOverlaps(pos)
+			return tree.FindOverlapsWithinDistance(pos, distance)
 		}
 		return nil
 	}
@@ -61,7 +74,37 @@ func (c *Cache) FindTranscripts(chrom string, pos int64) []*Transcript {
 
 	var result []*Transcript
 	for _, t := range transcripts {
-		if t.Contains(pos) {
+		if pos >= t.Start-distance && pos <= t.End+distance {
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
+// FindTranscriptsInRange returns all transcripts whose body extended by distance
+// overlaps the genomic range [start, end]. Used for multi-position variants
+// (deletions, MNPs) so transcripts near either end of the variant are found.
+func (c *Cache) FindTranscriptsInRange(chrom string, start, end, distance int64) []*Transcript {
+	if distance < 0 {
+		distance = 0
+	}
+
+	if c.trees != nil {
+		if tree, ok := c.trees[chrom]; ok {
+			return tree.FindOverlapsInRange(start, end, distance)
+		}
+		return nil
+	}
+
+	// Fallback to linear scan
+	transcripts, ok := c.transcripts[chrom]
+	if !ok {
+		return nil
+	}
+
+	var result []*Transcript
+	for _, t := range transcripts {
+		if t.Start-distance <= end && t.End+distance >= start {
 			result = append(result, t)
 		}
 	}

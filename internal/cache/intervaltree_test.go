@@ -79,6 +79,45 @@ func TestIntervalTree_MaxEndPruning(t *testing.T) {
 	assert.Equal(t, "long", results[0].ID)
 }
 
+func TestIntervalTree_FindOverlapsWithinDistance(t *testing.T) {
+	transcripts := []*Transcript{
+		{ID: "A", Start: 1000, End: 2000},
+		{ID: "B", Start: 5000, End: 6000},
+	}
+	tree := BuildIntervalTree(transcripts)
+
+	// distance=0 behaves like FindOverlaps.
+	assert.Empty(t, tree.FindOverlapsWithinDistance(999, 0))
+	assert.Len(t, tree.FindOverlapsWithinDistance(1500, 0), 1)
+
+	// 5 bp upstream of A: within a 10 bp padding.
+	results := tree.FindOverlapsWithinDistance(995, 10)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "A", results[0].ID)
+
+	// 5 bp downstream of A: within a 10 bp padding.
+	results = tree.FindOverlapsWithinDistance(2005, 10)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "A", results[0].ID)
+
+	// Just outside the padding on both sides — no hits.
+	assert.Empty(t, tree.FindOverlapsWithinDistance(989, 10))
+	assert.Empty(t, tree.FindOverlapsWithinDistance(2011, 10))
+
+	// Large padding overlapping both transcripts from between them.
+	results = tree.FindOverlapsWithinDistance(3500, 2000)
+	ids := map[string]bool{}
+	for _, r := range results {
+		ids[r.ID] = true
+	}
+	assert.True(t, ids["A"], "A within 2 kb downstream padding")
+	assert.True(t, ids["B"], "B within 2 kb upstream padding")
+
+	// Negative distance is clamped to 0.
+	assert.Empty(t, tree.FindOverlapsWithinDistance(999, -5))
+	assert.Len(t, tree.FindOverlapsWithinDistance(1500, -100), 1)
+}
+
 func TestIntervalTree_MatchesLinearScan(t *testing.T) {
 	// Verify interval tree produces same results as linear scan
 	transcripts := []*Transcript{

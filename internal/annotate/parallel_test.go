@@ -13,7 +13,9 @@ import (
 // mockLookup returns no transcripts (intergenic) for all positions.
 type mockLookup struct{}
 
-func (m *mockLookup) FindTranscripts(string, int64) []*cache.Transcript { return nil }
+func (m *mockLookup) FindTranscriptsInRange(string, int64, int64, int64) []*cache.Transcript {
+	return nil
+}
 
 func makeItems(n int) <-chan WorkItem {
 	ch := make(chan WorkItem, n)
