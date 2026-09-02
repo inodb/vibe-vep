@@ -19,11 +19,10 @@ import (
 // as upstream_gene_variant / downstream_gene_variant instead of intergenic.
 const DefaultDistance int64 = 5000
 
-// TranscriptLookup defines the interface for finding transcripts at a position.
-// Implementations must honour `distance` as an upstream/downstream padding: a
-// transcript is returned when pos falls within [Start-distance, End+distance].
+// TranscriptLookup defines the interface for finding transcripts near a variant.
+// Implementations must honour `distance` as an upstream/downstream padding.
 type TranscriptLookup interface {
-	FindTranscriptsWithinDistance(chrom string, pos, distance int64) []*cache.Transcript
+	FindTranscriptsInRange(chrom string, start, end, distance int64) []*cache.Transcript
 }
 
 // Annotator annotates variants with consequence predictions.
@@ -69,9 +68,10 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 	// Normalize chromosome
 	chrom := v.NormalizeChrom()
 
-	// Find transcripts overlapping the variant, padded by --distance so that
-	// nearby (upstream/downstream) transcripts are also considered.
-	transcripts := a.cache.FindTranscriptsWithinDistance(chrom, v.Pos, a.distance)
+	// For multi-position variants (deletions, MNPs), query the full genomic range
+	// [v.Pos, varEnd] so transcripts within --distance of either endpoint are found.
+	varEnd := v.Pos + int64(len(v.Ref)) - 1
+	transcripts := a.cache.FindTranscriptsInRange(chrom, v.Pos, varEnd, a.distance)
 
 	if len(transcripts) == 0 {
 		// Intergenic variant

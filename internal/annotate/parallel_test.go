@@ -13,7 +13,7 @@ import (
 // mockLookup returns no transcripts (intergenic) for all positions.
 type mockLookup struct{}
 
-func (m *mockLookup) FindTranscriptsWithinDistance(string, int64, int64) []*cache.Transcript {
+func (m *mockLookup) FindTranscriptsInRange(string, int64, int64, int64) []*cache.Transcript {
 	return nil
 }
 

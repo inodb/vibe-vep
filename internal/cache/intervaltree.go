@@ -48,6 +48,39 @@ func (t *IntervalTree) FindOverlaps(pos int64) []*Transcript {
 	return t.FindOverlapsWithinDistance(pos, 0)
 }
 
+// FindOverlapsInRange returns all transcripts whose body extended by distance
+// overlaps the genomic range [start, end]: T.Start-distance <= end AND
+// T.End+distance >= start.
+func (t *IntervalTree) FindOverlapsInRange(start, end, distance int64) []*Transcript {
+	if start >= end {
+		return t.FindOverlapsWithinDistance(start, distance)
+	}
+	if len(t.intervals) == 0 {
+		return nil
+	}
+	if distance < 0 {
+		distance = 0
+	}
+
+	var result []*Transcript
+
+	// Binary search: first index with start > end+distance; candidates are [0, hi).
+	hi := sort.Search(len(t.intervals), func(i int) bool {
+		return t.intervals[i].start > end+distance
+	})
+
+	for i := hi - 1; i >= 0; i-- {
+		if t.maxEnd[i]+distance < start {
+			break
+		}
+		if t.intervals[i].end+distance >= start {
+			result = append(result, t.intervals[i].transcript)
+		}
+	}
+
+	return result
+}
+
 // FindOverlapsWithinDistance returns all transcripts whose
 // [Start-distance, End+distance] range contains pos. Passing distance=0 is
 // equivalent to FindOverlaps. Mirrors Ensembl VEP's --distance flag, which

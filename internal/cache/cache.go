@@ -81,6 +81,36 @@ func (c *Cache) FindTranscriptsWithinDistance(chrom string, pos, distance int64)
 	return result
 }
 
+// FindTranscriptsInRange returns all transcripts whose body extended by distance
+// overlaps the genomic range [start, end]. Used for multi-position variants
+// (deletions, MNPs) so transcripts near either end of the variant are found.
+func (c *Cache) FindTranscriptsInRange(chrom string, start, end, distance int64) []*Transcript {
+	if distance < 0 {
+		distance = 0
+	}
+
+	if c.trees != nil {
+		if tree, ok := c.trees[chrom]; ok {
+			return tree.FindOverlapsInRange(start, end, distance)
+		}
+		return nil
+	}
+
+	// Fallback to linear scan
+	transcripts, ok := c.transcripts[chrom]
+	if !ok {
+		return nil
+	}
+
+	var result []*Transcript
+	for _, t := range transcripts {
+		if t.Start-distance <= end && t.End+distance >= start {
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
 // GetTranscript returns a specific transcript by ID, or nil if not found.
 func (c *Cache) GetTranscript(id string) *Transcript {
 	for _, transcripts := range c.transcripts {
