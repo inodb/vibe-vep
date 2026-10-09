@@ -62,6 +62,16 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		if endPosStr == "" {
 			return ""
 		}
+		// An MNV whose alternate allele is the reverse complement of the
+		// reference is an inversion, and HGVS gives it its own operator:
+		// ATRX X:76938207 AA>TT is c.2540_2541inv, not c.2540_2541delinsAA.
+		// This holds on either strand, since reverse-complementing both
+		// alleles preserves the relation. It accounts for every one of the
+		// 161 inv calls in a VEP111 MSK-IMPACT MAF and nothing else: the
+		// other 7,263 same-length multi-base changes there are delins.
+		if isInversion(ref, alt) {
+			return prefix + startPosStr + "_" + endPosStr + "inv"
+		}
 		return prefix + startPosStr + "_" + endPosStr + "delins" + alt
 	}
 
@@ -258,6 +268,20 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 	afterStr := genomicToHGVScPos(insAfterPos, t)
 	beforeStr := genomicToHGVScPos(insBeforePos, t)
 	return prefix + afterStr + "_" + beforeStr + "ins" + insertedSeq
+}
+
+// isInversion reports whether alt is the reverse complement of ref, compared
+// in place rather than against an allocated reverse complement.
+func isInversion(ref, alt string) bool {
+	if len(ref) != len(alt) || len(ref) < 2 {
+		return false
+	}
+	for i := 0; i < len(ref); i++ {
+		if alt[i] != Complement(ref[len(ref)-1-i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // formatHGVScDeletion handles the deletion (and delins) path of FormatHGVSc.
