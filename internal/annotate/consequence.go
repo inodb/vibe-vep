@@ -313,10 +313,9 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 				result.HGVSp = FormatHGVSp(result)
 			}
 		}
-	} else if isSpliceRegion(v.Pos, t) || (len(v.Ref) == 0 && isSpliceRegion(v.Pos+1, t)) {
-		// Append splice_region_variant if near an exon boundary. A pure
-		// insertion is checked on both flanks, since at a junction only one of
-		// them is the exonic side.
+	} else if spanTouchesSpliceRegion(v, t) {
+		// Append splice_region_variant if any base the variant covers is near
+		// an exon boundary.
 		result.Consequence = appendSpliceRegion(result.Consequence)
 	}
 
@@ -1711,18 +1710,47 @@ func isSpliceRegion(pos int64, t *cache.Transcript) bool {
 			continue
 		}
 		exon := &t.Exons[i]
-		// Near exon Start boundary
-		if pos >= exon.Start && pos <= exon.Start+2 {
-			return true
+		// A splice region needs a splice site, so each boundary only counts
+		// when there is an intron on the far side of it. The outermost edges
+		// of the transcript have none: VEP reports no splice_region_variant
+		// for KMT2D c.2T>C, two bases into the first exon, nor anywhere in
+		// single-exon genes like H3C4.
+		if i > 0 {
+			// Near exon Start boundary
+			if pos >= exon.Start && pos <= exon.Start+2 {
+				return true
+			}
+			if pos >= exon.Start-8 && pos <= exon.Start-3 {
+				return true
+			}
 		}
-		if pos >= exon.Start-8 && pos <= exon.Start-3 {
-			return true
+		if i < len(t.Exons)-1 {
+			// Near exon End boundary
+			if pos >= exon.End-2 && pos <= exon.End {
+				return true
+			}
+			if pos >= exon.End+3 && pos <= exon.End+8 {
+				return true
+			}
 		}
-		// Near exon End boundary
-		if pos >= exon.End-2 && pos <= exon.End {
-			return true
-		}
-		if pos >= exon.End+3 && pos <= exon.End+8 {
+	}
+	return false
+}
+
+// spanTouchesSpliceRegion reports whether any base a variant covers lies in a
+// splice region.
+//
+// VEP decides this on the whole span, not the start: MDM2 c.880_918del is
+// written well inside the exon but its 39 deleted bases reach the boundary,
+// and VEP reports frameshift_variant,splice_region_variant where vibe-vep,
+// testing only v.Pos, reported the frameshift alone. A pure insertion covers
+// no base, so both of the positions it sits between are tested instead.
+func spanTouchesSpliceRegion(v *vcf.Variant, t *cache.Transcript) bool {
+	if len(v.Ref) == 0 {
+		return isSpliceRegion(v.Pos, t) || isSpliceRegion(v.Pos+1, t)
+	}
+	for pos := v.Pos; pos < v.Pos+int64(len(v.Ref)); pos++ {
+		if isSpliceRegion(pos, t) {
 			return true
 		}
 	}
