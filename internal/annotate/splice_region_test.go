@@ -87,3 +87,41 @@ func TestSpliceRegionUsesTheWholeSpan(t *testing.T) {
 		t.Error("a deletion inside the exon should not touch the splice region")
 	}
 }
+
+// Exon 1 ends at 1010 (CDS 12 is 1011), so the donor's +1 and +2 are 1012 and
+// 1013; the acceptor's -1 and -2 before exon 2 are 1099 and 1098.
+func TestInsertionSpliceTerms(t *testing.T) {
+	tr := threeExonTranscript()
+	cases := []struct {
+		name string
+		pos  int64
+		want string
+	}{
+		// Between +1 and +2: the insertion splits the donor GT.
+		{"splits the donor", 1012, ConsequenceSpliceDonor},
+		// Between +2 and +3: the GT survives, so this is only a region.
+		{"past the donor", 1013, ConsequenceSpliceRegion + "," + ConsequenceIntronVariant},
+		// Between -2 and -1: splits the acceptor AG.
+		{"splits the acceptor", 1098, ConsequenceSpliceAcceptor},
+		// Between -3 and -2: the AG survives.
+		{"before the acceptor", 1097, ConsequenceSpliceRegion + "," +
+			ConsequencePolypyrimidineTract + "," + ConsequenceIntronVariant},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			v := &vcf.Variant{Chrom: "1", Pos: c.pos, Ref: "", Alt: "T"}
+			terms, ok := insertionSpliceTerms(v, tr)
+			if !ok {
+				t.Fatalf("expected both flanks to be intronic at %d", c.pos)
+			}
+			if got := joinConsequenceTerms(terms); got != c.want {
+				t.Errorf("terms = %q, want %q", got, c.want)
+			}
+		})
+	}
+	// An insertion with an exonic flank is not this function's business.
+	v := &vcf.Variant{Chrom: "1", Pos: 1011, Ref: "", Alt: "T"}
+	if _, ok := insertionSpliceTerms(v, tr); ok {
+		t.Error("an insertion at the exon edge should be left to the exonic path")
+	}
+}

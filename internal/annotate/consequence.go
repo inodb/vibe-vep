@@ -104,7 +104,13 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 		// Collect the SO terms for every intronic position the variant covers.
 		// VEP distinguishes the donor 5th base, the donor region and the
 		// polypyrimidine tract, which a single splice_region_variant hides.
-		if joined := joinConsequenceTerms(spanSpliceTerms(v, t)); joined != "" {
+		terms := spanSpliceTerms(v, t)
+		if insTerms, ok := insertionSpliceTerms(v, t); ok {
+			// An insertion covers no base, so the span enumeration would
+			// describe whichever of its two flanks v.Pos names.
+			terms = insTerms
+		}
+		if joined := joinConsequenceTerms(terms); joined != "" {
 			result.Consequence = joined
 			result.Impact = GetImpact(firstTerm(joined))
 		} else {

@@ -276,3 +276,51 @@ func relabelInframeAsProteinAltering(consequence string) string {
 	}
 	return joinConsequenceTerms(terms)
 }
+
+// insertionSpliceTerms returns the SO terms for a pure insertion sitting
+// between two intronic positions, or false when either flank is exonic.
+//
+// An insertion alters no base, so it only breaks a splice site when it lands
+// strictly between the two essential ones. Between +1 and +2 it splits the
+// donor GT and VEP says splice_donor_variant; one base further along, between
+// +2 and +3, the GT is intact and VEP says splice_region_variant,intron_variant
+// - 26 times against 3 that still say donor. The same holds at the acceptor:
+// between -2 and -1 is splice_acceptor_variant, between -3 and -2 is the
+// region plus the polypyrimidine tract.
+//
+// The finer donor terms go with the site terms. VEP names no
+// splice_donor_region_variant or donor 5th base for an insertion, which is
+// what vibe-vep was reporting for the +2/+3 case.
+//
+// This is the principle already applied where a junction insertion is treated
+// as exonic: inserting between two bases leaves both of them where they are.
+func insertionSpliceTerms(v *vcf.Variant, t *cache.Transcript) ([]string, bool) {
+	if len(v.Ref) != 0 {
+		return nil, false
+	}
+	after, before := v.Pos, v.Pos+1
+	if !t.IsForwardStrand() {
+		after, before = v.Pos+1, v.Pos
+	}
+	offAfter, okA := intronOffset(after, t)
+	offBefore, okB := intronOffset(before, t)
+	if !okA || !okB {
+		return nil, false
+	}
+	if (offAfter == 1 && offBefore == 2) || (offAfter == -2 && offBefore == -1) {
+		return spliceTermsForOffset(offAfter), true
+	}
+	terms := []string{ConsequenceIntronVariant}
+	for _, off := range [2]int64{offAfter, offBefore} {
+		for _, term := range spliceTermsForOffset(off) {
+			switch term {
+			case ConsequenceSpliceDonor, ConsequenceSpliceAcceptor,
+				ConsequenceSpliceDonorRegion, ConsequenceSpliceDonor5thBase:
+				terms = append(terms, ConsequenceSpliceRegion)
+			default:
+				terms = append(terms, term)
+			}
+		}
+	}
+	return terms, true
+}
