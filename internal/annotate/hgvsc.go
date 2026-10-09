@@ -228,7 +228,8 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 	// above bails when the anchor is intronic, but the inserted base may
 	// still duplicate the exon boundary base.
 	// A pure insertion inside the intron may shift 3' into the exon.
-	if shifted, ok := insertionShiftIntronToExon(v, t, insertedSeq); ok {
+	if shifted, k, ok := insertionShiftIntronToExon(v, t, insertedSeq); ok {
+		result.HGVSOffset = k
 		return shifted
 	}
 
@@ -414,22 +415,22 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 // Positions are addressed on one axis where the exon's first coding base is E
 // and E-k is the kth intron base before it, so the walk does not care which
 // side of the junction it is on.
-func insertionShiftIntronToExon(v *vcf.Variant, t *cache.Transcript, insertedSeq string) (string, bool) {
+func insertionShiftIntronToExon(v *vcf.Variant, t *cache.Transcript, insertedSeq string) (string, int, bool) {
 	if insertedSeq == "" || len(t.CDSSequence) == 0 || !t.IsProteinCoding() {
-		return "", false
+		return "", 0, false
 	}
 	insAfter := v.Pos // base the insertion follows, in coding order
 	if t.IsReverseStrand() {
 		insAfter = v.Pos + 1
 	}
 	if GenomicToCDS(insAfter, t) >= 1 {
-		return "", false // already exonic; the CDS path handles it
+		return "", 0, false // already exonic; the CDS path handles it
 	}
 
 	// The exon the insertion is moving toward.
 	idx := t.FindNearestExonIdx(insAfter)
 	if idx < 0 {
-		return "", false
+		return "", 0, false
 	}
 	var exon *cache.Exon
 	for _, i := range [3]int{idx - 1, idx, idx + 1} {
@@ -450,7 +451,7 @@ func insertionShiftIntronToExon(v *vcf.Variant, t *cache.Transcript, insertedSeq
 		}
 	}
 	if exon == nil || exon.IntronBeforeLen == 0 {
-		return "", false
+		return "", 0, false
 	}
 	firstCoding := exon.Start
 	if t.IsReverseStrand() {
@@ -458,7 +459,7 @@ func insertionShiftIntronToExon(v *vcf.Variant, t *cache.Transcript, insertedSeq
 	}
 	eCDS := GenomicToCDS(firstCoding, t)
 	if eCDS < 1 {
-		return "", false
+		return "", 0, false
 	}
 	// How far before the exon the insertion currently sits.
 	gap := firstCoding - insAfter
@@ -466,7 +467,7 @@ func insertionShiftIntronToExon(v *vcf.Variant, t *cache.Transcript, insertedSeq
 		gap = insAfter - firstCoding
 	}
 	if gap < 1 || gap > int64(exon.IntronBeforeLen) {
-		return "", false
+		return "", 0, false
 	}
 
 	f := int64(exon.IntronBeforeLen)
@@ -492,7 +493,7 @@ func insertionShiftIntronToExon(v *vcf.Variant, t *cache.Transcript, insertedSeq
 		k++
 	}
 	if k == 0 || a+int64(k) < eCDS {
-		return "", false // never made it into the exon
+		return "", 0, false // never made it into the exon
 	}
 	end := a + int64(k)
 
@@ -508,11 +509,11 @@ func insertionShiftIntronToExon(v *vcf.Variant, t *cache.Transcript, insertedSeq
 	}
 	if match && start >= eCDS {
 		if L == 1 {
-			return "c." + strconv.FormatInt(end, 10) + "dup", true
+			return "c." + strconv.FormatInt(end, 10) + "dup", k, true
 		}
-		return "c." + strconv.FormatInt(start, 10) + "_" + strconv.FormatInt(end, 10) + "dup", true
+		return "c." + strconv.FormatInt(start, 10) + "_" + strconv.FormatInt(end, 10) + "dup", k, true
 	}
-	return "c." + strconv.FormatInt(end, 10) + "_" + strconv.FormatInt(end+1, 10) + "ins" + rotated, true
+	return "c." + strconv.FormatInt(end, 10) + "_" + strconv.FormatInt(end+1, 10) + "ins" + rotated, k, true
 }
 
 // insertionShiftIntoIntron continues an insertion's 3' shift past the end of an
