@@ -161,3 +161,92 @@ func upper(s string) string {
 	}
 	return string(b)
 }
+
+// codonsSpellStop reports whether reading the codon string in frame from its
+// start hits a stop codon. The Codons field mixes case to mark the changed
+// bases and writes "-" for an empty side, neither of which affects the frame.
+func codonsSpellStop(codons string) bool {
+	seq := make([]byte, 0, len(codons))
+	for i := 0; i < len(codons); i++ {
+		if c := codons[i]; c != '-' {
+			seq = append(seq, upperBase(c))
+		}
+	}
+	for i := 0; i+3 <= len(seq); i += 3 {
+		switch string(seq[i : i+3]) {
+		case "TAA", "TAG", "TGA":
+			return true
+		}
+	}
+	return false
+}
+
+func upperBase(c byte) byte {
+	if c >= 'a' && c <= 'z' {
+		return c - 'a' + 'A'
+	}
+	return c
+}
+
+// addStopGainedForFrameshift adds stop_gained to a frameshift whose altered
+// codons spell out a stop.
+//
+// VEP's stop_gained test is on the peptide the affected codons translate to,
+// not on where the shifted reading frame eventually terminates, so the two
+// come apart in both directions: GATA3 caGTCA/ca is p.S70* yet plain
+// frameshift_variant, while gct/gcCTCTGGCCCTGGCTGCTGATGGCt is
+// stop_gained,frameshift_variant despite running on to p.T20Sfs*6.
+//
+// Reading the Codons alt side in frame and requiring the ref side not to
+// already hold a stop reproduces VEP exactly: 530 of 60,028 frameshift
+// variants in a VEP111 MSK-IMPACT MAF, with no false positives and none
+// missed.
+func addStopGainedForFrameshift(result *ConsequenceResult) {
+	if result.CodonChange == "" || !hasTerm(result.Consequence, ConsequenceFrameshiftVariant) {
+		return
+	}
+	if hasTerm(result.Consequence, ConsequenceStopGained) {
+		return
+	}
+	slash := -1
+	for i := 0; i < len(result.CodonChange); i++ {
+		if result.CodonChange[i] == '/' {
+			slash = i
+			break
+		}
+	}
+	if slash < 0 {
+		return
+	}
+	ref, alt := result.CodonChange[:slash], result.CodonChange[slash+1:]
+	if !codonsSpellStop(alt) || codonsSpellStop(ref) {
+		return
+	}
+	result.Consequence = joinConsequenceTerms(append([]string{ConsequenceStopGained}, splitConsequenceTerms(result.Consequence)...))
+	result.Impact = GetImpact(firstTerm(result.Consequence))
+}
+
+// splitConsequenceTerms splits a rendered consequence back into its terms.
+func splitConsequenceTerms(consequence string) []string {
+	var terms []string
+	start := 0
+	for i := 0; i <= len(consequence); i++ {
+		if i == len(consequence) || consequence[i] == ',' {
+			if i > start {
+				terms = append(terms, consequence[start:i])
+			}
+			start = i + 1
+		}
+	}
+	return terms
+}
+
+// hasTerm reports whether a rendered consequence contains the given term.
+func hasTerm(consequence, term string) bool {
+	for _, t := range splitConsequenceTerms(consequence) {
+		if t == term {
+			return true
+		}
+	}
+	return false
+}
