@@ -260,9 +260,12 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 	for sharedLen < refLen && sharedLen < altLen && v.Ref[sharedLen] == v.Alt[sharedLen] {
 		sharedLen++
 	}
-	if sharedLen == 0 {
-		sharedLen = 1
-	}
+	// A VCF-style deletion carries an anchor base the ref and alt share, which
+	// the loop above finds. When they share nothing the variant replaces every
+	// base it covers, so clipping one anyway would drop the inserted allele and
+	// turn a delins into a plain deletion: KIT ref=AGTGGAA alt=C came out as
+	// c.1669_1674del where VEP has c.1667_1673delinsC. A pure MAF deletion has
+	// no alt at all and is unaffected either way.
 	if sharedLen > altLen {
 		sharedLen = altLen
 	}
