@@ -259,6 +259,12 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 		return "c." + strconv.FormatInt(sjDup.cdsStart, 10) + "_" + strconv.FormatInt(sjDup.cdsEnd, 10) + "dup"
 	}
 
+	// Both flanks intronic: shift and test for a duplication against the
+	// cached intron flank, which the CDS-based checks above cannot see.
+	if dupStr, ok := intronicInsertionDup(v, t, insertedSeq, result); ok {
+		return dupStr
+	}
+
 	insAfterPos := v.Pos
 	insBeforePos := v.Pos + 1
 	if t.IsReverseStrand() {
