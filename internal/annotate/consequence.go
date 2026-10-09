@@ -77,8 +77,12 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 		return result
 	}
 
+	// VEP names the exons a variant's genomic span overlaps, whether or not it
+	// starts in one, so this is derived from the span rather than from the
+	// exon lookup below.
+	result.ExonNumber = spannedExonNumber(v, t)
+
 	// Check if in exon
-	junctionInsertion := false
 	exon := t.FindExon(v.Pos)
 	if exon == nil && len(v.Ref) == 0 {
 		// A pure insertion sits BETWEEN two bases and v.Pos names only one of
@@ -92,7 +96,6 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 		// does break the site, so this applies to insertions only.
 		if other := t.FindExon(v.Pos + 1); other != nil {
 			exon = other
-			junctionInsertion = true
 		}
 	}
 	if exon == nil {
@@ -140,14 +143,6 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 			}
 		}
 		return result
-	}
-
-	// Set exon number. A junction insertion spans the exon/intron boundary
-	// rather than sitting inside the exon, and VEP leaves Exon_Number empty for
-	// those, so do not attribute it to the exon we borrowed for the coding
-	// coordinates.
-	if !junctionInsertion {
-		result.ExonNumber = formatExonNumber(exon.Number, len(t.Exons))
 	}
 
 	// Check if transcript is protein coding
@@ -1560,6 +1555,61 @@ func spliceSiteType(pos int64, t *cache.Transcript) string {
 }
 
 // indelSpliceSiteType checks if an indel's span overlaps a splice site.
+// spannedExonNumber renders the Exon_Number VEP reports: the exons a variant's
+// genomic span overlaps, as a range when it covers more than one.
+//
+// The span decides it, not the start position. On a reverse-strand transcript
+// the leftmost genomic base of TP53 c.541_559+2del is the intronic one, so a
+// start-position lookup finds no exon at all and leaves the field empty where
+// VEP writes 5/11. A deletion running from one exon through an intron into the
+// next is reported as a range: KMT2D c.5964_6183+90del is 28-29/54.
+//
+// A junction insertion still comes out empty, which is what VEP does, because
+// a pure insertion spans no genomic base and v.Pos is the intronic flank.
+func spannedExonNumber(v *vcf.Variant, t *cache.Transcript) string {
+	spanEnd := v.Pos + int64(len(v.Ref)) - 1
+	if spanEnd < v.Pos {
+		spanEnd = v.Pos
+	}
+	first, last := 0, 0
+	for i := range t.Exons {
+		e := &t.Exons[i]
+		if e.End < v.Pos || e.Start > spanEnd {
+			continue
+		}
+		// Exons are numbered in transcript order, so on a reverse-strand
+		// transcript the lower number is the rightmost genomic one.
+		if first == 0 || e.Number < first {
+			first = e.Number
+		}
+		if e.Number > last {
+			last = e.Number
+		}
+	}
+	switch {
+	case first == 0:
+		return ""
+	case first == last:
+		return formatExonNumber(first, len(t.Exons))
+	default:
+		return formatExonRange(first, last, len(t.Exons))
+	}
+}
+
+// formatExonRange builds the "N-K/M" string VEP uses for a span covering
+// several exons.
+func formatExonRange(first, last, total int) string {
+	var buf [32]byte
+	n := putInt64(buf[:], int64(first))
+	buf[n] = '-'
+	n++
+	n += putInt64(buf[n:], int64(last))
+	buf[n] = '/'
+	n++
+	n += putInt64(buf[n:], int64(total))
+	return string(buf[:n])
+}
+
 // formatExonNumber builds "N/M" string using a stack-allocated buffer.
 func formatExonNumber(num, total int) string {
 	var buf [16]byte
