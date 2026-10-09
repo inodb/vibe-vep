@@ -150,6 +150,31 @@ func spanSpliceTerms(v *vcf.Variant, t *cache.Transcript) []string {
 	return terms
 }
 
+// exonicTerms are the SO terms that say a variant alters transcribed exonic
+// sequence. VEP suppresses splice_polypyrimidine_tract_variant whenever one of
+// these is present: of the 504 variants carrying the polypyrimidine term in a
+// VEP111 MSK-IMPACT MAF, every one is intronic-only. A deletion running from
+// the tract into the exon is reported as
+// splice_acceptor_variant,coding_sequence_variant,intron_variant, dropping the
+// tract term that the same span would earn on its own.
+var exonicTerms = map[string]bool{
+	ConsequenceCodingSequenceVariant: true,
+	ConsequenceFrameshiftVariant:     true,
+	ConsequenceInframeInsertion:      true,
+	ConsequenceInframeDeletion:       true,
+	ConsequenceMissenseVariant:       true,
+	ConsequenceSynonymousVariant:     true,
+	ConsequenceProteinAltering:       true,
+	ConsequenceStopGained:            true,
+	ConsequenceStopLost:              true,
+	ConsequenceStopRetained:          true,
+	ConsequenceStartLost:             true,
+	ConsequenceStartRetained:         true,
+	Consequence5PrimeUTR:             true,
+	Consequence3PrimeUTR:             true,
+	ConsequenceNonCodingExon:         true,
+}
+
 // joinConsequenceTerms renders a term set in Ensembl severity order, dropping
 // duplicates. splice_region_variant is suppressed when a splice donor or
 // acceptor term is present, which is what VEP does.
@@ -158,6 +183,7 @@ func joinConsequenceTerms(terms []string) string {
 	uniq := make([]string, 0, len(terms))
 	hasSite := false
 	has5thBase := false
+	hasExonic := false
 	for _, t := range terms {
 		if t == "" || seen[t] {
 			continue
@@ -167,6 +193,9 @@ func joinConsequenceTerms(terms []string) string {
 			hasSite = true
 		case ConsequenceSpliceDonor5thBase:
 			has5thBase = true
+		}
+		if exonicTerms[t] {
+			hasExonic = true
 		}
 		seen[t] = true
 		uniq = append(uniq, t)
@@ -181,6 +210,13 @@ func joinConsequenceTerms(terms []string) string {
 			continue
 		}
 		if has5thBase && t == ConsequenceSpliceDonorRegion {
+			continue
+		}
+		// The polypyrimidine tract is only named for variants that stay
+		// inside the intron; reaching the exon replaces it with the exonic
+		// term. splice_donor_region_variant and the donor 5th base carry no
+		// such rule and do co-occur with coding_sequence_variant.
+		if hasExonic && t == ConsequencePolypyrimidineTract {
 			continue
 		}
 		out = append(out, t)
