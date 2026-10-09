@@ -46,7 +46,7 @@ type ConsequenceResult struct {
 	// own placeholder from the protein position.
 	SuppressHGVSp bool
 	ProteinStart  int64
-	ProteinEnd   int64
+	ProteinEnd    int64
 	// HGVSOffset is how far the variant was 3'-shifted to reach its HGVS
 	// representation, in bases. VEP reports this as hgvs_offset and omits it
 	// when zero; genome-nexus surfaces it as the MAF HGVS_Offset column.
@@ -101,19 +101,7 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 		// Collect the SO terms for every intronic position the variant covers.
 		// VEP distinguishes the donor 5th base, the donor region and the
 		// polypyrimidine tract, which a single splice_region_variant hides.
-		var terms []string
-		spanEnd := v.Pos + int64(len(v.Ref)) - 1
-		if spanEnd < v.Pos {
-			spanEnd = v.Pos
-		}
-		for pos := v.Pos; pos <= spanEnd; pos++ {
-			if off, ok := intronOffset(pos, t); ok {
-				terms = append(terms, spliceTermsForOffset(off)...)
-			} else {
-				terms = append(terms, ConsequenceCodingSequenceVariant)
-			}
-		}
-		if joined := joinConsequenceTerms(terms); joined != "" {
+		if joined := joinConsequenceTerms(spanSpliceTerms(v, t)); joined != "" {
 			result.Consequence = joined
 			result.Impact = GetImpact(firstTerm(joined))
 		} else {
@@ -316,7 +304,12 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 	// consequence, plus coding_sequence_variant because it also alters coding
 	// sequence: VEP gives "splice_acceptor_variant,coding_sequence_variant".
 	if spliceSite := indelSpliceSiteType(v, t); spliceSite != "" {
-		result.Consequence = joinConsequenceTerms([]string{spliceSite, ConsequenceCodingSequenceVariant})
+		// Name every region the variant reaches, not only the site it breaks:
+		// a deletion running off the end of an exon is also an intron_variant,
+		// and may cover the donor 5th base. spliceSite itself is kept because
+		// it decides the impact and the two overlap-tests can disagree at the
+		// very edge of the span.
+		result.Consequence = joinConsequenceTerms(append(spanSpliceTerms(v, t), spliceSite, ConsequenceCodingSequenceVariant))
 		result.Impact = GetImpact(spliceSite)
 		if t.IsProteinCoding() {
 			if pos := nearestSpliceBoundaryProteinPos(v.Pos, t); pos > 0 {

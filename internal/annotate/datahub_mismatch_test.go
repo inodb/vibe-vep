@@ -382,7 +382,15 @@ func TestDatahub_DeletionSpanningSpliceDonor(t *testing.T) {
 	v := &vcf.Variant{Chrom: "1", Pos: 1008, Ref: "GAAAAA", Alt: "G"}
 	result := PredictConsequence(v, tr)
 
-	want := ConsequenceSpliceDonor + "," + ConsequenceCodingSequenceVariant
+	// The deleted bases run to +3, so the span also covers the donor region
+	// and intronic sequence, and VEP names each region it touches. Grouping
+	// the VEP111 MSK-IMPACT MAF's exon-spanning donor deletions by how far
+	// into the intron they reach: those ending at +3/+4 are reported as
+	// splice_donor_variant,splice_donor_region_variant,coding_sequence_variant,
+	// intron_variant 51 times, and those reaching +5 or beyond swap
+	// donor_region for splice_donor_5th_base_variant.
+	want := ConsequenceSpliceDonor + "," + ConsequenceSpliceDonorRegion + "," +
+		ConsequenceCodingSequenceVariant + "," + ConsequenceIntronVariant
 	if result.Consequence != want {
 		t.Errorf("deletion spanning splice donor should be %q, got %q", want, result.Consequence)
 	}

@@ -1,6 +1,9 @@
 package annotate
 
-import "github.com/inodb/vibe-vep/internal/cache"
+import (
+	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/vcf"
+)
 
 // Additional SO terms VEP reports for positions inside an intron near a splice
 // site. vibe-vep previously collapsed all of these into splice_region_variant
@@ -121,6 +124,30 @@ func spliceTermsForOffset(offset int64) []string {
 	default:
 		return []string{ConsequenceIntronVariant}
 	}
+}
+
+// spanSpliceTerms enumerates the SO terms for every genomic position a variant
+// covers: intronic positions through spliceTermsForOffset, exonic ones as
+// coding_sequence_variant.
+//
+// A deletion reaching from an exon into an intron earns the terms of both
+// sides. VEP reports SMARCA4 c.4860_4864+34del as splice_donor_variant,
+// splice_donor_5th_base_variant,coding_sequence_variant,intron_variant - one
+// term per region the deletion touches, not just the site it breaks.
+func spanSpliceTerms(v *vcf.Variant, t *cache.Transcript) []string {
+	spanEnd := v.Pos + int64(len(v.Ref)) - 1
+	if spanEnd < v.Pos {
+		spanEnd = v.Pos
+	}
+	var terms []string
+	for pos := v.Pos; pos <= spanEnd; pos++ {
+		if off, ok := intronOffset(pos, t); ok {
+			terms = append(terms, spliceTermsForOffset(off)...)
+		} else {
+			terms = append(terms, ConsequenceCodingSequenceVariant)
+		}
+	}
+	return terms
 }
 
 // joinConsequenceTerms renders a term set in Ensembl severity order, dropping
