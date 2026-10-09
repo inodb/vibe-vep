@@ -115,3 +115,53 @@ func intronicInsertionDup(v *vcf.Variant, t *cache.Transcript, insertedSeq strin
 	}
 	return "c." + startStr + "_" + endStr + "dup", true
 }
+
+// codingBaseAt returns the base at a genomic position in coding orientation,
+// from the CDS where the position is exonic and from the cached intron flanks
+// otherwise. It reports false wherever vibe-vep has no sequence - past the
+// flank, or in a UTR, which the UTR-specific shifts cover.
+func codingBaseAt(pos int64, t *cache.Transcript) (byte, bool) {
+	if cds := GenomicToCDS(pos, t); cds >= 1 && int(cds) <= len(t.CDSSequence) {
+		return t.CDSSequence[cds-1], true
+	}
+	return intronFlankBaseAt(pos, t)
+}
+
+// genomicDeletionShift returns how far a deletion 3'-shifts, counted in bases
+// along the transcript, working directly on genomic positions.
+//
+// A deletion may move one base 3' whenever its first deleted base equals the
+// base just past its end, which is one rule whether those two bases sit in an
+// exon, in an intron, or one of each. The shifts this backs up - the donor
+// flank, the acceptor flank, the 5'UTR - each describe one such arrangement,
+// and a deletion in none of those arrangements was simply not shifted: of the
+// 874 rows where vibe-vep and VEP disagree on a deletion's HGVSc, 790 have
+// vibe-vep reporting no shift at all against VEP's 1 to 7 bases.
+//
+// It stops wherever codingBaseAt runs out of sequence, so a deletion starting
+// deeper in an intron than the 100bp flank reaches still goes unshifted.
+func genomicDeletionShift(delStart, delEnd int64, t *cache.Transcript) int {
+	if delEnd < delStart {
+		return 0
+	}
+	// head is the 5'-most deleted base in transcript order, tail the 3'-most.
+	head, tail, step := delStart, delEnd, int64(1)
+	if t.IsReverseStrand() {
+		head, tail, step = delEnd, delStart, -1
+	}
+	maxShift := len(t.CDSSequence) + 2*cache.IntronFlankBases
+	shift := 0
+	for shift < maxShift {
+		hb, ok := codingBaseAt(head, t)
+		if !ok {
+			break
+		}
+		nb, ok := codingBaseAt(tail+step, t)
+		if !ok || hb != nb {
+			break
+		}
+		head, tail = head+step, tail+step
+		shift++
+	}
+	return shift
+}

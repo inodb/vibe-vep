@@ -420,6 +420,12 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 			// Or the deletion starts upstream of the start codon.
 			k = utr5DeletionShift(v, t)
 		}
+		if k == 0 {
+			// None of those arrangements: shift it on genomic positions,
+			// which covers the rest without caring where the two bases
+			// being compared happen to sit.
+			k = genomicDeletionShift(delStartGenomic, delEndGenomic, t)
+		}
 		if k > 0 {
 			d := int64(k)
 			if t.IsReverseStrand() {
