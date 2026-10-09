@@ -114,16 +114,25 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 			cdsIdx = 0
 		}
 
+		// Codons are reported at the UNSHIFTED position, with the inserted
+		// bases in the order the variant gives them. VEP writes the HGVS at
+		// the 3'-shifted position but expands codons around where the change
+		// actually sits: SMARCA2 c.705_707dup is -/CAG, the allele as it
+		// appears in the MAF, not the -/GCA the same bases become once they
+		// have been walked 41 bases down the repeat.
+		//
+		// This runs before the shift because shiftInsertionBuf rotates seq in
+		// place. Unshifting the anchor afterwards is not enough on its own -
+		// that was the bug, and it left the position right but the bases
+		// rotated. The anchor here is the same value that subtracting the
+		// offset used to produce.
+		result.CodonChange = formatCodonChangeCDS(t.CDSSequence,
+			int64(cdsIdx)+2, int64(cdsIdx)+1, string(seq))
+
 		// Shift insertion in place (modifies seq), stops at exon boundary
 		maxIdx := cdsExonEndIdx(cdsIdx, t)
 		shiftedIdx := shiftInsertionBuf(seq, cdsIdx, t.CDSSequence, maxIdx)
 		result.HGVSOffset = shiftedIdx - cdsIdx
-		// Codons are reported at the UNSHIFTED position. VEP writes the HGVS at
-		// the 3'-shifted position but expands codons around where the change
-		// actually sits, so subtract the shift back out.
-		unshiftedAnchor := int64(shiftedIdx+1) - int64(result.HGVSOffset)
-		result.CodonChange = formatCodonChangeCDS(t.CDSSequence,
-			unshiftedAnchor+1, unshiftedAnchor, string(seq))
 		seqLen := len(seq)
 
 		// The shift stops at the exon edge; HGVS does not (see
