@@ -315,3 +315,29 @@ func relabelInsertionSplittingACodon(result *ConsequenceResult) {
 	result.Consequence = relabelInframeAsProteinAltering(result.Consequence)
 	result.Impact = GetImpact(firstTerm(result.Consequence))
 }
+
+// clearCodonsForSpliceSite drops the Codons string for a variant that destroys
+// a splice site.
+//
+// Once the donor or acceptor is gone the transcript's reading frame is no
+// longer something the annotation predicts, and VEP reports no codons for it:
+// of the 16,264 variants carrying splice_donor_variant or
+// splice_acceptor_variant without stop_lost in a VEP111 MSK-IMPACT MAF, 16,262
+// have an empty Codons field.
+//
+// A variant that also loses the stop codon keeps its codons - 61 of 63 - and
+// those are deletions taking a whole terminal exon, where the junction still
+// spells something readable.
+func clearCodonsForSpliceSite(result *ConsequenceResult) {
+	if result.CodonChange == "" {
+		return
+	}
+	if !hasTerm(result.Consequence, ConsequenceSpliceDonor) &&
+		!hasTerm(result.Consequence, ConsequenceSpliceAcceptor) {
+		return
+	}
+	if hasTerm(result.Consequence, ConsequenceStopLost) {
+		return
+	}
+	result.CodonChange = ""
+}

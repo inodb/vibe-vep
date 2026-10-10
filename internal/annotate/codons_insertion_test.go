@@ -66,3 +66,29 @@ func TestRelabelInsertionSplittingACodon(t *testing.T) {
 		})
 	}
 }
+
+func TestClearCodonsForSpliceSite(t *testing.T) {
+	tests := []struct {
+		name        string
+		consequence string
+		want        string
+	}{
+		{"donor destroyed", ConsequenceSpliceDonor + "," + ConsequenceCodingSequenceVariant, ""},
+		{"acceptor destroyed", ConsequenceSpliceAcceptor + "," + ConsequenceIntronVariant, ""},
+		// The stop codon goes with it, and VEP keeps the codons then.
+		{"stop lost as well", ConsequenceSpliceAcceptor + "," + ConsequenceSpliceDonor + "," +
+			ConsequenceStopLost, "gGa/ga"},
+		// A splice region is not a splice site.
+		{"only a splice region", ConsequenceFrameshiftVariant + "," + ConsequenceSpliceRegion, "gGa/ga"},
+		{"no splice term", ConsequenceMissenseVariant, "gGa/ga"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &ConsequenceResult{Consequence: tt.consequence, CodonChange: "gGa/ga"}
+			clearCodonsForSpliceSite(r)
+			if r.CodonChange != tt.want {
+				t.Errorf("Codons = %q, want %q", r.CodonChange, tt.want)
+			}
+		})
+	}
+}
