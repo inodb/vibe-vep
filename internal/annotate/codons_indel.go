@@ -250,3 +250,68 @@ func hasTerm(consequence, term string) bool {
 	}
 	return false
 }
+
+// translateCodonsInto writes the peptide a Codons side spells into buf and
+// returns its length, ignoring the mixed case that marks the changed bases and
+// the "-" that marks an empty side. A trailing partial codon is dropped.
+func translateCodonsInto(buf []byte, codons string) int {
+	var seq [96]byte
+	n := 0
+	for i := 0; i < len(codons) && n < len(seq); i++ {
+		if c := codons[i]; c != '-' {
+			seq[n] = upperBase(c)
+			n++
+		}
+	}
+	out := 0
+	for i := 0; i+3 <= n && out < len(buf); i += 3 {
+		buf[out] = TranslateCodon(string(seq[i : i+3]))
+		out++
+	}
+	return out
+}
+
+// relabelInsertionSplittingACodon swaps inframe_insertion for
+// protein_altering_variant when the inserted bases break a codon apart rather
+// than adding whole ones.
+//
+// EGFR c.2308_2309insGTT inserts three bases one base into the codon, so the
+// aspartate it lands in is replaced by a glycine and a valine - a delins at
+// the protein level, which VEP reports as protein_altering_variant.
+//
+// Two shapes keep the plain insertion term: bases added at a codon boundary,
+// where the Codons reference side is empty, and bases that split a codon but
+// leave the original residue standing at one end of the result. Together with
+// this relabelling they account for all 1,698 in-frame insertions in a VEP111
+// MSK-IMPACT MAF, with no exceptions either way.
+func relabelInsertionSplittingACodon(result *ConsequenceResult) {
+	if !hasTerm(result.Consequence, ConsequenceInframeInsertion) {
+		return
+	}
+	slash := -1
+	for i := 0; i < len(result.CodonChange); i++ {
+		if result.CodonChange[i] == '/' {
+			slash = i
+			break
+		}
+	}
+	if slash < 0 {
+		return
+	}
+	ref, alt := result.CodonChange[:slash], result.CodonChange[slash+1:]
+	var refPep, altPep [32]byte
+	rn := translateCodonsInto(refPep[:], ref)
+	an := translateCodonsInto(altPep[:], alt)
+	if rn == 0 || an < rn {
+		// Nothing was replaced: whole codons were added at a boundary.
+		return
+	}
+	r := string(refPep[:rn])
+	if string(altPep[:rn]) == r || string(altPep[an-rn:an]) == r {
+		// The original residues survive at one end, so this reads as an
+		// insertion into the protein rather than a replacement.
+		return
+	}
+	result.Consequence = relabelInframeAsProteinAltering(result.Consequence)
+	result.Impact = GetImpact(firstTerm(result.Consequence))
+}

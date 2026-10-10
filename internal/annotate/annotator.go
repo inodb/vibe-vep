@@ -100,8 +100,9 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 		if result.SuppressHGVSp {
 			result.HGVSp = ""
 		}
-		// Needs the Codons string, which FormatHGVSc fills in.
+		// Need the Codons string, which FormatHGVSc fills in.
 		addStopGainedForFrameshift(result)
+		relabelInsertionSplittingACodon(result)
 
 		// Append biotype-specific modifier terms per VEP convention
 		consequence := result.Consequence
