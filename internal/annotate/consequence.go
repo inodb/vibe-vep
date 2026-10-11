@@ -1771,11 +1771,16 @@ func isSpliceRegion(pos int64, t *cache.Transcript) bool {
 // VEP decides this on the whole span, not the start: MDM2 c.880_918del is
 // written well inside the exon but its 39 deleted bases reach the boundary,
 // and VEP reports frameshift_variant,splice_region_variant where vibe-vep,
-// testing only v.Pos, reported the frameshift alone. A pure insertion covers
-// no base, so both of the positions it sits between are tested instead.
+// testing only v.Pos, reported the frameshift alone.
+//
+// A pure insertion covers no base, and VEP gives it a zero-length feature
+// whose start is one past its end. Overlapping a region then needs both of
+// those coordinates inside it, so an insertion between the third and fourth
+// base of an exon is not in the splice region while one between the second
+// and third is. Testing either flank on its own over-called it 237 times.
 func spanTouchesSpliceRegion(v *vcf.Variant, t *cache.Transcript) bool {
 	if len(v.Ref) == 0 {
-		return isSpliceRegion(v.Pos, t) || isSpliceRegion(v.Pos+1, t)
+		return isSpliceRegion(v.Pos, t) && isSpliceRegion(v.Pos+1, t)
 	}
 	for pos := v.Pos; pos < v.Pos+int64(len(v.Ref)); pos++ {
 		if isSpliceRegion(pos, t) {

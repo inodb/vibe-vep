@@ -86,6 +86,19 @@ func TestSpliceRegionUsesTheWholeSpan(t *testing.T) {
 	if spanTouchesSpliceRegion(v2, tr) {
 		t.Error("a deletion inside the exon should not touch the splice region")
 	}
+
+	// An insertion needs both of the bases it sits between to be in the
+	// region. Exon 2 runs 1100..1111, so its first three bases are the
+	// region: between 1101 and 1102 is inside it, between 1102 and 1103 is
+	// not.
+	ins := &vcf.Variant{Chrom: "1", Pos: 1101, Ref: "", Alt: "T"}
+	if !spanTouchesSpliceRegion(ins, tr) {
+		t.Error("an insertion between the second and third exon bases is in the splice region")
+	}
+	insOut := &vcf.Variant{Chrom: "1", Pos: 1102, Ref: "", Alt: "T"}
+	if spanTouchesSpliceRegion(insOut, tr) {
+		t.Error("an insertion between the third and fourth exon bases is past the splice region")
+	}
 }
 
 // Exon 1 ends at 1010 (CDS 12 is 1011), so the donor's +1 and +2 are 1012 and
