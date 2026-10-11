@@ -416,7 +416,15 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 	// A deletion running from an exon into the following intron can still be
 	// 3'-shifted, using the stored intron flank (see straddlingDeletionShift).
 	if len(extraAlt) == 0 {
-		k, _ := straddlingDeletionShift(v, t)
+		// The genomic shift applies the HGVS rule directly, reading each base
+		// through codingBaseAt, so it is asked first. The three below each
+		// describe one arrangement of exon and intron and are approximations
+		// of the same rule; they answer only where the genomic one has no
+		// sequence to compare and returns nothing.
+		k := genomicDeletionShift(delStartGenomic, delEndGenomic, t)
+		if k == 0 {
+			k, _ = straddlingDeletionShift(v, t)
+		}
 		if k == 0 {
 			// The donor flank did not reach; the next exon may be nearer.
 			k, _ = acceptorSideDeletionShift(v, t)
@@ -424,12 +432,6 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 		if k == 0 {
 			// Or the deletion starts upstream of the start codon.
 			k = utr5DeletionShift(v, t)
-		}
-		if k == 0 {
-			// None of those arrangements: shift it on genomic positions,
-			// which covers the rest without caring where the two bases
-			// being compared happen to sit.
-			k = genomicDeletionShift(delStartGenomic, delEndGenomic, t)
 		}
 		if k > 0 {
 			d := int64(k)
