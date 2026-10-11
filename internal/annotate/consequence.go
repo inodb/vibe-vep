@@ -297,6 +297,25 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 				result.Consequence = ConsequenceStartLost5PrimeUTR
 				result.HGVSp = ""
 			}
+			if result.Consequence == ConsequenceStartLost {
+				// start_lost is a co-term for a deletion, not a verdict on its
+				// own: VEP writes frameshift_variant,start_lost or
+				// start_lost,inframe_deletion, and never start_lost alone for
+				// a DEL - of the 103 deletions carrying it in a VEP111
+				// MSK-IMPACT MAF, every one names the length change or the
+				// 5'UTR alongside it.
+				//
+				// This runs after FormatHGVSp above, which keys off the
+				// consequence and needs to see the start_lost form to render
+				// p.Met1?.
+				lengthTerm := ConsequenceInframeDeletion
+				if (len(v.Ref)-len(v.Alt))%3 != 0 {
+					lengthTerm = ConsequenceFrameshiftVariant
+				}
+				result.Consequence = joinConsequenceTerms(
+					[]string{ConsequenceStartLost, lengthTerm})
+				result.Impact = GetImpact(firstTerm(result.Consequence))
+			}
 			return result
 		}
 	}

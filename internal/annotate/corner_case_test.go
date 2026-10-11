@@ -124,8 +124,13 @@ func TestCorner_DeletionAtTranscriptStart(t *testing.T) {
 	v := &vcf.Variant{Chrom: "1", Pos: 1000, Ref: "ATGG", Alt: "A"}
 	result := PredictConsequence(v, tr)
 
-	assert.Equal(t, ConsequenceStartLost, result.Consequence,
-		"deletion of start codon should be start_lost")
+	// Three bases go, so the start is lost and the rest stays in frame. VEP
+	// names both: of the 103 deletions carrying start_lost in a VEP111
+	// MSK-IMPACT MAF, none carries it alone - 11 are start_lost,
+	// inframe_deletion, 25 pair it with frameshift_variant and the other 67
+	// with 5_prime_UTR_variant or a splice term.
+	assert.Equal(t, ConsequenceStartLost+","+ConsequenceInframeDeletion, result.Consequence,
+		"a deletion taking the start codon should name the length change too")
 }
 
 // --- Pattern: Reverse strand insertion ---
