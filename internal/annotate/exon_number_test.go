@@ -37,9 +37,12 @@ func TestSpannedExonNumber(t *testing.T) {
 		{"span covering every exon", 100, string(make([]byte, 501)), "1-3/3"},
 		{"wholly intronic", 220, "AAAA", ""},
 		{"outside the transcript", 50, "A", ""},
-		// A pure insertion covers no genomic base; at a junction v.Pos is the
-		// intronic flank and VEP leaves Exon_Number empty.
-		{"junction insertion", 201, "", ""},
+		// A pure insertion covers no genomic base; it is in an exon only when
+		// both of the bases it sits between are, so neither side of a
+		// junction counts.
+		{"junction insertion, intronic side", 201, "", ""},
+		{"junction insertion, exonic side", 200, "", ""},
+		{"junction insertion before an exon", 299, "", ""},
 		{"insertion inside an exon", 350, "", "2/3"},
 	}
 	for _, tt := range tests {

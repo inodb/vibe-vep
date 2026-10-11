@@ -1601,6 +1601,19 @@ func spliceSiteType(pos int64, t *cache.Transcript) string {
 // A junction insertion still comes out empty, which is what VEP does, because
 // a pure insertion spans no genomic base and v.Pos is the intronic flank.
 func spannedExonNumber(v *vcf.Variant, t *cache.Transcript) string {
+	if len(v.Ref) == 0 {
+		// A pure insertion covers no base. VEP gives it a zero-length feature
+		// whose start is one past its end, so it lies within an exon only
+		// when both of those coordinates do - an insertion sitting on a
+		// junction is in neither the exon nor the intron, and VEP names no
+		// exon for it: CDH1 c.1565+1_1565+2dup and TP53 c.97-1_97insAG are
+		// both empty.
+		a, b := t.FindExon(v.Pos), t.FindExon(v.Pos+1)
+		if a == nil || b == nil || a.Number != b.Number {
+			return ""
+		}
+		return formatExonNumber(a.Number, len(t.Exons))
+	}
 	spanEnd := v.Pos + int64(len(v.Ref)) - 1
 	if spanEnd < v.Pos {
 		spanEnd = v.Pos
