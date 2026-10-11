@@ -124,6 +124,35 @@ func codingBaseAt(pos int64, t *cache.Transcript) (byte, bool) {
 	if cds := GenomicToCDS(pos, t); cds >= 1 && int(cds) <= len(t.CDSSequence) {
 		return t.CDSSequence[cds-1], true
 	}
+	if t.FindExon(pos) != nil {
+		// Exonic but outside the CDS, so a UTR base. Both tails are stored in
+		// coding orientation and addressed by distance from the start or stop
+		// codon, which is the same number HGVS writes as -k or *k. A deletion
+		// running off the end of the CDS needs these to shift: VEP moves
+		// CALR c.1216_*32del three bases to c.1219_*35del.
+		past3 := pos > t.CDSEnd
+		if t.IsReverseStrand() {
+			past3 = pos < t.CDSStart
+		}
+		if past3 {
+			d := exonicDistance(t.CDSEnd, pos, t)
+			if t.IsReverseStrand() {
+				d = exonicDistance(pos, t.CDSStart, t)
+			}
+			if d >= 1 && int(d) <= len(t.UTR3Sequence) {
+				return t.UTR3Sequence[d-1], true
+			}
+			return 0, false
+		}
+		k := exonicDistance(pos, t.CDSStart, t)
+		if t.IsReverseStrand() {
+			k = exonicDistance(t.CDSEnd, pos, t)
+		}
+		if k >= 1 {
+			return t.UTR5BaseAt(int(k))
+		}
+		return 0, false
+	}
 	return intronFlankBaseAt(pos, t)
 }
 

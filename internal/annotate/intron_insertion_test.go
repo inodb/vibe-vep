@@ -124,3 +124,53 @@ func TestGenomicDeletionShiftReverseStrand(t *testing.T) {
 		t.Errorf("shift = %d, want 1", got)
 	}
 }
+
+// A transcript whose exon carries 5'UTR, CDS and 3'UTR, so a deletion can run
+// off either end of the coding sequence.
+func utrTranscript() *cache.Transcript {
+	utr5, utr5Len := cache.PackDNA2Bit("GGGCCC")
+	tr := &cache.Transcript{
+		ID: "ENST_UTR", GeneName: "UTR", Chrom: "1", Strand: 1,
+		Start: 1000, End: 1023, CDSStart: 1006, CDSEnd: 1017,
+		Biotype:      "protein_coding",
+		CDSSequence:  "ATGCATGAATAA",
+		UTR3Sequence: "AAATTTGGG",
+		UTR5Packed:   utr5, UTR5Len: uint16(utr5Len),
+		Exons: []cache.Exon{
+			{Number: 1, Start: 1000, End: 1023, CDSStart: 1006, CDSEnd: 1017, Frame: 0},
+		},
+	}
+	tr.BuildCDSIndex()
+	return tr
+}
+
+func TestCodingBaseAtReadsBothUTRs(t *testing.T) {
+	tr := utrTranscript()
+	// c.-1 is the base just before the start codon, the last of the stored
+	// 5' tail; *1 is the first base after the stop codon.
+	cases := map[int64]byte{
+		1005: 'C', // c.-1
+		1006: 'A', // c.1
+		1017: 'A', // c.12, last base of the stop codon
+		1018: 'A', // *1
+		1021: 'T', // *4
+	}
+	for pos, want := range cases {
+		got, ok := codingBaseAt(pos, tr)
+		if !ok || got != want {
+			t.Errorf("codingBaseAt(%d) = %q (ok=%v), want %q", pos, got, ok, want)
+		}
+	}
+}
+
+func TestGenomicDeletionShiftIntoThe3PrimeUTR(t *testing.T) {
+	tr := utrTranscript()
+	// The CDS ends in A and the 3'UTR opens AAA, so deleting the last base of
+	// the stop codon walks three bases into the UTR before meeting the T at
+	// *4. Without the UTR tail there is nothing to compare against and the
+	// deletion stays put, which is how CALR c.1216_*32del missed VEP's
+	// c.1219_*35del.
+	if got := genomicDeletionShift(1017, 1017, tr); got != 3 {
+		t.Errorf("shift = %d, want 3", got)
+	}
+}
