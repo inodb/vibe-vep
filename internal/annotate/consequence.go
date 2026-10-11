@@ -684,28 +684,6 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 										result.EndAA = TranslateCodon(endCodon)
 									}
 								}
-								// Inside a run of the same amino acid, VEP names
-								// the residue one before the 3'-most that HGVS
-								// asks for: the Q-run ending at 238 gives
-								// p.Q237dup. Following VEP here is a deliberate
-								// choice, and the opposite of the one made for
-								// dup-vs-ins at the CDS level, where vibe-vep
-								// stays HGVS-correct.
-								//
-								// Only single-residue dups need it. Of the 672
-								// protein duplications the two tools both
-								// report, the 338 covering a range already
-								// agree, as do the 224 single ones that are not
-								// in a run - where the 3'-most position is the
-								// only position.
-								if insLen == 1 && result.ProteinPosition > 1 {
-									prev := GetCodon(t.CDSSequence, result.ProteinPosition-1)
-									if len(prev) == 3 && TranslateCodon(prev) == insAAs[0] {
-										result.ProteinPosition--
-										result.ProteinEndPosition = result.ProteinPosition
-										result.RefAA = insAAs[0]
-									}
-								}
 							}
 						}
 					}
