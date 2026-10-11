@@ -99,6 +99,19 @@ func TestSpliceRegionUsesTheWholeSpan(t *testing.T) {
 	if spanTouchesSpliceRegion(insOut, tr) {
 		t.Error("an insertion between the third and fourth exon bases is past the splice region")
 	}
+
+	// An insertion on the junction itself: exon 1 ends at 1010, so this sits
+	// between its last base and the intron's +1. Neither window holds both
+	// bases, but VEP reports the splice region.
+	junction := &vcf.Variant{Chrom: "1", Pos: 1011, Ref: "", Alt: "T"}
+	if !spanTouchesSpliceRegion(junction, tr) {
+		t.Error("an insertion on an exon/intron junction is in the splice region")
+	}
+	// The same shape at the transcript's outer edge borders no intron.
+	outer := &vcf.Variant{Chrom: "1", Pos: 999, Ref: "", Alt: "T"}
+	if spanTouchesSpliceRegion(outer, tr) {
+		t.Error("the start of the first exon borders no intron")
+	}
 }
 
 // Exon 1 ends at 1010 (CDS 12 is 1011), so the donor's +1 and +2 are 1012 and

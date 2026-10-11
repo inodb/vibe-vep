@@ -1777,7 +1777,23 @@ func isSpliceRegion(pos int64, t *cache.Transcript) bool {
 // and third is. Testing either flank on its own over-called it 237 times.
 func spanTouchesSpliceRegion(v *vcf.Variant, t *cache.Transcript) bool {
 	if len(v.Ref) == 0 {
-		return isSpliceRegion(v.Pos, t) && isSpliceRegion(v.Pos+1, t)
+		if isSpliceRegion(v.Pos, t) && isSpliceRegion(v.Pos+1, t) {
+			return true
+		}
+		// An insertion landing on the junction itself is the exception: its
+		// two bases sit either side of the exon edge, so neither of the two
+		// windows contains both, yet VEP reports the splice region for
+		// RAF1 c.990_990+1insT and 51 others like it. Requiring the exonic
+		// flank to be in a splice region keeps the transcript's outer edges
+		// out, since those border no intron.
+		exonSide, intronSide := v.Pos, v.Pos+1
+		if t.FindExon(exonSide) == nil {
+			exonSide, intronSide = intronSide, exonSide
+		}
+		if t.FindExon(exonSide) != nil && t.FindExon(intronSide) == nil {
+			return isSpliceRegion(exonSide, t)
+		}
+		return false
 	}
 	for pos := v.Pos; pos < v.Pos+int64(len(v.Ref)); pos++ {
 		if isSpliceRegion(pos, t) {
