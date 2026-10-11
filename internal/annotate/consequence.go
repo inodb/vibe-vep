@@ -238,7 +238,15 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 			}
 		}
 		result.Consequence = utrConsequence
-		result.Impact = GetImpact(result.Consequence)
+		// A UTR base can sit in a splice region like any other exonic base.
+		// This branch returned before the check that the coding path makes,
+		// so GLI1 c.-26G>C came out as 5_prime_UTR_variant where VEP has
+		// splice_region_variant,5_prime_UTR_variant.
+		if spanTouchesSpliceRegion(v, t) {
+			result.Consequence = joinConsequenceTerms(
+				[]string{ConsequenceSpliceRegion, utrConsequence})
+		}
+		result.Impact = GetImpact(firstTerm(result.Consequence))
 		return result
 	}
 

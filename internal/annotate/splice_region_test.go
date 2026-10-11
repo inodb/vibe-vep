@@ -151,3 +151,22 @@ func TestInsertionSpliceTerms(t *testing.T) {
 		t.Error("an insertion at the exon edge should be left to the exonic path")
 	}
 }
+
+// Exon 2 runs 1100..1111 with the CDS starting at 1106, so 1101 is a 5'UTR
+// base two inside the exon - in the splice region, and in the UTR.
+func TestUTRVariantInSpliceRegion(t *testing.T) {
+	tr := threeExonTranscript()
+	tr.CDSStart = 1106
+	tr.BuildCDSIndex()
+	v := &vcf.Variant{Chrom: "1", Pos: 1101, Ref: "G", Alt: "C"}
+	result := PredictConsequence(v, tr)
+	want := ConsequenceSpliceRegion + "," + Consequence5PrimeUTR
+	if result.Consequence != want {
+		t.Errorf("Consequence = %q, want %q", result.Consequence, want)
+	}
+	// Deeper into the exon it is only a UTR variant.
+	v2 := &vcf.Variant{Chrom: "1", Pos: 1104, Ref: "G", Alt: "C"}
+	if got := PredictConsequence(v2, tr).Consequence; got != Consequence5PrimeUTR {
+		t.Errorf("Consequence = %q, want %q", got, Consequence5PrimeUTR)
+	}
+}
