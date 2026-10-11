@@ -239,6 +239,31 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 	// These paths use string concat (less common, not on the hot path).
 	insertedSeq := string(seq)
 
+	// Only the CDS-based block above filled in the Codons string, so an
+	// insertion anchored on the intronic side of a junction came out with
+	// none at all - 59 rows, and with it the stop_gained test that reads the
+	// altered codons. The codons are still well defined: the insertion sits
+	// between two bases, and whichever of them is coding gives the anchor.
+	//
+	// seq is unrotated here because shiftInsertionBuf runs only inside that
+	// block, so these are the bases as the variant gives them - which is what
+	// the Codons field shows.
+	if result.CodonChange == "" && len(t.CDSSequence) > 0 {
+		insAfter, insBefore := v.Pos, v.Pos+1
+		if t.IsReverseStrand() {
+			insAfter, insBefore = v.Pos+1, v.Pos
+		}
+		anchor := GenomicToCDS(insAfter, t)
+		if anchor < 1 {
+			if next := GenomicToCDS(insBefore, t); next >= 1 {
+				anchor = next - 1
+			}
+		}
+		if anchor >= 1 {
+			result.CodonChange = formatCodonChangeCDS(t.CDSSequence, anchor+1, anchor, insertedSeq)
+		}
+	}
+
 	dup := checkDuplication(v, t, insertedSeq)
 	if dup.isDup {
 		if dup.cdsStart == dup.cdsEnd {

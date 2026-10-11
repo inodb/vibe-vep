@@ -174,3 +174,19 @@ func TestGenomicDeletionShiftIntoThe3PrimeUTR(t *testing.T) {
 		t.Errorf("shift = %d, want 3", got)
 	}
 }
+
+// On the reverse-strand fixture, exon 1 is at 1100..1111 and holds CDS 1..12,
+// so in coding order CDS 12 is genomic 1100 and the intron follows at 1099.
+// An insertion between them has v.Pos intronic, which is where the CDS-based
+// block bails and the Codons string used to be left empty.
+func TestJunctionInsertionStillGetsCodons(t *testing.T) {
+	tr := intronFlankTranscript(-1)
+	v := &vcf.Variant{Chrom: "1", Pos: 1099, Ref: "", Alt: "A"} // T on the coding strand
+	result := PredictConsequence(v, tr)
+	result.HGVSc = FormatHGVSc(v, tr, result)
+	// CDS 12 ends codon 4, so the insertion is on a codon boundary and the
+	// reference side is empty.
+	if want := "-/T"; result.CodonChange != want {
+		t.Errorf("Codons = %q, want %q (HGVSc %q)", result.CodonChange, want, result.HGVSc)
+	}
+}
