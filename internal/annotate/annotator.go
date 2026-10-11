@@ -104,6 +104,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 		addStopGainedFromCodons(result)
 		relabelInsertionSplittingACodon(result)
 		clearCodonsForSpliceSite(result)
+		relabelStopLostWhenItShiftsClear(v, t, result)
 
 		// Append biotype-specific modifier terms per VEP convention
 		consequence := result.Consequence

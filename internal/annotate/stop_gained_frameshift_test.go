@@ -1,6 +1,11 @@
 package annotate
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/vcf"
+)
 
 // Cases taken from a VEP111 MSK-IMPACT MAF: the Codons string VEP reports
 // alongside its Consequence, for frameshift-length indels.
@@ -129,5 +134,41 @@ func TestStopGainedDropsTheLengthTerm(t *testing.T) {
 				t.Errorf("Codons %q, %q -> %q, want %q", tt.codons, tt.consequence, r.Consequence, tt.want)
 			}
 		})
+	}
+}
+
+func TestStopLostRelabelledWhenItShiftsClear(t *testing.T) {
+	// CDS 1..12 at genomic 1000..1011, so the stop codon TAA is 1009..1011
+	// and the 3'UTR begins at 1012.
+	tr := &cache.Transcript{
+		ID: "ENST_STOP", GeneName: "STOP", Chrom: "1", Strand: 1,
+		Start: 1000, End: 1023, CDSStart: 1000, CDSEnd: 1011,
+		Biotype:      "protein_coding",
+		CDSSequence:  "ATGCATGAATAA",
+		UTR3Sequence: "TAACCCGGG",
+		Exons: []cache.Exon{
+			{Number: 1, Start: 1000, End: 1023, CDSStart: 1000, CDSEnd: 1011, Frame: 0},
+		},
+	}
+	tr.BuildCDSIndex()
+
+	// A deletion starting on the stop codon that 3'-shifts three bases past it:
+	// the bases after it spell the same stop, so the stop survives.
+	v := &vcf.Variant{Chrom: "1", Pos: 1009, Ref: "TAATAA", Alt: ""}
+	r := &ConsequenceResult{
+		Consequence: ConsequenceStopLost + "," + Consequence3PrimeUTR,
+		HGVSOffset:  3,
+	}
+	relabelStopLostWhenItShiftsClear(v, tr, r)
+	want := ConsequenceStopRetained + "," + Consequence3PrimeUTR
+	if r.Consequence != want {
+		t.Errorf("Consequence = %q, want %q", r.Consequence, want)
+	}
+
+	// The same deletion with no shift still covers the stop codon.
+	r2 := &ConsequenceResult{Consequence: ConsequenceStopLost + "," + Consequence3PrimeUTR}
+	relabelStopLostWhenItShiftsClear(v, tr, r2)
+	if want := ConsequenceStopLost + "," + Consequence3PrimeUTR; r2.Consequence != want {
+		t.Errorf("Consequence = %q, want %q", r2.Consequence, want)
 	}
 }

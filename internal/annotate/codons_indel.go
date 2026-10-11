@@ -1,5 +1,10 @@
 package annotate
 
+import (
+	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/vcf"
+)
+
 // formatCodonChangeCDS renders the Codons string Ensembl VEP reports for an
 // indel or multi-nucleotide variant, working in CDS coordinates.
 //
@@ -445,4 +450,44 @@ func clearCodonsForSpliceSite(result *ConsequenceResult) {
 		return
 	}
 	result.CodonChange = ""
+}
+
+// relabelStopLostWhenItShiftsClear turns stop_lost into stop_retained_variant
+// for a variant whose 3'-shifted representation no longer reaches the stop
+// codon.
+//
+// The stop_lost tests run on the unshifted genomic span, which can overlap the
+// stop codon even when the change describes itself entirely past it. ERBB3
+// deletes 510 bases starting at the stop codon, but the bases that follow
+// spell the same stop, so HGVS writes it c.*1_*510del and the protein still
+// terminates where it did. vibe-vep called that stop_lost; VEP reports
+// stop_retained_variant,3_prime_UTR_variant.
+//
+// A stop codon the variant does not touch cannot be lost, so this only ever
+// corrects an over-call.
+func relabelStopLostWhenItShiftsClear(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult) {
+	if !hasTerm(result.Consequence, ConsequenceStopLost) || len(v.Ref) == 0 {
+		return
+	}
+	shift := int64(result.HGVSOffset)
+	if t.IsReverseStrand() {
+		shift = -shift
+	}
+	start := v.Pos + shift
+	end := start + int64(len(v.Ref)) - 1
+	stopStart, stopEnd := t.CDSEnd-2, t.CDSEnd
+	if t.IsReverseStrand() {
+		stopStart, stopEnd = t.CDSStart, t.CDSStart+2
+	}
+	if end >= stopStart && start <= stopEnd {
+		return // still covers the stop codon
+	}
+	terms := splitConsequenceTerms(result.Consequence)
+	for i, term := range terms {
+		if term == ConsequenceStopLost {
+			terms[i] = ConsequenceStopRetained
+		}
+	}
+	result.Consequence = joinConsequenceTerms(terms)
+	result.Impact = GetImpact(firstTerm(result.Consequence))
 }
