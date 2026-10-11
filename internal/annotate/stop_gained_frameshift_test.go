@@ -46,7 +46,40 @@ func TestAddStopGainedForFrameshift(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &ConsequenceResult{Consequence: tt.consequence, CodonChange: tt.codons}
-			addStopGainedForFrameshift(r)
+			addStopGainedFromCodons(r)
+			if r.Consequence != tt.want {
+				t.Errorf("Codons %q, %q -> %q, want %q", tt.codons, tt.consequence, r.Consequence, tt.want)
+			}
+		})
+	}
+}
+
+// The same test applies to in-frame indels and delins, where VEP keeps the
+// length term alongside: stop_gained,inframe_insertion for SMAD2 gaa/gaGTAa.
+func TestAddStopGainedFromCodonsOnInFrameIndels(t *testing.T) {
+	tests := []struct {
+		name        string
+		codons      string
+		consequence string
+		want        string
+	}{
+		{"SMAD2 gaa/gaGTAa", "gaa/gaGTAa", ConsequenceInframeInsertion,
+			ConsequenceStopGained + "," + ConsequenceInframeInsertion},
+		{"ERCC4 tTGAag/tag", "tTGAag/tag", ConsequenceInframeDeletion,
+			ConsequenceStopGained + "," + ConsequenceInframeDeletion},
+		{"GNAS cgCTCCAACGag/cgTTag", "cgCTCCAACGag/cgTTag", ConsequenceProteinAltering,
+			ConsequenceStopGained + "," + ConsequenceProteinAltering},
+		// The reference already holds the stop, so it is lost, not gained.
+		{"ref already stops", "tTAAg/tg", ConsequenceInframeDeletion, ConsequenceInframeDeletion},
+		// No stop in the altered codons.
+		{"no stop", "gaa/gaCCCa", ConsequenceInframeInsertion, ConsequenceInframeInsertion},
+		// Substitutions are left to the single-base path.
+		{"substitution untouched", "tGG/tAA", ConsequenceMissenseVariant, ConsequenceMissenseVariant},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &ConsequenceResult{Consequence: tt.consequence, CodonChange: tt.codons}
+			addStopGainedFromCodons(r)
 			if r.Consequence != tt.want {
 				t.Errorf("Codons %q, %q -> %q, want %q", tt.codons, tt.consequence, r.Consequence, tt.want)
 			}

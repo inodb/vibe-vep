@@ -101,7 +101,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 			result.HGVSp = ""
 		}
 		// Need the Codons string, which FormatHGVSc fills in.
-		addStopGainedForFrameshift(result)
+		addStopGainedFromCodons(result)
 		relabelInsertionSplittingACodon(result)
 		clearCodonsForSpliceSite(result)
 
