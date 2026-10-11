@@ -57,6 +57,13 @@ type ConsequenceResult struct {
 func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult {
 	result := &ConsequenceResult{}
 
+	// VEP names the exons a variant's genomic span overlaps, whether or not it
+	// starts in one, so this is derived from the span rather than from the
+	// exon lookup below. It is set before the boundary check because a
+	// deletion can start outside the transcript and still reach an exon:
+	// RAD51C 17:56769933 is upstream of its own start and VEP reports 1/9.
+	result.ExonNumber = spannedExonNumber(v, t)
+
 	// Check if variant is within transcript boundaries
 	if !t.Contains(v.Pos) {
 		// Check upstream/downstream
@@ -76,11 +83,6 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 		result.Impact = GetImpact(result.Consequence)
 		return result
 	}
-
-	// VEP names the exons a variant's genomic span overlaps, whether or not it
-	// starts in one, so this is derived from the span rather than from the
-	// exon lookup below.
-	result.ExonNumber = spannedExonNumber(v, t)
 
 	// Check if in exon
 	exon := t.FindExon(v.Pos)

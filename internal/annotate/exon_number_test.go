@@ -51,3 +51,17 @@ func TestSpannedExonNumber(t *testing.T) {
 		})
 	}
 }
+
+func TestExonNumberWhenTheVariantStartsOutsideTheTranscript(t *testing.T) {
+	tr := revStrandTranscript() // exons at 100-200, 300-400, 500-600
+	// A deletion beginning before the transcript and reaching exon 3.
+	v := &vcf.Variant{Chrom: "1", Pos: 50, Ref: string(make([]byte, 101)), Alt: ""}
+	if got := PredictConsequence(v, tr).ExonNumber; got != "3/3" {
+		t.Errorf("ExonNumber = %q, want %q", got, "3/3")
+	}
+	// One that genuinely stays outside names no exon.
+	v2 := &vcf.Variant{Chrom: "1", Pos: 50, Ref: "AAAA", Alt: ""}
+	if got := PredictConsequence(v2, tr).ExonNumber; got != "" {
+		t.Errorf("ExonNumber = %q, want empty", got)
+	}
+}
