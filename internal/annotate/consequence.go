@@ -64,8 +64,16 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 	// RAD51C 17:56769933 is upstream of its own start and VEP reports 1/9.
 	result.ExonNumber = spannedExonNumber(v, t)
 
-	// Check if variant is within transcript boundaries
-	if !t.Contains(v.Pos) {
+	// Check if variant is within transcript boundaries. The span decides it,
+	// not the start: a deletion can begin before the transcript and still
+	// delete part of its first exon, and calling that upstream_gene_variant
+	// contradicted the exon this very function had just named for it. VEP
+	// reports coding_sequence_variant plus the UTR it reaches.
+	spanLast := v.Pos + int64(len(v.Ref)) - 1
+	if spanLast < v.Pos {
+		spanLast = v.Pos
+	}
+	if !t.Contains(v.Pos) && !t.Contains(spanLast) && !(v.Pos < t.Start && spanLast > t.End) {
 		// Check upstream/downstream
 		if v.Pos < t.Start {
 			if t.IsForwardStrand() {

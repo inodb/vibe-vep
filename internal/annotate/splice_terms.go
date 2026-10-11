@@ -141,13 +141,51 @@ func spanSpliceTerms(v *vcf.Variant, t *cache.Transcript) []string {
 	}
 	var terms []string
 	for pos := v.Pos; pos <= spanEnd; pos++ {
-		if off, ok := intronOffset(pos, t); ok {
-			terms = append(terms, spliceTermsForOffset(off)...)
-		} else {
+		if !t.Contains(pos) {
+			// Outside the transcript there is nothing to name. Without this
+			// the nearest-exon lookup below answers with a large offset and
+			// the span picks up an intron_variant it has not earned.
+			continue
+		}
+		if t.FindExon(pos) == nil {
+			if off, ok := intronOffset(pos, t); ok {
+				terms = append(terms, spliceTermsForOffset(off)...)
+			}
+			continue
+		}
+		// An exonic base outside the CDS is a UTR base, and VEP names the UTR
+		// it falls in: a deletion running from the 5'UTR into the coding
+		// sequence is coding_sequence_variant,5_prime_UTR_variant.
+		if GenomicToCDS(pos, t) >= 1 {
 			terms = append(terms, ConsequenceCodingSequenceVariant)
+		} else if term := utrTermAt(pos, t); term != "" {
+			terms = append(terms, term)
 		}
 	}
 	return terms
+}
+
+// utrTermAt names the UTR an exonic non-coding position falls in.
+func utrTermAt(pos int64, t *cache.Transcript) string {
+	if !t.IsProteinCoding() {
+		return ""
+	}
+	if t.IsForwardStrand() {
+		if pos < t.CDSStart {
+			return Consequence5PrimeUTR
+		}
+		if pos > t.CDSEnd {
+			return Consequence3PrimeUTR
+		}
+		return ""
+	}
+	if pos > t.CDSEnd {
+		return Consequence5PrimeUTR
+	}
+	if pos < t.CDSStart {
+		return Consequence3PrimeUTR
+	}
+	return ""
 }
 
 // exonicTerms are the SO terms that say a variant alters transcribed exonic

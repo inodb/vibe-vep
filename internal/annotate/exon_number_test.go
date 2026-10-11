@@ -68,3 +68,37 @@ func TestExonNumberWhenTheVariantStartsOutsideTheTranscript(t *testing.T) {
 		t.Errorf("ExonNumber = %q, want empty", got)
 	}
 }
+
+// A deletion that begins before the transcript but deletes part of its first
+// exon is not upstream of it.
+func TestDeletionReachingIntoTheTranscriptIsNotUpstream(t *testing.T) {
+	tr := &cache.Transcript{
+		ID: "ENST_REACH", GeneName: "REACH", Chrom: "1", Strand: 1,
+		Start: 1000, End: 1023, CDSStart: 1006, CDSEnd: 1017,
+		Biotype:     "protein_coding",
+		CDSSequence: "ATGCATGAATAA",
+		Exons: []cache.Exon{
+			{Number: 1, Start: 1000, End: 1023, CDSStart: 1006, CDSEnd: 1017, Frame: 0},
+		},
+	}
+	tr.BuildCDSIndex()
+	// Starts 10 bases before the transcript and runs to CDS base 3, so it
+	// covers upstream sequence, the 5'UTR and coding sequence.
+	v := &vcf.Variant{Chrom: "1", Pos: 990, Ref: string(make([]byte, 19)), Alt: ""}
+	result := PredictConsequence(v, tr)
+	if result.Consequence == ConsequenceUpstreamGene {
+		t.Fatalf("called upstream_gene_variant while naming exon %q", result.ExonNumber)
+	}
+	want := ConsequenceCodingSequenceVariant + "," + Consequence5PrimeUTR
+	if result.Consequence != want {
+		t.Errorf("Consequence = %q, want %q", result.Consequence, want)
+	}
+	if result.ExonNumber != "1/1" {
+		t.Errorf("ExonNumber = %q, want %q", result.ExonNumber, "1/1")
+	}
+	// One that really stays outside is still upstream.
+	v2 := &vcf.Variant{Chrom: "1", Pos: 980, Ref: "AAAA", Alt: ""}
+	if got := PredictConsequence(v2, tr).Consequence; got != ConsequenceUpstreamGene {
+		t.Errorf("Consequence = %q, want %q", got, ConsequenceUpstreamGene)
+	}
+}
