@@ -1690,15 +1690,20 @@ func putInt64(buf []byte, v int64) int {
 
 // spliceRegionCompound maps single consequences to their compound form with
 // splice_region_variant appended. Pre-built to avoid runtime concatenation.
+// The order within each entry is Ensembl's severity order, the same one
+// consequenceRank encodes: splice_region_variant sits between the terms that
+// outrank it and those it outranks. Writing it after every term, as this table
+// used to, put synonymous_variant and coding_sequence_variant on the wrong
+// side - VEP reports splice_region_variant,synonymous_variant.
 var spliceRegionCompound = map[string]string{
 	ConsequenceMissenseVariant:       ConsequenceMissenseVariant + "," + ConsequenceSpliceRegion,
-	ConsequenceSynonymousVariant:     ConsequenceSynonymousVariant + "," + ConsequenceSpliceRegion,
 	ConsequenceStopGained:            ConsequenceStopGained + "," + ConsequenceSpliceRegion,
-	ConsequenceStopRetained:          ConsequenceStopRetained + "," + ConsequenceSpliceRegion,
 	ConsequenceFrameshiftVariant:     ConsequenceFrameshiftVariant + "," + ConsequenceSpliceRegion,
 	ConsequenceInframeDeletion:       ConsequenceInframeDeletion + "," + ConsequenceSpliceRegion,
 	ConsequenceInframeInsertion:      ConsequenceInframeInsertion + "," + ConsequenceSpliceRegion,
-	ConsequenceCodingSequenceVariant: ConsequenceCodingSequenceVariant + "," + ConsequenceSpliceRegion,
+	ConsequenceSynonymousVariant:     ConsequenceSpliceRegion + "," + ConsequenceSynonymousVariant,
+	ConsequenceStopRetained:          ConsequenceSpliceRegion + "," + ConsequenceStopRetained,
+	ConsequenceCodingSequenceVariant: ConsequenceSpliceRegion + "," + ConsequenceCodingSequenceVariant,
 }
 
 // appendSpliceRegion appends ",splice_region_variant" to a consequence string.
@@ -1707,7 +1712,10 @@ func appendSpliceRegion(consequence string) string {
 	if compound, ok := spliceRegionCompound[consequence]; ok {
 		return compound
 	}
-	return consequence + "," + ConsequenceSpliceRegion
+	// A consequence the table does not cover is ranked properly rather than
+	// having the term stuck on the end: stop_lost,3_prime_UTR_variant takes it
+	// in the middle, as stop_lost,splice_region_variant,3_prime_UTR_variant.
+	return joinConsequenceTerms(append(splitConsequenceTerms(consequence), ConsequenceSpliceRegion))
 }
 
 // For deletions, the affected range is [pos, pos+len(ref)-1]. If any position

@@ -170,3 +170,22 @@ func TestUTRVariantInSpliceRegion(t *testing.T) {
 		t.Errorf("Consequence = %q, want %q", got, Consequence5PrimeUTR)
 	}
 }
+
+// Ensembl orders consequence terms by severity, so splice_region_variant lands
+// before the terms it outranks and after those that outrank it.
+func TestAppendSpliceRegionOrdersBySeverity(t *testing.T) {
+	tests := map[string]string{
+		ConsequenceMissenseVariant:       ConsequenceMissenseVariant + "," + ConsequenceSpliceRegion,
+		ConsequenceFrameshiftVariant:     ConsequenceFrameshiftVariant + "," + ConsequenceSpliceRegion,
+		ConsequenceSynonymousVariant:     ConsequenceSpliceRegion + "," + ConsequenceSynonymousVariant,
+		ConsequenceCodingSequenceVariant: ConsequenceSpliceRegion + "," + ConsequenceCodingSequenceVariant,
+		// Not in the fast-path table: the term goes in the middle.
+		ConsequenceStopLost + "," + Consequence3PrimeUTR: ConsequenceStopLost + "," +
+			ConsequenceSpliceRegion + "," + Consequence3PrimeUTR,
+	}
+	for in, want := range tests {
+		if got := appendSpliceRegion(in); got != want {
+			t.Errorf("appendSpliceRegion(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
