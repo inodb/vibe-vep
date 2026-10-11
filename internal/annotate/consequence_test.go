@@ -662,7 +662,7 @@ func TestPredictConsequence_StopLostWithExtension(t *testing.T) {
 	assert.Equal(t, ConsequenceStopLost, result.Consequence)
 	assert.Equal(t, int64(4), result.ProteinPosition) // Stop is at protein pos 4
 	assert.Equal(t, 2, result.StopLostExtDist, "expected ext*2")
-	assert.Equal(t, "p.Ter4Glnext*2", result.HGVSp)
+	assert.Equal(t, "p.Ter4GlnextTer2", result.HGVSp)
 }
 
 func BenchmarkPredictConsequence(b *testing.B) {

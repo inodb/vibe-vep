@@ -163,15 +163,22 @@ func FormatHGVSp(result *ConsequenceResult) string {
 		return string(buf[:n])
 
 	case ConsequenceStopLost:
-		// p.Ter###Xxxext*N or p.Ter###Xxxext*?
+		// p.Ter###XxxextTer### or p.Ter###XxxextTer?
+		//
+		// The extension's terminator is spelled out like every other residue
+		// in the three-letter form. genome-nexus shortens this to the p.*###
+		// Xext*### that the MAF's HGVSp_Short column carries, which is why the
+		// short column agreed while this one did not: every one of the 480
+		// extensions in a VEP111 MSK-IMPACT MAF writes extTer here.
 		n += copy(buf[n:], "p.Ter")
 		n += putInt64(buf[n:], pos)
 		n += copy(buf[n:], aaThree(result.AltAA))
+		n += copy(buf[n:], "extTer")
 		if result.StopLostExtDist > 0 {
-			n += copy(buf[n:], "ext*")
 			n += putInt64(buf[n:], int64(result.StopLostExtDist))
 		} else {
-			n += copy(buf[n:], "ext*?")
+			buf[n] = '?'
+			n++
 		}
 		return string(buf[:n])
 

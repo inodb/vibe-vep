@@ -473,7 +473,9 @@ func TestHGVS_StartLost(t *testing.T) {
 }
 
 func TestHGVSp_StopLost_WithExtension(t *testing.T) {
-	// p.Ter110Glnext*17 (stop codon to Gln, new stop at +17)
+	// p.Ter110GlnextTer17 (stop codon to Gln, new stop at +17). The
+	// three-letter form spells the extension terminator out; ext*17 is the
+	// one-letter form, which genome-nexus renders into HGVSp_Short.
 	result := &ConsequenceResult{
 		Consequence:     ConsequenceStopLost,
 		ProteinPosition: 110,
@@ -481,18 +483,18 @@ func TestHGVSp_StopLost_WithExtension(t *testing.T) {
 		AltAA:           'Q',
 		StopLostExtDist: 17,
 	}
-	assert.Equal(t, "p.Ter110Glnext*17", FormatHGVSp(result))
+	assert.Equal(t, "p.Ter110GlnextTer17", FormatHGVSp(result))
 }
 
 func TestHGVSp_StopLost_UnknownExtension(t *testing.T) {
-	// p.Ter327Argext*? (no new stop found)
+	// p.Ter327ArgextTer? (no new stop found)
 	result := &ConsequenceResult{
 		Consequence:     ConsequenceStopLost,
 		ProteinPosition: 327,
 		RefAA:           '*',
 		AltAA:           'R',
 	}
-	assert.Equal(t, "p.Ter327Argext*?", FormatHGVSp(result))
+	assert.Equal(t, "p.Ter327ArgextTer?", FormatHGVSp(result))
 }
 
 func TestHGVSp_StopRetained(t *testing.T) {

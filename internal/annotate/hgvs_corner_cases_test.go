@@ -222,7 +222,7 @@ func TestHGVS_StopLost_EndToEnd(t *testing.T) {
 	// CDS: ATG GGG TAA = Met Gly Ter
 	// SNV at first base of stop codon: T→C → CAA = Gln → stop_lost
 	// UTR3: GGGGGGTAACCC → reading continues: CAA GGG GGG TAA
-	// Extension: Gln(1) Gly(2) Gly(3) Ter(4) → ext*4
+	// Extension: Gln(1) Gly(2) Gly(3) Ter(4) → extTer4
 	cds := "ATGGGGTAA"
 	utr3 := "GGGGGGTAACCC"
 	transcript := &cache.Transcript{
@@ -242,7 +242,7 @@ func TestHGVS_StopLost_EndToEnd(t *testing.T) {
 	t.Logf("stop_lost result: consequence=%s HGVSp=%s StopLostExtDist=%d", result.Consequence, result.HGVSp, result.StopLostExtDist)
 	assert.Equal(t, ConsequenceStopLost, result.Consequence)
 	if result.StopLostExtDist > 0 {
-		assert.Contains(t, result.HGVSp, "ext*")
+		assert.Contains(t, result.HGVSp, "extTer")
 	}
 }
 
@@ -501,7 +501,7 @@ func TestHGVS_FrameshiftDeletion_ImmediateStop(t *testing.T) {
 func TestHGVS_StopLost_KnownExtensionDistance(t *testing.T) {
 	// CDS: ATG GCT TAA (M A *)
 	// Mutate T→C at CDS pos 7: TAA→CAA (Gln) → stop_lost
-	// UTR3: AAA TAA GGG → reading: CAA AAA TAA → Gln Lys Ter → ext*3
+	// UTR3: AAA TAA GGG → reading: CAA AAA TAA → Gln Lys Ter → extTer3
 	cds := "ATGGCTTAA"
 	utr3 := "AAATAAGGG"
 	tr := &cache.Transcript{
@@ -519,9 +519,9 @@ func TestHGVS_StopLost_KnownExtensionDistance(t *testing.T) {
 	t.Logf("Stop-lost: consequence=%s HGVSp=%s StopLostExtDist=%d", result.Consequence, result.HGVSp, result.StopLostExtDist)
 	assert.Equal(t, ConsequenceStopLost, result.Consequence)
 	if result.StopLostExtDist > 0 {
-		assert.Contains(t, result.HGVSp, "ext*")
+		assert.Contains(t, result.HGVSp, "extTer")
 		// Verify the extension distance is a specific number, not "?"
-		assert.NotContains(t, result.HGVSp, "ext*?")
+		assert.NotContains(t, result.HGVSp, "extTer?")
 	}
 }
 

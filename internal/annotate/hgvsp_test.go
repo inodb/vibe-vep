@@ -53,7 +53,7 @@ func TestFormatHGVSp(t *testing.T) {
 				RefAA:           '*',
 				AltAA:           'K',
 			},
-			want: "p.Ter130Lysext*?",
+			want: "p.Ter130LysextTer?",
 		},
 		{
 			name: "start_lost",
