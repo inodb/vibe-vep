@@ -79,7 +79,12 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 	refLen := len(v.Ref)
 	altLen := len(v.Alt)
 
-	if altLen > refLen {
+	// A longer alternate allele is only an insertion when the reference
+	// survives inside it. MAF rows typed INS are not always pure insertions -
+	// NF1 17:29686003 is ref C alt GG - and the insertion path assumes the
+	// alt begins with the ref, so it read that as inserting a single G and
+	// dropped the C>G substitution entirely. VEP calls it c.8067delinsGG.
+	if altLen > refLen && !isDelIns(v.Ref, v.Alt) {
 		return formatHGVScInsertion(v, t, prefix, refLen, altLen, result)
 	}
 
