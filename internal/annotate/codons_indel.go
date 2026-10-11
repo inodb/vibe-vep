@@ -248,8 +248,87 @@ func addStopGainedFromCodons(result *ConsequenceResult) {
 	if !codonsSpellStop(alt) || codonsSpellStop(ref) {
 		return
 	}
-	result.Consequence = joinConsequenceTerms(append([]string{ConsequenceStopGained}, splitConsequenceTerms(result.Consequence)...))
+	terms := splitConsequenceTerms(result.Consequence)
+	if dropsLengthTerm(ref, alt, result.Consequence) {
+		kept := terms[:0]
+		for _, t := range terms {
+			if !isLengthChangeTerm(t) {
+				kept = append(kept, t)
+			}
+		}
+		terms = kept
+	}
+	result.Consequence = joinConsequenceTerms(append([]string{ConsequenceStopGained}, terms...))
 	result.Impact = GetImpact(firstTerm(result.Consequence))
+}
+
+func isLengthChangeTerm(term string) bool {
+	for _, t := range lengthChangeTerms {
+		if t == term {
+			return true
+		}
+	}
+	return false
+}
+
+// dropsLengthTerm reports whether VEP reports stop_gained on its own rather
+// than alongside the length change.
+//
+// It does so when the variant replaces a reference codon and the codon that
+// takes its place is itself a stop: nothing survives at that position, so
+// there is no insertion or replacement left to describe. CCGGga/Tga is
+// stop_gained alone, while cgCTCCAACGag/cgTTag keeps
+// protein_altering_variant because its first altered codon still spells Arg.
+//
+// Two shapes always keep the term. A pure deletion does - all 48 in a VEP111
+// MSK-IMPACT MAF, even where the junction it creates spells a stop - and so
+// does an insertion at a codon boundary, which replaces no reference codon at
+// all. Frameshifts are never affected: VEP writes stop_gained,
+// frameshift_variant and never stop_gained alone for one.
+//
+// Together these reproduce VEP's choice on all 122 non-frameshift coding
+// indels that gain a stop, with no exceptions.
+func dropsLengthTerm(ref, alt, consequence string) bool {
+	if hasTerm(consequence, ConsequenceFrameshiftVariant) {
+		return false
+	}
+	if ref == "" || ref == "-" {
+		return false // whole codons inserted at a boundary
+	}
+	if !hasUpper(alt) {
+		return false // pure deletion
+	}
+	return firstCodonIsStop(alt)
+}
+
+func hasUpper(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 'A' && s[i] <= 'Z' {
+			return true
+		}
+	}
+	return false
+}
+
+// firstCodonIsStop reports whether the first complete codon of a Codons side
+// is a stop.
+func firstCodonIsStop(codons string) bool {
+	var c [3]byte
+	n := 0
+	for i := 0; i < len(codons) && n < 3; i++ {
+		if codons[i] != '-' {
+			c[n] = upperBase(codons[i])
+			n++
+		}
+	}
+	if n < 3 {
+		return false
+	}
+	switch string(c[:]) {
+	case "TAA", "TAG", "TGA":
+		return true
+	}
+	return false
 }
 
 // splitConsequenceTerms splits a rendered consequence back into its terms.
