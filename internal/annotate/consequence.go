@@ -531,19 +531,28 @@ func predictMNVConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseque
 			result.EndAA = deletedAAs[len(deletedAAs)-1]
 		}
 
-		// Check for stop/start effects in multi-codon MNV.
+		// Check for stop/start effects in multi-codon MNV. An MNV reaching
+		// over several codons can do more than one of these at once, and VEP
+		// names each: AR c.3_4delinsTT changes the last base of ATG and makes
+		// the next codon a stop, and is reported stop_gained,start_lost. All
+		// 6 multi-base substitutions touching a start codon in a VEP111
+		// MSK-IMPACT MAF carry start_lost.
 		hasInsStop := containsStop(insertedAAs)
 		hasDelStop := containsStop(deletedAAs)
+		var terms []string
 		switch {
 		case hasInsStop && !hasDelStop:
-			result.Consequence = ConsequenceStopGained
+			terms = append(terms, ConsequenceStopGained)
 		case hasDelStop && !hasInsStop:
-			result.Consequence = ConsequenceStopLost
-		case startPos == 1 && (len(deletedAAs) == 0 || deletedAAs[0] == 'M'):
-			result.Consequence = ConsequenceStartLost
-		default:
-			result.Consequence = ConsequenceMissenseVariant
+			terms = append(terms, ConsequenceStopLost)
 		}
+		if startPos == 1 && (len(deletedAAs) == 0 || deletedAAs[0] == 'M') {
+			terms = append(terms, ConsequenceStartLost)
+		}
+		if len(terms) == 0 {
+			terms = append(terms, ConsequenceMissenseVariant)
+		}
+		result.Consequence = joinConsequenceTerms(terms)
 	}
 
 	result.Impact = GetImpact(result.Consequence)

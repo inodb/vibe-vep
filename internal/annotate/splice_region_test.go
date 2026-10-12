@@ -1,6 +1,7 @@
 package annotate
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/inodb/vibe-vep/internal/cache"
@@ -187,5 +188,27 @@ func TestAppendSpliceRegionOrdersBySeverity(t *testing.T) {
 		if got := appendSpliceRegion(in); got != want {
 			t.Errorf("appendSpliceRegion(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// AR c.3_4delinsTT changes the last base of the start codon and turns the
+// codon after it into a stop, so the variant does both things at once.
+func TestMNVCanLoseTheStartAndGainAStop(t *testing.T) {
+	tr := &cache.Transcript{
+		ID: "ENST_MNV", GeneName: "MNV", Chrom: "1", Strand: 1,
+		Start: 1000, End: 1017, CDSStart: 1000, CDSEnd: 1017,
+		Biotype:     "protein_coding",
+		CDSSequence: "ATGGACCATGAATAA",
+		Exons: []cache.Exon{
+			{Number: 1, Start: 1000, End: 1017, CDSStart: 1000, CDSEnd: 1017, Frame: 0},
+		},
+	}
+	tr.BuildCDSIndex()
+	// CDS 3 and 4 are the G of ATG and the G of GAC: ATG GAC -> ATT TAC...
+	// make the second codon a stop by writing TGA.
+	v := &vcf.Variant{Chrom: "1", Pos: 1002, Ref: "GGA", Alt: "TTG"}
+	got := PredictConsequence(v, tr).Consequence
+	if !strings.Contains(got, ConsequenceStartLost) {
+		t.Errorf("Consequence = %q, expected it to name start_lost", got)
 	}
 }
