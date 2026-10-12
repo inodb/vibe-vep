@@ -195,6 +195,23 @@ func utrTermAt(pos int64, t *cache.Transcript) string {
 // the tract into the exon is reported as
 // splice_acceptor_variant,coding_sequence_variant,intron_variant, dropping the
 // tract term that the same span would earn on its own.
+// namedCodingTerms are the terms that say what a variant does to the protein,
+// as opposed to coding_sequence_variant, which says only that it does
+// something.
+var namedCodingTerms = map[string]bool{
+	ConsequenceFrameshiftVariant: true,
+	ConsequenceInframeInsertion:  true,
+	ConsequenceInframeDeletion:   true,
+	ConsequenceMissenseVariant:   true,
+	ConsequenceSynonymousVariant: true,
+	ConsequenceProteinAltering:   true,
+	ConsequenceStopGained:        true,
+	ConsequenceStopLost:          true,
+	ConsequenceStopRetained:      true,
+	ConsequenceStartLost:         true,
+	ConsequenceStartRetained:     true,
+}
+
 var exonicTerms = map[string]bool{
 	ConsequenceCodingSequenceVariant: true,
 	ConsequenceFrameshiftVariant:     true,
@@ -223,6 +240,7 @@ func joinConsequenceTerms(terms []string) string {
 	has5thBase := false
 	hasDonorRegion := false
 	hasExonic := false
+	hasNamedCoding := false
 	for _, t := range terms {
 		if t == "" || seen[t] {
 			continue
@@ -237,6 +255,9 @@ func joinConsequenceTerms(terms []string) string {
 		}
 		if exonicTerms[t] {
 			hasExonic = true
+		}
+		if namedCodingTerms[t] {
+			hasNamedCoding = true
 		}
 		seen[t] = true
 		uniq = append(uniq, t)
@@ -263,6 +284,21 @@ func joinConsequenceTerms(terms []string) string {
 		// term. splice_donor_region_variant and the donor 5th base carry no
 		// such rule and do co-occur with coding_sequence_variant.
 		if hasExonic && t == ConsequencePolypyrimidineTract {
+			continue
+		}
+		// coding_sequence_variant is what VEP says when it knows the variant
+		// alters coding sequence but cannot say how; naming the effect
+		// replaces it. In a VEP111 MSK-IMPACT MAF its 3030 occurrences pair
+		// only with splice, intron and UTR terms -- never with a term that
+		// names the protein change.
+		if hasNamedCoding && t == ConsequenceCodingSequenceVariant {
+			continue
+		}
+		// A span long enough to cover both UTRs still gets one UTR term:
+		// in a VEP111 MSK-IMPACT MAF the two never appear together. The 5'
+		// one wins, as it does for a deletion running from the 5'UTR through
+		// the whole CDS.
+		if seen[Consequence5PrimeUTR] && t == Consequence3PrimeUTR {
 			continue
 		}
 		out = append(out, t)

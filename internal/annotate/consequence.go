@@ -250,7 +250,9 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 				// start codon from inside the CDS, but one starting in the UTR
 				// is caught here first and returned before that point.
 				if variantLeavesCDS(v, t, true) {
-					result.Consequence = ConsequenceStartLost5PrimeUTR
+					result.Consequence = joinConsequenceTerms(
+						append(spanSpliceTerms(v, t), ConsequenceStartLost))
+					result.Impact = GetImpact(firstTerm(result.Consequence))
 					result.HGVSp = ""
 				}
 				return result
@@ -350,7 +352,9 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 			// position. Emitting our own p.Met1? here would win the argument
 			// and lose the comparison.
 			if variantLeavesCDS(v, t, true) {
-				result.Consequence = ConsequenceStartLost5PrimeUTR
+				result.Consequence = joinConsequenceTerms(
+					append(spanSpliceTerms(v, t), ConsequenceStartLost))
+				result.Impact = GetImpact(firstTerm(result.Consequence))
 				result.HGVSp = ""
 			}
 			if result.Consequence == ConsequenceStartLost {
