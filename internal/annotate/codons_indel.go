@@ -389,6 +389,19 @@ func ProteinPositionWithheld(consequence string) bool {
 	return false
 }
 
+// signedHGVSOffset gives a 3' shift the sign VEP reports it with. Internally
+// the offset is a distance along the transcript, always positive; VEP signs it
+// by genomic direction, so a shift along a reverse-strand transcript runs
+// toward lower coordinates and comes out negative. Every one of the 33,858
+// offsets on a forward-strand transcript in a VEP111 MSK-IMPACT MAF is
+// positive, and every one of the 25 on a reverse-strand transcript negative.
+func signedHGVSOffset(offset int, t *cache.Transcript) int {
+	if t != nil && t.IsReverseStrand() {
+		return -offset
+	}
+	return offset
+}
+
 func hasTerm(consequence, term string) bool {
 	for _, t := range splitConsequenceTerms(consequence) {
 		if t == term {

@@ -138,7 +138,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 			CDNAPosition:       result.CDNAPosition,
 			HGVSp:              result.HGVSp,
 			HGVSc:              result.HGVSc,
-			HGVSOffset:         result.HGVSOffset,
+			HGVSOffset:         signedHGVSOffset(result.HGVSOffset, t),
 			ProteinStart:       result.ProteinStart,
 			ProteinEnd:         result.ProteinEnd,
 			PeptideMD5:         peptideMD5(t.CDSSequence),
