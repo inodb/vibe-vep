@@ -217,7 +217,7 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 		dupStart := shiftedIdx - seqLen + 1
 		if dupStart >= 0 && shiftedIdx+1 <= len(t.CDSSequence) &&
 			t.CDSSequence[dupStart:shiftedIdx+1] == string(seq) {
-			return cdsPosRangeStr(dupStart+1, shiftedIdx+1, "dup")
+			return cdsPosRangeStr(t, dupStart+1, shiftedIdx+1, "dup")
 		}
 
 		// Check dup: inserted bases match following bases at shifted position
@@ -225,24 +225,24 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 		afterEnd := afterStart + seqLen
 		if afterStart >= 0 && afterEnd <= len(t.CDSSequence) &&
 			t.CDSSequence[afterStart:afterEnd] == string(seq) {
-			return cdsPosRangeStr(afterStart+1, afterEnd, "dup")
+			return cdsPosRangeStr(t, afterStart+1, afterEnd, "dup")
 		}
 
 		// Plain insertion at shifted CDS position
 		if shiftedIdx+2 <= len(t.CDSSequence) {
 			var buf [128]byte
 			n := copy(buf[:], "c.")
-			n += putInt64(buf[n:], int64(shiftedIdx+1))
+			n += putInt64(buf[n:], cdsDisplayPos(int64(shiftedIdx+1), t))
 			buf[n] = '_'
 			n++
-			n += putInt64(buf[n:], int64(shiftedIdx+2))
+			n += putInt64(buf[n:], cdsDisplayPos(int64(shiftedIdx+2), t))
 			n += copy(buf[n:], "ins")
 			n += copy(buf[n:], seq)
 			return string(buf[:n])
 		}
 		// Insertion at end of CDS: second flanking position is *1 (3'UTR)
 		if shiftedIdx+1 == len(t.CDSSequence) {
-			return prefix + strconv.FormatInt(int64(shiftedIdx+1), 10) + "_*1ins" + string(seq)
+			return prefix + strconv.FormatInt(cdsDisplayPos(int64(shiftedIdx+1), t), 10) + "_*1ins" + string(seq)
 		}
 	}
 
@@ -278,9 +278,9 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 	dup := checkDuplication(v, t, insertedSeq)
 	if dup.isDup {
 		if dup.cdsStart == dup.cdsEnd {
-			return "c." + strconv.FormatInt(dup.cdsStart, 10) + "dup"
+			return "c." + strconv.FormatInt(cdsDisplayPos(dup.cdsStart, t), 10) + "dup"
 		}
-		return "c." + strconv.FormatInt(dup.cdsStart, 10) + "_" + strconv.FormatInt(dup.cdsEnd, 10) + "dup"
+		return "c." + strconv.FormatInt(cdsDisplayPos(dup.cdsStart, t), 10) + "_" + strconv.FormatInt(cdsDisplayPos(dup.cdsEnd, t), 10) + "dup"
 	}
 
 	// Check for duplication at splice junctions where one flanking position
@@ -295,9 +295,9 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 
 	if sjDup := checkSpliceJunctionDup(v, t, insertedSeq); sjDup.isDup {
 		if sjDup.cdsStart == sjDup.cdsEnd {
-			return "c." + strconv.FormatInt(sjDup.cdsStart, 10) + "dup"
+			return "c." + strconv.FormatInt(cdsDisplayPos(sjDup.cdsStart, t), 10) + "dup"
 		}
-		return "c." + strconv.FormatInt(sjDup.cdsStart, 10) + "_" + strconv.FormatInt(sjDup.cdsEnd, 10) + "dup"
+		return "c." + strconv.FormatInt(cdsDisplayPos(sjDup.cdsStart, t), 10) + "_" + strconv.FormatInt(cdsDisplayPos(sjDup.cdsEnd, t), 10) + "dup"
 	}
 
 	// Both flanks intronic: shift and test for a duplication against the
@@ -390,11 +390,11 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 			// Write RC of extra alt directly into the output buffer for reverse strand.
 			var buf [128]byte
 			n := copy(buf[:], "c.")
-			n += putInt64(buf[n:], delStartCDS)
+			n += putInt64(buf[n:], cdsDisplayPos(delStartCDS, t))
 			if delStartCDS != delEndCDS {
 				buf[n] = '_'
 				n++
-				n += putInt64(buf[n:], delEndCDS)
+				n += putInt64(buf[n:], cdsDisplayPos(delEndCDS, t))
 			}
 			n += copy(buf[n:], "delins")
 			if t.IsReverseStrand() {
@@ -423,7 +423,7 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 			if g := genomicSpanCodons(v, t, delStartCDS, delEndCDS); g != "" {
 				result.CodonChange = g
 			}
-			return formatDeletionAcrossDonor(sc, ee, k)
+			return formatDeletionAcrossDonor(t, sc, ee, k)
 		}
 
 		// Pure deletion: apply 3' shift (stops at exon boundary)
@@ -437,7 +437,7 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 			int64(sEnd+1-result.HGVSOffset)); g != "" {
 			result.CodonChange = g
 		}
-		return cdsPosRangeStr(sStart+1, sEnd+1, "del")
+		return cdsPosRangeStr(t, sStart+1, sEnd+1, "del")
 	}
 
 	// Before falling back, a purely intronic pure deletion may still 3'-shift
@@ -445,7 +445,7 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 	if len(extraAlt) == 0 {
 		if sStart, sEnd, k := shiftedIntronicDelCDS(v, t); sStart > 0 {
 			result.HGVSOffset = k
-			return cdsPosRangeStr(int(sStart), int(sEnd), "del")
+			return cdsPosRangeStr(t, int(sStart), int(sEnd), "del")
 		}
 	}
 
@@ -607,11 +607,11 @@ func insertionShiftIntronToExon(v *vcf.Variant, t *cache.Transcript, insertedSeq
 	}
 	if match && start >= eCDS {
 		if L == 1 {
-			return "c." + strconv.FormatInt(end, 10) + "dup", k, true
+			return "c." + strconv.FormatInt(cdsDisplayPos(end, t), 10) + "dup", k, true
 		}
-		return "c." + strconv.FormatInt(start, 10) + "_" + strconv.FormatInt(end, 10) + "dup", k, true
+		return "c." + strconv.FormatInt(cdsDisplayPos(start, t), 10) + "_" + strconv.FormatInt(cdsDisplayPos(end, t), 10) + "dup", k, true
 	}
-	return "c." + strconv.FormatInt(end, 10) + "_" + strconv.FormatInt(end+1, 10) + "ins" + rotated, k, true
+	return "c." + strconv.FormatInt(cdsDisplayPos(end, t), 10) + "_" + strconv.FormatInt(cdsDisplayPos(end+1, t), 10) + "ins" + rotated, k, true
 }
 
 // insertionShiftIntoIntron continues an insertion's 3' shift past the end of an
@@ -686,9 +686,9 @@ func formatInsertionInIntron(rotated []byte, exon *cache.Exon, t *cache.Transcri
 	}
 	pos := func(p int64) string {
 		if p <= exonEndCDS {
-			return strconv.FormatInt(p, 10)
+			return strconv.FormatInt(cdsDisplayPos(p, t), 10)
 		}
-		return strconv.FormatInt(exonEndCDS, 10) + "+" + strconv.FormatInt(p-exonEndCDS, 10)
+		return strconv.FormatInt(cdsDisplayPos(exonEndCDS, t), 10) + "+" + strconv.FormatInt(p-exonEndCDS, 10)
 	}
 
 	end := exonEndCDS + int64(k)
@@ -969,15 +969,15 @@ func deletionShiftIntoIntron(v *vcf.Variant, t *cache.Transcript) (startCDS, exo
 
 // formatDeletionAcrossDonor renders a deletion that has shifted k bases past the
 // end of an exon, keeping whatever exonic part remains.
-func formatDeletionAcrossDonor(startCDS, exonEndCDS int64, k int) string {
+func formatDeletionAcrossDonor(t *cache.Transcript, startCDS, exonEndCDS int64, k int) string {
 	if startCDS <= exonEndCDS {
 		// Part of the deletion is still exonic: c.START_EXONEND+k del
-		return "c." + strconv.FormatInt(startCDS, 10) + "_" +
-			strconv.FormatInt(exonEndCDS, 10) + "+" + strconv.Itoa(k) + "del"
+		return "c." + strconv.FormatInt(cdsDisplayPos(startCDS, t), 10) + "_" +
+			strconv.FormatInt(cdsDisplayPos(exonEndCDS, t), 10) + "+" + strconv.Itoa(k) + "del"
 	}
 	// Entirely intronic now: c.EXONEND+a_EXONEND+k del
 	a := int(startCDS - exonEndCDS)
-	base := "c." + strconv.FormatInt(exonEndCDS, 10) + "+"
+	base := "c." + strconv.FormatInt(cdsDisplayPos(exonEndCDS, t), 10) + "+"
 	if a == k {
 		return base + strconv.Itoa(k) + "del"
 	}
@@ -1111,16 +1111,26 @@ func shiftedIntronicDelCDS(v *vcf.Variant, t *cache.Transcript) (cdsStart, cdsEn
 	return cdsStart, cdsStart + int64(refLen) - 1, k
 }
 
+// cdsDisplayPos turns a CDS position into the number an HGVSc string shows.
+// Internally a CDS position counts from the notional complete first codon, so
+// on a 5'-incomplete (cds_start_NF) transcript it includes the bases GENCODE
+// never annotated. VEP numbers c. from the first base that is actually there,
+// so those padded bases come back off before the number is rendered. For every
+// transcript with a complete start -- all but ~5% of GENCODE -- this is a no-op.
+func cdsDisplayPos(cdsPos int64, t *cache.Transcript) int64 {
+	return cdsPos - int64(t.CDSStartOffset)
+}
+
 // cdsPosRangeStr builds a CDS position string like "c.34del", "c.34_36del",
 // "c.35dup", etc. using a stack-allocated buffer for zero intermediate allocations.
-func cdsPosRangeStr(start, end int, suffix string) string {
+func cdsPosRangeStr(t *cache.Transcript, start, end int, suffix string) string {
 	var buf [64]byte
 	n := copy(buf[:], "c.")
-	n += putInt64(buf[n:], int64(start))
+	n += putInt64(buf[n:], cdsDisplayPos(int64(start), t))
 	if start != end {
 		buf[n] = '_'
 		n++
-		n += putInt64(buf[n:], int64(end))
+		n += putInt64(buf[n:], cdsDisplayPos(int64(end), t))
 	}
 	n += copy(buf[n:], suffix)
 	return string(buf[:n])
@@ -1174,7 +1184,7 @@ func exonicHGVScPos(pos int64, exon *cache.Exon, t *cache.Transcript) string {
 	if exon.IsCoding() && pos >= exon.CDSStart && pos <= exon.CDSEnd {
 		cdsPos := GenomicToCDS(pos, t)
 		if cdsPos > 0 {
-			return strconv.FormatInt(cdsPos, 10)
+			return strconv.FormatInt(cdsDisplayPos(cdsPos, t), 10)
 		}
 	}
 
@@ -1335,7 +1345,7 @@ func exonBoundaryHGVScPos(genomicPos int64, exon *cache.Exon, t *cache.Transcrip
 	if exon.IsCoding() && genomicPos >= exon.CDSStart && genomicPos <= exon.CDSEnd {
 		cdsPos := GenomicToCDS(genomicPos, t)
 		if cdsPos > 0 {
-			return strconv.FormatInt(cdsPos, 10)
+			return strconv.FormatInt(cdsDisplayPos(cdsPos, t), 10)
 		}
 	}
 
