@@ -793,9 +793,23 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 			if stopCodonCDSPos > 0 && result.CDSPosition > 0 {
 				indelEndCDS := cdsSpanEnd(v, t, result.CDSPosition+int64(refLen)-1)
 				if indelEndCDS >= stopCodonCDSPos {
-					result.Consequence = ConsequenceStopLost3PrimeUTR
+					// 3_prime_UTR_variant is earned by leaving the CDS, not
+					// by reaching the stop codon: a deletion that takes part
+					// of the stop but stops there keeps its length term, and
+					// VEP writes stop_lost,inframe_deletion. The split is
+					// exact over the 94 in-frame stop-losing deletions in a
+					// VEP111 MSK-IMPACT MAF -- the 90 running past the stop
+					// carry the UTR term, the 4 ending inside it never do.
 					if variantLeavesCDS(v, t, false) {
+						result.Consequence = ConsequenceStopLost3PrimeUTR
 						result.SuppressHGVSp = true
+					} else {
+						lengthTerm := ConsequenceInframeDeletion
+						if isDelIns(v.Ref, v.Alt) {
+							lengthTerm = ConsequenceProteinAltering
+						}
+						result.Consequence = joinConsequenceTerms(
+							[]string{ConsequenceStopLost, lengthTerm})
 					}
 				}
 			}

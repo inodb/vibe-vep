@@ -37,9 +37,24 @@ func spliceSpanProteinTerms(v *vcf.Variant, t *cache.Transcript) []string {
 	if t.FindExon(start) == nil || t.FindExon(end) == nil {
 		return nil
 	}
-	// A deletion reaching into a UTR is described by the boundary it crosses,
-	// not by a length term, and those paths handle it already.
-	if GenomicToCDS(start, t) < 1 || GenomicToCDS(end, t) < 1 {
+	// A deletion reaching into a UTR is described by the boundary it crosses
+	// rather than by a length term, because VEP has no second CDS coordinate
+	// to measure between. Running off the 3' end takes the stop codon with it:
+	// MEN1 c.1242_*39del is splice_acceptor_variant,splice_donor_variant,
+	// stop_lost,splice_donor_5th_base_variant,3_prime_UTR_variant,
+	// intron_variant. The 5' end is left to the start_lost paths, which
+	// already handle it.
+	fiveEnd, threeEnd := start, end
+	if !t.IsForwardStrand() {
+		fiveEnd, threeEnd = end, start
+	}
+	if GenomicToCDS(fiveEnd, t) < 1 {
+		return nil
+	}
+	if GenomicToCDS(threeEnd, t) < 1 {
+		if utrTermAt(threeEnd, t) == Consequence3PrimeUTR {
+			return []string{ConsequenceStopLost}
+		}
 		return nil
 	}
 
