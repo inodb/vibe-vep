@@ -191,8 +191,12 @@ func codingBaseAt(pos int64, t *cache.Transcript) (byte, bool) {
 // whose eight-base shift lands entirely inside the next exon, came out
 // unshifted. deleted may be nil, and the cache is still asked first.
 func genomicDeletionShift(delStart, delEnd int64, t *cache.Transcript, deleted func(int64) (byte, bool)) int {
-	if delEnd < delStart {
-		return 0
+	// formatHGVScDeletion hands these over in transcript order, so on the
+	// reverse strand the first is the larger. Put them back in genomic order
+	// before picking the ends -- the early return this replaces meant no
+	// reverse-strand deletion ever reached the loop below.
+	if delStart > delEnd {
+		delStart, delEnd = delEnd, delStart
 	}
 	// head is the 5'-most deleted base in transcript order, tail the 3'-most.
 	head, tail, step := delStart, delEnd, int64(1)
