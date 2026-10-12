@@ -454,6 +454,37 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 		// Pure deletion: apply 3' shift (stops at exon boundary)
 		maxIdx := cdsExonEndIdx(int(delEndCDS-1), t)
 		sStart, sEnd := shiftDeletionThreePrime(int(delStartCDS-1), int(delEndCDS-1), t.CDSSequence, maxIdx)
+
+		// shiftDeletionThreePrime indexes CDSSequence, so it can go no further
+		// than the last coding base. A deletion that reaches it may still keep
+		// moving into the 3'UTR, where HGVS numbers the bases *1, *2 and so
+		// on: VEP has PIK3CA c.3204_*1del and EP300 c.*2_*3del, which stopping
+		// at the stop codon rendered as c.3203_3207del and c.7244_7245del.
+		// codingBaseAt reads the stored 3' tail, so the genomic shift sees the
+		// sequence this one cannot.
+		if sEnd == len(t.CDSSequence)-1 {
+			k := genomicDeletionShift(delStartGenomic, delEndGenomic, t,
+				func(pos int64) (byte, bool) { return refAlleleBase(pos, v, t) })
+			if k > sStart-int(delStartCDS-1) {
+				d := int64(k)
+				if t.IsReverseStrand() {
+					d = -d
+				}
+				gs, ge := delStartGenomic+d, delEndGenomic+d
+				startStr, endStr := genomicToHGVScPos(gs, t), genomicToHGVScPos(ge, t)
+				if startStr != "" && endStr != "" {
+					result.HGVSOffset = k
+					result.CodonChange = formatCodonChangeCDS(t.CDSSequence, delStartCDS, delEndCDS, "")
+					if g := genomicSpanCodons(v, t, delStartCDS, delEndCDS); g != "" {
+						result.CodonChange = g
+					}
+					if gs == ge {
+						return prefix + startStr + "del"
+					}
+					return prefix + startStr + "_" + endStr + "del"
+				}
+			}
+		}
 		result.HGVSOffset = sStart - int(delStartCDS-1)
 		// Codons are expanded around the unshifted deleted range (see above).
 		result.CodonChange = formatCodonChangeCDS(t.CDSSequence,

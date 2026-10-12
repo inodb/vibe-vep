@@ -486,6 +486,13 @@ func relabelStopLostWhenItShiftsClear(v *vcf.Variant, t *cache.Transcript, resul
 		hasTerm(result.Consequence, ConsequenceSpliceAcceptor) {
 		return
 	}
+	// Shifting the description clear of the stop codon only means the stop
+	// survives if the reading frame does. EP300 22:41574959 AG> removes the
+	// last two bases of the stop codon: HGVS writes it three bases later, at
+	// c.*2_*3del, but the frame is gone and VEP keeps stop_lost.
+	if hasTerm(result.Consequence, ConsequenceFrameshiftVariant) {
+		return
+	}
 	shift := int64(result.HGVSOffset)
 	if t.IsReverseStrand() {
 		shift = -shift
