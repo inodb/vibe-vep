@@ -272,6 +272,9 @@ func buildAnnotationSummary(variant string, v *vcf.Variant, anns []*annotate.Ann
 // buildTranscriptConsequenceSummary builds a single transcript consequence summary.
 func buildTranscriptConsequenceSummary(ann *annotate.Annotation, v *vcf.Variant) GNTranscriptConsequenceSummary {
 	aminoAcids := formatAminoAcidsVEP(ann.AminoAcidChange)
+	if annotate.ProteinUndescribableHGVSc(ann.HGVSc) {
+		aminoAcids = "" // no protein description, so nothing to build one from
+	}
 	aaRef, aaAlt := splitAminoAcids(aminoAcids)
 
 	tcs := GNTranscriptConsequenceSummary{
