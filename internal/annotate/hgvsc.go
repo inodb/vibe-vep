@@ -371,6 +371,84 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 	return prefix + afterStr + "_" + beforeStr + "ins" + shifted
 }
 
+// proteinUndescribableHGVSc reports whether VEP declines to name a protein
+// change for a variant written as this HGVSc.
+//
+// It names one only where the variant's coordinates sit in the coding
+// sequence. An insertion is the exception: its two coordinates are the bases
+// it falls between, so one of them may be the neighbouring intron base
+// without any coding base being touched, and one coordinate inside the CDS is
+// enough.
+//
+// This holds without exception across a VEP111 MSK-IMPACT MAF. Of the 3,835
+// variants whose HGVSc range leaves the CDS, the only 54 given an HGVSp are
+// insertions keeping one coordinate inside it -- 48 written c.N_N+1ins and 6
+// c.N-1_Nins. Every deletion, duplication, delins and inversion reaching an
+// intron or a UTR has none, and so does every single-coordinate variant whose
+// one position is outside the CDS, all 13,348 of them.
+func proteinUndescribableHGVSc(hgvsc string) bool {
+	if i := strings.Index(hgvsc, ":c."); i >= 0 {
+		hgvsc = hgvsc[i+3:]
+	} else if strings.HasPrefix(hgvsc, "c.") {
+		hgvsc = hgvsc[2:]
+	} else {
+		// No HGVSc, or an n. position on a non-coding transcript, which has
+		// no protein to describe either way.
+		return false
+	}
+
+	// The coordinates run up to the operator, which is lower case; a
+	// substitution has none and stops at its upper-case reference base.
+	end, isIns := len(hgvsc), false
+	for j := 0; j < len(hgvsc); j++ {
+		c := hgvsc[j]
+		if c >= 'a' && c <= 'z' {
+			end, isIns = j, strings.HasPrefix(hgvsc[j:], "ins")
+			break
+		}
+		if c >= 'A' && c <= 'Z' || c == '=' {
+			end = j
+			break
+		}
+	}
+
+	anyCDS, allCDS := false, true
+	for rest := hgvsc[:end]; ; {
+		part := rest
+		if k := strings.IndexByte(rest, '_'); k >= 0 {
+			part, rest = rest[:k], rest[k+1:]
+		} else {
+			rest = ""
+		}
+		if coordinateIsCoding(part) {
+			anyCDS = true
+		} else {
+			allCDS = false
+		}
+		if rest == "" {
+			break
+		}
+	}
+	if isIns {
+		return !anyCDS
+	}
+	return !allCDS
+}
+
+// coordinateIsCoding reports whether an HGVS c. coordinate names a coding
+// base: plain digits, with no intron offset and no UTR marker.
+func coordinateIsCoding(p string) bool {
+	if p == "" || p[0] == '*' || p[0] == '-' {
+		return false
+	}
+	for j := 0; j < len(p); j++ {
+		if p[j] < '0' || p[j] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // isInversion reports whether alt is the reverse complement of ref, compared
 // in place rather than against an allocated reverse complement.
 func isInversion(ref, alt string) bool {
