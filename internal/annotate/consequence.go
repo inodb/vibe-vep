@@ -221,6 +221,23 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 				startCodonStart, startCodonEnd = t.CDSEnd-2, t.CDSEnd
 			}
 			if utrConsequence == Consequence5PrimeUTR &&
+				variantEnd >= startCodonStart && v.Pos <= startCodonEnd &&
+				!startCodonPlaceable(v, t) {
+				// VEP needs a CDS coordinate for the variant's own 5' end
+				// before it will say the start is lost, and a deletion
+				// reaching the ATG from an intron or from outside the
+				// transcript has none. It names the regions the span covers
+				// instead: NOTCH3 19:15311647-15311872 removes the ATG and is
+				// still only coding_sequence_variant,5_prime_UTR_variant. Of
+				// the 51 variants in a VEP111 MSK-IMPACT MAF whose 5' end
+				// cannot be placed in an exon, not one carries start_lost.
+				if joined := joinConsequenceTerms(spanSpliceTerms(v, t)); joined != "" {
+					result.Consequence = joined
+					result.Impact = GetImpact(firstTerm(joined))
+					return result
+				}
+			}
+			if utrConsequence == Consequence5PrimeUTR &&
 				variantEnd >= startCodonStart && v.Pos <= startCodonEnd {
 				result.Consequence = ConsequenceStartLost
 				result.ProteinPosition = 1
@@ -281,6 +298,21 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 		startCodonStart, startCodonEnd := t.CDSStart, t.CDSStart+2
 		if !t.IsForwardStrand() {
 			startCodonStart, startCodonEnd = t.CDSEnd-2, t.CDSEnd
+		}
+		if indelEnd >= startCodonStart && v.Pos <= startCodonEnd &&
+			!startCodonPlaceable(v, t) {
+			// See startCodonPlaceable: with no CDS coordinate for its own 5'
+			// end VEP declines start_lost and names the regions the span
+			// covers. TP53 17:7579507-7580166 reaches the ATG from inside
+			// intron 1 and is splice_acceptor_variant,splice_donor_variant,
+			// splice_donor_5th_base_variant,coding_sequence_variant,
+			// 5_prime_UTR_variant,intron_variant.
+			if joined := joinConsequenceTerms(spanSpliceTerms(v, t)); joined != "" {
+				result.Consequence = joined
+				result.Impact = GetImpact(firstTerm(joined))
+				result.HGVSp = ""
+				return result
+			}
 		}
 		if indelEnd >= startCodonStart && v.Pos <= startCodonEnd {
 			result.Consequence = ConsequenceStartLost
@@ -1972,4 +2004,17 @@ func insertionInsideStartCodon(v *vcf.Variant, t *cache.Transcript) bool {
 		start, end = t.CDSEnd-2, t.CDSEnd
 	}
 	return v.Pos >= start && v.Pos+1 <= end
+}
+
+// startCodonPlaceable reports whether the variant's 5'-most base, in transcript
+// orientation, lies in an exon of the transcript. VEP derives translation_start
+// from that base; an intronic or out-of-transcript 5' end leaves it undefined,
+// and every consequence that needs it -- start_lost above all -- is then
+// unavailable however much coding sequence the variant goes on to remove.
+func startCodonPlaceable(v *vcf.Variant, t *cache.Transcript) bool {
+	five := v.Pos
+	if !t.IsForwardStrand() && len(v.Ref) > 0 {
+		five = v.Pos + int64(len(v.Ref)) - 1
+	}
+	return t.FindExon(five) != nil
 }
