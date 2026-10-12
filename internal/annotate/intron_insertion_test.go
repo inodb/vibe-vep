@@ -96,7 +96,7 @@ func TestGenomicDeletionShiftAcrossAcceptor(t *testing.T) {
 	tr := intronFlankTranscript(1)
 	// Flank positions: 1090..1099 hold TTTTTTTCAG, so 1093 and 1094 are both T
 	// and the base past the end (1095) is T as well.
-	if got := genomicDeletionShift(1093, 1094, tr); got != 2 {
+	if got := genomicDeletionShift(1093, 1094, tr, nil); got != 2 {
 		t.Errorf("shift = %d, want 2 (the T run ends at 1096)", got)
 	}
 }
@@ -105,7 +105,7 @@ func TestGenomicDeletionShiftStopsWithoutSequence(t *testing.T) {
 	tr := intronFlankTranscript(1)
 	// 1050 is in the middle of the intron, past both flanks, so there is no
 	// sequence to compare and the deletion cannot be shifted.
-	if got := genomicDeletionShift(1050, 1052, tr); got != 0 {
+	if got := genomicDeletionShift(1050, 1052, tr, nil); got != 0 {
 		t.Errorf("shift = %d, want 0 beyond the cached flank", got)
 	}
 }
@@ -120,7 +120,7 @@ func TestGenomicDeletionShiftReverseStrand(t *testing.T) {
 	// (A) repeats just past its end (A). It stops there, because the next
 	// comparison is the G at 1012 against the T at CDS 14.
 	tr := intronFlankTranscript(-1)
-	if got := genomicDeletionShift(1012, 1013, tr); got != 1 {
+	if got := genomicDeletionShift(1012, 1013, tr, nil); got != 1 {
 		t.Errorf("shift = %d, want 1", got)
 	}
 }
@@ -170,7 +170,7 @@ func TestGenomicDeletionShiftIntoThe3PrimeUTR(t *testing.T) {
 	// *4. Without the UTR tail there is nothing to compare against and the
 	// deletion stays put, which is how CALR c.1216_*32del missed VEP's
 	// c.1219_*35del.
-	if got := genomicDeletionShift(1017, 1017, tr); got != 3 {
+	if got := genomicDeletionShift(1017, 1017, tr, nil); got != 3 {
 		t.Errorf("shift = %d, want 3", got)
 	}
 }

@@ -464,7 +464,8 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 		// describe one arrangement of exon and intron and are approximations
 		// of the same rule; they answer only where the genomic one has no
 		// sequence to compare and returns nothing.
-		k := genomicDeletionShift(delStartGenomic, delEndGenomic, t)
+		k := genomicDeletionShift(delStartGenomic, delEndGenomic, t,
+			func(pos int64) (byte, bool) { return refAlleleBase(pos, v, t) })
 		if k == 0 {
 			k, _ = straddlingDeletionShift(v, t)
 		}

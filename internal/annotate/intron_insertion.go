@@ -116,6 +116,21 @@ func intronicInsertionDup(v *vcf.Variant, t *cache.Transcript, insertedSeq strin
 	return "c." + startStr + "_" + endStr + "dup", true
 }
 
+// refAlleleBase reads a base out of a variant's own reference allele, in coding
+// orientation. A deletion's bases are all spelled out there, so this reaches
+// positions the transcript cache does not hold.
+func refAlleleBase(pos int64, v *vcf.Variant, t *cache.Transcript) (byte, bool) {
+	i := pos - v.Pos
+	if i < 0 || int(i) >= len(v.Ref) {
+		return 0, false
+	}
+	b := v.Ref[i]
+	if t.IsReverseStrand() {
+		b = Complement(b)
+	}
+	return b, true
+}
+
 // codingBaseAt returns the base at a genomic position in coding orientation,
 // from the CDS where the position is exonic and from the cached intron flanks
 // otherwise. It reports false wherever vibe-vep has no sequence - past the
@@ -167,9 +182,15 @@ func codingBaseAt(pos int64, t *cache.Transcript) (byte, bool) {
 // 874 rows where vibe-vep and VEP disagree on a deletion's HGVSc, 790 have
 // vibe-vep reporting no shift at all against VEP's 1 to 7 bases.
 //
-// It stops wherever codingBaseAt runs out of sequence, so a deletion starting
-// deeper in an intron than the 100bp flank reaches still goes unshifted.
-func genomicDeletionShift(delStart, delEnd int64, t *cache.Transcript) int {
+// The 3'-most base it has to compare always lies just past the deletion, so it
+// comes from the cache. The 5'-most one is a base the deletion removes, and
+// deleted carries those: the variant's own reference allele spells out every
+// one of them, however deep in an intron it sits. Without it a deletion
+// starting past the 100bp flank could not shift at all, which is why STK11
+// c.921-473_977del, whose first deleted base is 481 bases into the intron and
+// whose eight-base shift lands entirely inside the next exon, came out
+// unshifted. deleted may be nil, and the cache is still asked first.
+func genomicDeletionShift(delStart, delEnd int64, t *cache.Transcript, deleted func(int64) (byte, bool)) int {
 	if delEnd < delStart {
 		return 0
 	}
@@ -182,6 +203,9 @@ func genomicDeletionShift(delStart, delEnd int64, t *cache.Transcript) int {
 	shift := 0
 	for shift < maxShift {
 		hb, ok := codingBaseAt(head, t)
+		if !ok && deleted != nil {
+			hb, ok = deleted(head)
+		}
 		if !ok {
 			break
 		}
