@@ -35,14 +35,14 @@ func nameStartLostSpan(t *cache.Transcript, result *ConsequenceResult) {
 	}
 
 	// A duplication or insertion names the codon after the block it follows.
-	start, end := codonOf(first), codonOf(last)
+	start, end := codonOfCDS(first), codonOfCDS(last)
 	netLen := insLen - (last - first + 1)
 	switch op {
 	case "dup":
-		start, end = codonOf(last+1), codonOf(last)
+		start, end = codonOfCDS(last+1), codonOfCDS(last)
 		netLen = last - first + 1
 	case "ins":
-		start, end = codonOf(last), codonOf(first)
+		start, end = codonOfCDS(last), codonOfCDS(first)
 		netLen = insLen
 	}
 	if start == end {
@@ -78,8 +78,8 @@ func residueAt(t *cache.Transcript, pos int64) byte {
 	return TranslateCodon(codon)
 }
 
-// codonOf gives the protein position a CDS coordinate falls in.
-func codonOf(cds int64) int64 { return (cds + 2) / 3 }
+// codonOfCDS gives the protein position a CDS coordinate falls in.
+func codonOfCDS(cds int64) int64 { return (cds + 2) / 3 }
 
 // cdsSpanOfHGVSc reads the coding coordinates out of an HGVSc, along with the
 // operator and how many bases it inserts. It reports false unless both
