@@ -3,6 +3,7 @@ package annotate
 import (
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/vcf"
+	"strings"
 )
 
 // formatCodonChangeCDS renders the Codons string Ensembl VEP reports for an
@@ -360,6 +361,34 @@ func splitConsequenceTerms(consequence string) []string {
 }
 
 // hasTerm reports whether a rendered consequence contains the given term.
+// ProteinPositionWithheld reports whether VEP declines to give a variant a
+// protein position at all.
+//
+// It does so for a variant that reaches into the 5'UTR and names nothing
+// beyond losing the start codon or touching the coding sequence: of the 166
+// rows in a VEP111 MSK-IMPACT MAF whose consequence is 5_prime_UTR_variant
+// alone, or with start_lost or coding_sequence_variant and nothing else, 164
+// carry no position of VEP's own and the annotation pipeline falls back to
+// the input MAF. The two that do carry one take it from an HGVSp in the
+// p.Met1_?9 form that vibe-vep does not write. Every combination that adds a
+// splice or intron term is given a position.
+//
+// The start codon is gone or unreachable in these, so there is no frame to
+// count residues from.
+func ProteinPositionWithheld(consequence string) bool {
+	if !hasTerm(consequence, Consequence5PrimeUTR) {
+		return false
+	}
+	switch strings.Count(consequence, ",") {
+	case 0:
+		return true
+	case 1:
+		return hasTerm(consequence, ConsequenceStartLost) ||
+			hasTerm(consequence, ConsequenceCodingSequenceVariant)
+	}
+	return false
+}
+
 func hasTerm(consequence, term string) bool {
 	for _, t := range splitConsequenceTerms(consequence) {
 		if t == term {

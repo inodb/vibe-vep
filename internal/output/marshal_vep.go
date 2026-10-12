@@ -92,6 +92,9 @@ func MarshalVEPAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotat
 // protein_start 1169 alongside its own p.I1170Sfs*23. Falls back to the HGVS
 // position when the unshifted one was not computed (non-coding paths).
 func proteinRange(ann *annotate.Annotation) (start, end int64) {
+	if annotate.ProteinPositionWithheld(ann.Consequence) {
+		return 0, 0
+	}
 	start = ann.ProteinStart
 	if start == 0 {
 		start = ann.ProteinPosition
