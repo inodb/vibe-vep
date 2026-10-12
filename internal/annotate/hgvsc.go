@@ -676,11 +676,20 @@ func insertionShiftIntronToExon(v *vcf.Variant, t *cache.Transcript, insertedSeq
 			match = false
 		}
 	}
-	if match && start >= eCDS {
-		if L == 1 {
-			return "c." + strconv.FormatInt(end, 10) + "dup", k, true
+	// A duplication may begin before the exon does. baseAt already reads
+	// those bases, and refusing to name them left EGFR c.2284-5_2290dup --
+	// twelve bases, five of them intronic -- as c.2290_2291insTCCAGGAAGCCT.
+	axisPos := func(p int64) string {
+		if p >= eCDS {
+			return strconv.FormatInt(p, 10)
 		}
-		return "c." + strconv.FormatInt(start, 10) + "_" + strconv.FormatInt(end, 10) + "dup", k, true
+		return strconv.FormatInt(eCDS, 10) + "-" + strconv.FormatInt(eCDS-p, 10)
+	}
+	if match {
+		if L == 1 {
+			return "c." + axisPos(end) + "dup", k, true
+		}
+		return "c." + axisPos(start) + "_" + axisPos(end) + "dup", k, true
 	}
 	return "c." + strconv.FormatInt(end, 10) + "_" + strconv.FormatInt(end+1, 10) + "ins" + rotated, k, true
 }
