@@ -60,8 +60,13 @@ func TestCorner_InframeInsertionCreatesStop(t *testing.T) {
 	v := &vcf.Variant{Chrom: "1", Pos: 1008, Ref: "A", Alt: "ATAA"}
 	result := PredictConsequence(v, tr)
 
-	assert.Equal(t, ConsequenceStopGained, result.Consequence,
-		"in-frame insertion creating stop should be stop_gained")
+	// Whole codons inserted at a codon boundary, so nothing is replaced and
+	// VEP names the insertion alongside the stop - as it does for the three
+	// -/TAACAA-shaped rows in a VEP111 MSK-IMPACT MAF. It writes stop_gained
+	// on its own only where the inserted bases take over a reference codon,
+	// which is what dropsLengthTerm tests.
+	assert.Equal(t, ConsequenceStopGainedInframeIns, result.Consequence,
+		"an insertion of whole codons keeps the insertion term beside stop_gained")
 }
 
 // --- Pattern: Deletion removing stop codon ---

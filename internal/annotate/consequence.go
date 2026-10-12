@@ -713,7 +713,11 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 			// p.H707_H712delinsQCF, and VEP puts stop_gained on only 30 of 776
 			// in-frame delins variants (3.9%).
 			if !isDelIns(v.Ref, v.Alt) && indelCreatesStop(v, t, result.CDSPosition) {
-				result.Consequence = ConsequenceStopGained
+				// The length term stays, as it does for the deletion branch
+				// below: VEP writes stop_gained,inframe_insertion. Whether it
+				// is dropped again is decided from the codons once those are
+				// known, by addStopGainedFromCodons.
+				result.Consequence = ConsequenceStopGainedInframeIns
 			}
 		} else {
 			result.Consequence = ConsequenceInframeDeletion

@@ -40,6 +40,7 @@ const (
 	ConsequenceStopLost3PrimeUTR    = "stop_lost,3_prime_UTR_variant"
 	ConsequenceStartLost5PrimeUTR   = "start_lost,5_prime_UTR_variant"
 	ConsequenceStopGainedInframeDel = "stop_gained,inframe_deletion"
+	ConsequenceStopGainedInframeIns = "stop_gained,inframe_insertion"
 	ConsequenceFrameshiftStopLost   = "frameshift_variant,stop_lost"
 
 	// MODIFIER impact

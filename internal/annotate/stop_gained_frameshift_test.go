@@ -172,3 +172,23 @@ func TestStopLostRelabelledWhenItShiftsClear(t *testing.T) {
 		t.Errorf("Consequence = %q, want %q", r2.Consequence, want)
 	}
 }
+
+// A consequence that already names stop_gained still gets the length-term
+// decision: the branch that classifies an in-frame insertion now emits both
+// terms and leaves the choice to the codons.
+func TestStopGainedAlreadyPresentStillDropsTheLengthTerm(t *testing.T) {
+	r := &ConsequenceResult{
+		Consequence: ConsequenceStopGainedInframeIns,
+		CodonChange: "tct/tGATGGTCCCAGAGTTct", // takes over the reference codon
+	}
+	addStopGainedFromCodons(r)
+	if r.Consequence != ConsequenceStopGained {
+		t.Errorf("Consequence = %q, want %q", r.Consequence, ConsequenceStopGained)
+	}
+	// Whole codons added at a boundary keep it.
+	r2 := &ConsequenceResult{Consequence: ConsequenceStopGainedInframeIns, CodonChange: "-/TAACAA"}
+	addStopGainedFromCodons(r2)
+	if r2.Consequence != ConsequenceStopGainedInframeIns {
+		t.Errorf("Consequence = %q, want %q", r2.Consequence, ConsequenceStopGainedInframeIns)
+	}
+}

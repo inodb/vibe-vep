@@ -236,9 +236,9 @@ func addStopGainedFromCodons(result *ConsequenceResult) {
 	if !coding {
 		return
 	}
-	if hasTerm(result.Consequence, ConsequenceStopGained) {
-		return
-	}
+	// A consequence that already names stop_gained still needs the length-term
+	// decision below, so this only skips re-adding the term.
+	alreadyStopGained := hasTerm(result.Consequence, ConsequenceStopGained)
 	slash := -1
 	for i := 0; i < len(result.CodonChange); i++ {
 		if result.CodonChange[i] == '/' {
@@ -250,7 +250,7 @@ func addStopGainedFromCodons(result *ConsequenceResult) {
 		return
 	}
 	ref, alt := result.CodonChange[:slash], result.CodonChange[slash+1:]
-	if !codonsSpellStop(alt) || codonsSpellStop(ref) {
+	if !alreadyStopGained && (!codonsSpellStop(alt) || codonsSpellStop(ref)) {
 		return
 	}
 	terms := splitConsequenceTerms(result.Consequence)
