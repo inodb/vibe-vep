@@ -415,9 +415,6 @@ func formatAminoAcidsVEP(change string) string {
 // annotation carries one, otherwise the ref/alt pair derived from the amino
 // acid change.
 func aminoAcidsField(ann *annotate.Annotation) string {
-	if annotate.ProteinUndescribableHGVSc(ann.HGVSc) {
-		return ""
-	}
 	if ann.AminoAcidsVEP != "" {
 		return ann.AminoAcidsVEP
 	}
