@@ -96,6 +96,11 @@ func TestDeletionReachingIntoTheTranscriptIsNotUpstream(t *testing.T) {
 	if result.ExonNumber != "1/1" {
 		t.Errorf("ExonNumber = %q, want %q", result.ExonNumber, "1/1")
 	}
+	// Its first base is outside the transcript, so there is no c. coordinate
+	// to name it from and VEP writes no HGVSc either.
+	if got := FormatHGVSc(v, tr, result); got != "" {
+		t.Errorf("HGVSc = %q, want empty", got)
+	}
 	// One that really stays outside is still upstream.
 	v2 := &vcf.Variant{Chrom: "1", Pos: 980, Ref: "AAAA", Alt: ""}
 	if got := PredictConsequence(v2, tr).Consequence; got != ConsequenceUpstreamGene {

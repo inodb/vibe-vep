@@ -23,6 +23,17 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		return ""
 	}
 
+	// A variant whose first base lies outside the transcript has no c.
+	// coordinate to start from, and VEP emits no HGVSc for one: RAD51C
+	// 17:56769924 deletes 91 bases ending inside exon 1 and VEP leaves the
+	// field empty while still reporting coding_sequence_variant,
+	// 5_prime_UTR_variant. Extrapolating a coordinate from the nearest exon,
+	// as genomicToHGVScPos will happily do, invents a position the transcript
+	// does not have.
+	if !t.Contains(v.Pos) {
+		return ""
+	}
+
 	// Determine prefix: c. for coding, n. for non-coding
 	prefix := "c."
 	if !t.IsProteinCoding() {
