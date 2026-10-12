@@ -221,6 +221,7 @@ func joinConsequenceTerms(terms []string) string {
 	uniq := make([]string, 0, len(terms))
 	hasSite := false
 	has5thBase := false
+	hasDonorRegion := false
 	hasExonic := false
 	for _, t := range terms {
 		if t == "" || seen[t] {
@@ -231,6 +232,8 @@ func joinConsequenceTerms(terms []string) string {
 			hasSite = true
 		case ConsequenceSpliceDonor5thBase:
 			has5thBase = true
+		case ConsequenceSpliceDonorRegion:
+			hasDonorRegion = true
 		}
 		if exonicTerms[t] {
 			hasExonic = true
@@ -244,7 +247,12 @@ func joinConsequenceTerms(terms []string) string {
 		// site, and splice_donor_5th_base_variant is the more specific term
 		// where it overlaps splice_donor_region_variant. Both suppressions are
 		// what VEP emits for spans covering these positions.
-		if hasSite && t == ConsequenceSpliceRegion {
+		// The donor-side terms are more specific than splice_region_variant
+		// and VEP reports them instead of it, never beside it: of the 1394
+		// variants carrying splice_donor_5th_base_variant and the 268
+		// carrying splice_donor_region_variant in a VEP111 MSK-IMPACT MAF,
+		// not one also carries splice_region_variant.
+		if (hasSite || has5thBase || hasDonorRegion) && t == ConsequenceSpliceRegion {
 			continue
 		}
 		if has5thBase && t == ConsequenceSpliceDonorRegion {

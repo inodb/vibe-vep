@@ -202,9 +202,15 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 		variantEnd := v.Pos + int64(len(v.Ref)) - 1
 		if len(v.Ref) > 1 {
 			if v.IsIndel() {
-				// Check splice site overlap first (highest priority)
+				// Check splice site overlap first (highest priority).
+				// Name every region the span reaches, as the coding branch
+				// does: a deletion running from the 3'UTR through the
+				// acceptor into the intron is
+				// splice_acceptor_variant,coding_sequence_variant,
+				// 3_prime_UTR_variant,intron_variant, not the bare site.
 				if spliceSite := indelSpliceSiteType(v, t); spliceSite != "" {
-					result.Consequence = spliceSite
+					result.Consequence = joinConsequenceTerms(
+						append(spanSpliceTerms(v, t), spliceSite))
 					result.Impact = GetImpact(spliceSite)
 					return result
 				}
@@ -1743,6 +1749,15 @@ var spliceRegionCompound = map[string]string{
 // appendSpliceRegion appends ",splice_region_variant" to a consequence string.
 // Uses a pre-built lookup for common cases to avoid runtime concatenation.
 func appendSpliceRegion(consequence string) string {
+	// A variant already named by a more specific splice term does not also
+	// get splice_region_variant (see joinConsequenceTerms).
+	for _, t := range splitConsequenceTerms(consequence) {
+		switch t {
+		case ConsequenceSpliceDonor, ConsequenceSpliceAcceptor,
+			ConsequenceSpliceDonor5thBase, ConsequenceSpliceDonorRegion:
+			return consequence
+		}
+	}
 	if compound, ok := spliceRegionCompound[consequence]; ok {
 		return compound
 	}
