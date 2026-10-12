@@ -25,10 +25,6 @@ func formatAASequence(aas string) string {
 	return b.String()
 }
 
-// FormatHGVSp formats the HGVS protein notation for a consequence result.
-// Returns an empty string for non-coding consequences.
-//
-// Uses a stack-allocated buffer for common short cases to minimize allocations.
 // insertedPeptide returns the residues an HGVSp names for an inserted
 // sequence. Nothing is translated past a stop, so it ends at the first one.
 // Of the 377 delins descriptions in a VEP111 MSK-IMPACT MAF that reach a stop
@@ -43,6 +39,10 @@ func insertedPeptide(aas string) string {
 	return aas
 }
 
+// FormatHGVSp formats the HGVS protein notation for a consequence result.
+// Returns an empty string for non-coding consequences.
+//
+// Uses a stack-allocated buffer for common short cases to minimize allocations.
 func FormatHGVSp(result *ConsequenceResult) string {
 	// Get the primary consequence (first term before comma)
 	conseq := result.Consequence
