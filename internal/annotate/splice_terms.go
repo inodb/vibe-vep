@@ -47,6 +47,13 @@ var consequenceRank = map[string]int{
 	ConsequenceIntergenicVariant:     31,
 }
 
+// MoreSevereTerm reports whether consequence term a ranks above b in the
+// Ensembl severity order, which is the order VEP lists terms in and the order
+// it picks most_severe_consequence by.
+func MoreSevereTerm(a, b string) bool {
+	return rankOf(a) < rankOf(b)
+}
+
 func rankOf(term string) int {
 	if r, ok := consequenceRank[term]; ok {
 		return r

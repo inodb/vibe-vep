@@ -242,15 +242,7 @@ func (j *JSONLWriter) marshalVEP() ([]byte, error) {
 		AssemblyName:  j.assembly,
 	}
 
-	// Find most severe consequence.
-	bestImpact := -1
-	for _, ann := range j.curAnns {
-		impact := annotate.ImpactRank(ann.Impact)
-		if impact > bestImpact {
-			bestImpact = impact
-			result.MostSevereConsequence = firstConsequence(ann.Consequence)
-		}
-	}
+	result.MostSevereConsequence = mostSevereConsequence(j.curAnns)
 
 	for _, ann := range j.curAnns {
 		pStart, pEnd := proteinRange(ann)
@@ -318,14 +310,7 @@ func (j *JSONLWriter) marshalVibeVep() ([]byte, error) {
 		Assembly:        j.assembly,
 	}
 
-	bestImpact := -1
-	for _, ann := range j.curAnns {
-		impact := annotate.ImpactRank(ann.Impact)
-		if impact > bestImpact {
-			bestImpact = impact
-			result.MostSevereConsequence = firstConsequence(ann.Consequence)
-		}
-	}
+	result.MostSevereConsequence = mostSevereConsequence(j.curAnns)
 
 	for _, ann := range j.curAnns {
 		tc := VibeVepTranscriptConsequence{

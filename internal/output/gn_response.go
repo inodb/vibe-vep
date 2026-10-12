@@ -51,15 +51,11 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 	// Find most severe consequence and best canonical transcript.
 	// When multiple genes overlap (e.g. EGFR + EGFR-AS1), pick the canonical
 	// with highest impact (protein-coding missense > non-coding).
-	bestImpact := -1
+	result.MostSevereConsequence = mostSevereConsequence(anns)
 	var canonicalAnn *annotate.Annotation
 	canonicalImpact := -1
 	for _, ann := range anns {
 		impact := annotate.ImpactRank(ann.Impact)
-		if impact > bestImpact {
-			bestImpact = impact
-			result.MostSevereConsequence = firstConsequence(ann.Consequence)
-		}
 		if ann.IsCanonicalEnsembl && impact > canonicalImpact {
 			canonicalAnn = ann
 			canonicalImpact = impact

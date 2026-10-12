@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/vcf"
@@ -27,15 +28,7 @@ func MarshalVEPAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotat
 		AssemblyName:  assembly,
 	}
 
-	// Find most severe consequence.
-	bestImpact := -1
-	for _, ann := range anns {
-		impact := annotate.ImpactRank(ann.Impact)
-		if impact > bestImpact {
-			bestImpact = impact
-			result.MostSevereConsequence = firstConsequence(ann.Consequence)
-		}
-	}
+	result.MostSevereConsequence = mostSevereConsequence(anns)
 
 	for _, ann := range anns {
 		pStart, pEnd := proteinRange(ann)
@@ -126,4 +119,32 @@ func sortVEPTranscripts(tcs []VEPTranscriptConsequence) {
 	sort.SliceStable(tcs, func(i, j int) bool {
 		return tcs[i].TranscriptID < tcs[j].TranscriptID
 	})
+}
+
+// mostSevereConsequence returns the term VEP reports as
+// most_severe_consequence: the highest ranked term across every transcript.
+//
+// Ranking by impact alone and keeping the first annotation to reach the best
+// one is not the same thing, because a whole class of terms shares an impact.
+// CDKN2A 9:21971192 reaches seventeen transcripts, eleven of them HIGH; three
+// say stop_gained and the rest frameshift_variant, and stop_gained outranks
+// frameshift_variant. Taking the first HIGH annotation in transcript order
+// left frameshift_variant standing as the most severe, and genome-nexus
+// selects the reported transcript against this value.
+func mostSevereConsequence(anns []*annotate.Annotation) string {
+	best := ""
+	for _, ann := range anns {
+		for rest := ann.Consequence; rest != ""; {
+			term := rest
+			if i := strings.IndexByte(rest, ','); i >= 0 {
+				term, rest = rest[:i], rest[i+1:]
+			} else {
+				rest = ""
+			}
+			if best == "" || annotate.MoreSevereTerm(term, best) {
+				best = term
+			}
+		}
+	}
+	return best
 }
