@@ -228,6 +228,31 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 			return cdsPosRangeStr(t, afterStart+1, afterEnd, "dup")
 		}
 
+		// The two CDS bases the insertion sits between are consecutive
+		// numbers, but at an exon's edge they are an intron apart on the
+		// genome and HGVS names the intron base: MET c.3028_3028+1insT, not
+		// c.3028_3029insT, and on the reverse strand TP53 c.97-1_97insAG,
+		// not c.96_97insAG. Where nothing shifted the flanks are the two
+		// bases the variant itself lies between; where the insertion walked
+		// to the exon edge the anchor is that last coding base.
+		if shiftedIdx+2 <= len(t.CDSSequence) && cdsExonEndIdx(shiftedIdx, t) == shiftedIdx {
+			anchorG := v.Pos
+			step := int64(1)
+			if t.IsReverseStrand() {
+				anchorG, step = v.Pos+1, -1
+			}
+			if shiftedIdx != cdsIdx {
+				if g := CDSToGenomic(int64(shiftedIdx+1), t); g != 0 {
+					anchorG = g
+				}
+			}
+			afterStr := genomicToHGVScPos(anchorG, t)
+			beforeStr := genomicToHGVScPos(anchorG+step, t)
+			if afterStr != "" && beforeStr != "" {
+				return prefix + afterStr + "_" + beforeStr + "ins" + string(seq)
+			}
+		}
+
 		// Plain insertion at shifted CDS position
 		if shiftedIdx+2 <= len(t.CDSSequence) {
 			var buf [128]byte
