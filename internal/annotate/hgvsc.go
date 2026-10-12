@@ -1394,12 +1394,23 @@ func intronicHGVScPos(pos int64, t *cache.Transcript) string {
 		distToDownstream = downstreamExon.Start - pos
 	}
 
-	// Pick the closer exon boundary
+	// Pick the closer exon boundary. Equidistant, HGVS counts from the exon
+	// the transcript reaches first, so the position takes a + offset -- and
+	// which exon that is depends on the strand, where this used to take the
+	// genomically lower one either way. RECQL4 ENST00000428558 has a one-base
+	// intron on the reverse strand and VEP writes c.2295+1C>T, not c.2296-1C>T.
 	useUpstream := true
-	if upstreamExon == nil {
+	switch {
+	case upstreamExon == nil:
 		useUpstream = false
-	} else if downstreamExon != nil && distToDownstream < distToUpstream {
+	case downstreamExon == nil:
+		useUpstream = true
+	case distToDownstream < distToUpstream:
 		useUpstream = false
+	case distToDownstream > distToUpstream:
+		useUpstream = true
+	default:
+		useUpstream = t.IsForwardStrand()
 	}
 
 	if t.IsForwardStrand() {
