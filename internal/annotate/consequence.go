@@ -788,6 +788,17 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 	} else {
 		// Frameshift
 		result.Consequence = ConsequenceFrameshiftVariant
+		// An insertion landing between two bases of the start codon destroys
+		// it, however far HGVS then shifts the description 3'. VEP decides
+		// this on the unshifted position, so CDKN1A 6:36651880^36651881 --
+		// written c.12_34dup -- is frameshift_variant,start_lost. Of the 11
+		// insertions interior to a start codon in a VEP111 MSK-IMPACT MAF,
+		// the 9 frameshifting ones all carry start_lost and the 2 in-frame
+		// ones never do: whole codons slot in without displacing the ATG.
+		if insertionInsideStartCodon(v, t) {
+			result.Consequence = joinConsequenceTerms(
+				[]string{ConsequenceFrameshiftVariant, ConsequenceStartLost})
+		}
 		// Check if frameshift overlaps stop codon (stop_lost)
 		if stopCodonCDSPos > 0 && result.CDSPosition > 0 {
 			indelEndCDS := cdsSpanEnd(v, t, result.CDSPosition+int64(refLen)-1)
@@ -1946,4 +1957,19 @@ func formatCodonChange(refCodon, altCodon string, posInCodon int) string {
 	}
 	buf[3] = '/'
 	return string(buf[:])
+}
+
+// insertionInsideStartCodon reports whether a pure insertion sits strictly
+// between two bases of the transcript's start codon. The insertion occupies no
+// base of its own: it falls between v.Pos and v.Pos+1, so both flanks must be
+// start-codon bases for the ATG to be broken apart.
+func insertionInsideStartCodon(v *vcf.Variant, t *cache.Transcript) bool {
+	if len(v.Ref) != 0 || len(v.Alt) == 0 || !t.IsProteinCoding() {
+		return false
+	}
+	start, end := t.CDSStart, t.CDSStart+2
+	if !t.IsForwardStrand() {
+		start, end = t.CDSEnd-2, t.CDSEnd
+	}
+	return v.Pos >= start && v.Pos+1 <= end
 }
