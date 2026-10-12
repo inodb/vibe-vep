@@ -469,6 +469,15 @@ func relabelStopLostWhenItShiftsClear(v *vcf.Variant, t *cache.Transcript, resul
 	if !hasTerm(result.Consequence, ConsequenceStopLost) || len(v.Ref) == 0 {
 		return
 	}
+	// A deletion that breaks a splice site gets stop_lost for a different
+	// reason -- VEP reads it off the deleted genomic sequence, not off the
+	// real stop codon (see spliceSpanProteinTerms) -- and relabelling that
+	// would answer a question this function is not asking. VEP never pairs
+	// stop_retained_variant with a splice site term.
+	if hasTerm(result.Consequence, ConsequenceSpliceDonor) ||
+		hasTerm(result.Consequence, ConsequenceSpliceAcceptor) {
+		return
+	}
 	shift := int64(result.HGVSOffset)
 	if t.IsReverseStrand() {
 		shift = -shift

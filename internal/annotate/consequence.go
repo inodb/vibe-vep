@@ -389,7 +389,12 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 		// and may cover the donor 5th base. spliceSite itself is kept because
 		// it decides the impact and the two overlap-tests can disagree at the
 		// very edge of the span.
-		result.Consequence = joinConsequenceTerms(append(spanSpliceTerms(v, t), spliceSite, ConsequenceCodingSequenceVariant))
+		terms := append(spanSpliceTerms(v, t), spliceSite, ConsequenceCodingSequenceVariant)
+		// With a CDS coordinate at each end VEP also says what the deletion
+		// does to the protein, and that naming replaces coding_sequence_variant
+		// (see joinConsequenceTerms). See spliceSpanProteinTerms.
+		terms = append(terms, spliceSpanProteinTerms(v, t)...)
+		result.Consequence = joinConsequenceTerms(terms)
 		result.Impact = GetImpact(spliceSite)
 		if t.IsProteinCoding() {
 			if pos := nearestSpliceBoundaryProteinPos(v.Pos, t); pos > 0 {
