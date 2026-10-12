@@ -97,7 +97,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 		// FormatHGVSc can discover that the variant shifts out of the exon,
 		// which is only knowable once the shift is done; the protein call is
 		// withdrawn here rather than re-derived.
-		if proteinUndescribableHGVSc(result.HGVSc) {
+		if ProteinUndescribableHGVSc(result.HGVSc) {
 			result.SuppressHGVSp = true
 		}
 		if result.SuppressHGVSp {

@@ -371,7 +371,7 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 	return prefix + afterStr + "_" + beforeStr + "ins" + shifted
 }
 
-// proteinUndescribableHGVSc reports whether VEP declines to name a protein
+// ProteinUndescribableHGVSc reports whether VEP declines to name a protein
 // change for a variant written as this HGVSc.
 //
 // It names one only where the variant's coordinates sit in the coding
@@ -386,7 +386,7 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 // c.N-1_Nins. Every deletion, duplication, delins and inversion reaching an
 // intron or a UTR has none, and so does every single-coordinate variant whose
 // one position is outside the CDS, all 13,348 of them.
-func proteinUndescribableHGVSc(hgvsc string) bool {
+func ProteinUndescribableHGVSc(hgvsc string) bool {
 	if i := strings.Index(hgvsc, ":c."); i >= 0 {
 		hgvsc = hgvsc[i+3:]
 	} else if strings.HasPrefix(hgvsc, "c.") {
