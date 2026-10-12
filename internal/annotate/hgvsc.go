@@ -2,6 +2,7 @@ package annotate
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/vcf"
@@ -31,6 +32,20 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 	// as genomicToHGVScPos will happily do, invents a position the transcript
 	// does not have.
 	if !t.Contains(v.Pos) {
+		return ""
+	}
+
+	// A variant lying across the 5'UTR and the coding sequence, and reaching
+	// no splice site on the way, gets no c. coordinate from VEP: all 25 rows
+	// in a VEP111 MSK-IMPACT MAF whose consequence is exactly
+	// coding_sequence_variant with 5_prime_UTR_variant leave HGVSc empty,
+	// while every combination that adds a splice or intron term is named.
+	// coding_sequence_variant is VEP saying it cannot describe the change,
+	// and with one UTR term and nothing else there is no anchor left to
+	// count from.
+	if strings.Count(result.Consequence, ",") == 1 &&
+		hasTerm(result.Consequence, ConsequenceCodingSequenceVariant) &&
+		hasTerm(result.Consequence, Consequence5PrimeUTR) {
 		return ""
 	}
 
