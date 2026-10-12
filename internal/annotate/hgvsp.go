@@ -29,6 +29,20 @@ func formatAASequence(aas string) string {
 // Returns an empty string for non-coding consequences.
 //
 // Uses a stack-allocated buffer for common short cases to minimize allocations.
+// insertedPeptide returns the residues an HGVSp names for an inserted
+// sequence. Nothing is translated past a stop, so it ends at the first one.
+// Of the 377 delins descriptions in a VEP111 MSK-IMPACT MAF that reach a stop
+// at all, every one ends there: KIT p.Tyr568_Leu576delinsTer, never
+// delinsTerCys.
+func insertedPeptide(aas string) string {
+	for i := 0; i < len(aas); i++ {
+		if aas[i] == '*' {
+			return aas[:i+1]
+		}
+	}
+	return aas
+}
+
 func FormatHGVSp(result *ConsequenceResult) string {
 	// Get the primary consequence (first term before comma)
 	conseq := result.Consequence
@@ -85,7 +99,7 @@ func FormatHGVSp(result *ConsequenceResult) string {
 				n += putInt64(buf[n:], result.ProteinEndPosition)
 			}
 			n += copy(buf[n:], "delins")
-			return string(buf[:n]) + formatAASequence(result.InsertedAAs)
+			return string(buf[:n]) + formatAASequence(insertedPeptide(result.InsertedAAs))
 		}
 		// p.Xxx###Xxx (max ~15 chars)
 		n += copy(buf[n:], "p.")
@@ -122,14 +136,7 @@ func FormatHGVSp(result *ConsequenceResult) string {
 			n += copy(buf[n:], aaThree(result.EndAA))
 			n += putInt64(buf[n:], pos+1)
 			n += copy(buf[n:], "ins")
-			ins := result.InsertedAAs
-			for i := 0; i < len(ins); i++ {
-				if ins[i] == '*' {
-					ins = ins[:i+1] // nothing is translated past a stop
-					break
-				}
-			}
-			return string(buf[:n]) + formatAASequence(ins)
+			return string(buf[:n]) + formatAASequence(insertedPeptide(result.InsertedAAs))
 		}
 		if result.IsDelIns && len(result.InsertedAAs) > 0 {
 			n += copy(buf[n:], "p.")
@@ -144,16 +151,7 @@ func FormatHGVSp(result *ConsequenceResult) string {
 				n += putInt64(buf[n:], result.ProteinEndPosition)
 			}
 			n += copy(buf[n:], "delins")
-			// Nothing is translated past a stop, so c.1284_1285inv is
-			// p.Y428_Y429delins*, not p.Y428_Y429delins*N.
-			ins := result.InsertedAAs
-			for i := 0; i < len(ins); i++ {
-				if ins[i] == '*' {
-					ins = ins[:i+1]
-					break
-				}
-			}
-			return string(buf[:n]) + formatAASequence(ins)
+			return string(buf[:n]) + formatAASequence(insertedPeptide(result.InsertedAAs))
 		}
 		// p.Xxx###Ter
 		n += copy(buf[n:], "p.")
@@ -232,7 +230,7 @@ func FormatHGVSp(result *ConsequenceResult) string {
 		}
 		if len(result.InsertedAAs) > 0 {
 			n += copy(buf[n:], "delins")
-			return string(buf[:n]) + formatAASequence(result.InsertedAAs)
+			return string(buf[:n]) + formatAASequence(insertedPeptide(result.InsertedAAs))
 		}
 		n += copy(buf[n:], "del")
 		return string(buf[:n])
@@ -252,7 +250,7 @@ func FormatHGVSp(result *ConsequenceResult) string {
 				n += putInt64(buf[n:], result.ProteinEndPosition)
 			}
 			n += copy(buf[n:], "delins")
-			return string(buf[:n]) + formatAASequence(result.InsertedAAs)
+			return string(buf[:n]) + formatAASequence(insertedPeptide(result.InsertedAAs))
 		}
 		if result.IsDup {
 			if result.RefAA != 0 {
@@ -279,7 +277,7 @@ func FormatHGVSp(result *ConsequenceResult) string {
 		}
 		n += putInt64(buf[n:], pos+1)
 		n += copy(buf[n:], "ins")
-		return string(buf[:n]) + formatAASequence(result.InsertedAAs)
+		return string(buf[:n]) + formatAASequence(insertedPeptide(result.InsertedAAs))
 
 	case ConsequenceSpliceDonor, ConsequenceSpliceAcceptor:
 		n += copy(buf[n:], "p.X")
