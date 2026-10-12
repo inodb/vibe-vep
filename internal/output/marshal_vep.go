@@ -85,13 +85,12 @@ func MarshalVEPAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotat
 // protein_start 1169 alongside its own p.I1170Sfs*23. Falls back to the HGVS
 // position when the unshifted one was not computed (non-coding paths).
 func proteinRange(ann *annotate.Annotation) (start, end int64) {
-	// No protein description means no protein position either: VEP leaves
-	// both empty and the annotation pipeline falls back to the input MAF,
-	// which is where KIT c.1721_1774+3dup gets its 575 and RECQL4 c.2295+1C>T
-	// its -/1208. vibe-vep answering 574 and 765 was enough to stop the
-	// fallback and lose the row.
-	if annotate.ProteinPositionWithheld(ann.Consequence) ||
-		annotate.ProteinUndescribableHGVSc(ann.HGVSc) {
+	// Withholding this wherever the HGVSp is withheld was tried and measured
+	// worse. VEP does give a protein position to an intronic indel -- CYLD
+	// c.2099+1del is p.R700fs -- and genome-nexus builds that short form from
+	// the position and the amino acid together, so dropping only the position
+	// left it rendering p.Rnullfs on 112 variants to recover 11.
+	if annotate.ProteinPositionWithheld(ann.Consequence) {
 		return 0, 0
 	}
 	start = ann.ProteinStart
