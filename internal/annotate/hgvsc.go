@@ -332,14 +332,28 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 	}
 
 	insAfterPos := v.Pos
-	insBeforePos := v.Pos + 1
+	step := int64(1)
 	if t.IsReverseStrand() {
-		insAfterPos = v.Pos + 1
-		insBeforePos = v.Pos
+		insAfterPos, step = v.Pos+1, -1
 	}
+
+	// Nothing above has shifted this one: with neither flank a coding base the
+	// CDS-space walk never saw it. HGVS still writes it 3'-most, and the intron
+	// flanks and UTR tails hold the sequence to walk it with -- VEP has GATA3
+	// c.1047+2_1047+3insTT where vibe-vep wrote c.1047+1_1047+2insTT, and
+	// c.1047+1_1047+2insTT.
+	//
+	// Calling the result a duplication where the shifted bases repeat what
+	// they now follow is left alone: it is HGVS-correct and VEP does it on
+	// the forward strand (RBM10 c.-71dup), but on the reverse strand VEP
+	// writes ins, and turning it on here adds 29 of those divergences --
+	// the same reverse-strand duplication question already settled for the
+	// coding sequence.
+	shifted, insAfterPos, k := genomicInsertionShift(insAfterPos, step, insertedSeq, t)
+	result.HGVSOffset += k
 	afterStr := genomicToHGVScPos(insAfterPos, t)
-	beforeStr := genomicToHGVScPos(insBeforePos, t)
-	return prefix + afterStr + "_" + beforeStr + "ins" + insertedSeq
+	beforeStr := genomicToHGVScPos(insAfterPos+step, t)
+	return prefix + afterStr + "_" + beforeStr + "ins" + shifted
 }
 
 // isInversion reports whether alt is the reverse complement of ref, compared

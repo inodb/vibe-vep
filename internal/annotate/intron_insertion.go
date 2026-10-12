@@ -116,6 +116,34 @@ func intronicInsertionDup(v *vcf.Variant, t *cache.Transcript, insertedSeq strin
 	return "c." + startStr + "_" + endStr + "dup", true
 }
 
+// genomicInsertionShift walks a plain insertion 3' along the transcript,
+// rotating the inserted bases as it goes. It is for the insertions the
+// CDS-space walk never sees, where neither flank is a coding base: both ends
+// inside an intron, or in a UTR. It reads through codingBaseAt and so stops
+// where vibe-vep has no sequence left.
+func genomicInsertionShift(insAfter, step int64, seq string, t *cache.Transcript) (string, int64, int) {
+	if seq == "" {
+		return seq, insAfter, 0
+	}
+	buf := []byte(seq)
+	k := 0
+	for k < 2*cache.IntronFlankBases {
+		b, ok := codingBaseAt(insAfter+step, t)
+		if !ok || b != buf[0] {
+			break
+		}
+		first := buf[0]
+		copy(buf, buf[1:])
+		buf[len(buf)-1] = first
+		insAfter += step
+		k++
+	}
+	if k == 0 {
+		return seq, insAfter, 0
+	}
+	return string(buf), insAfter, k
+}
+
 // refAlleleBase reads a base out of a variant's own reference allele, in coding
 // orientation. A deletion's bases are all spelled out there, so this reaches
 // positions the transcript cache does not hold.
