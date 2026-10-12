@@ -976,13 +976,15 @@ func formatDeletionAcrossDonor(t *cache.Transcript, startCDS, exonEndCDS int64, 
 		return "c." + strconv.FormatInt(cdsDisplayPos(startCDS, t), 10) + "_" +
 			strconv.FormatInt(cdsDisplayPos(exonEndCDS, t), 10) + "+" + strconv.Itoa(k) + "del"
 	}
-	// Entirely intronic now: c.EXONEND+a_EXONEND+k del
+	// Entirely intronic now: c.EXONEND+a_EXONEND+k del. Only the first
+	// coordinate carries the c. prefix -- repeating it for the second gave
+	// PTEN c.164+1_c.164+5del.
 	a := int(startCDS - exonEndCDS)
-	base := "c." + strconv.FormatInt(cdsDisplayPos(exonEndCDS, t), 10) + "+"
+	anchor := strconv.FormatInt(cdsDisplayPos(exonEndCDS, t), 10) + "+"
 	if a == k {
-		return base + strconv.Itoa(k) + "del"
+		return "c." + anchor + strconv.Itoa(k) + "del"
 	}
-	return base + strconv.Itoa(a) + "_" + base + strconv.Itoa(k) + "del"
+	return "c." + anchor + strconv.Itoa(a) + "_" + anchor + strconv.Itoa(k) + "del"
 }
 
 // deletionHitsDonor reports whether the shifted deletion covers the first two
