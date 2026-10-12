@@ -1241,9 +1241,16 @@ func stopCodonPreserved(v *vcf.Variant, t *cache.Transcript, cdsPos int64) bool 
 		return true
 	}
 
-	// Check at shifted position (insertion pushes stop codon right by diff bases)
-	shifted := origStop + len(alt) - len(ref)
-	if shifted >= 0 && shifted+3 <= mut.Len() && TranslateCodon(mut.Codon(shifted)) == '*' {
+	// Check at shifted position (insertion pushes stop codon right by diff
+	// bases). Only an in-frame length change moves the stop codon to a new
+	// codon boundary; after a frameshift the same three bases still sit
+	// there, but no longer as a codon, and reading them as one finds a stop
+	// that is not translated. TP53 c.1180_1181insT splits TGA into T|TGA and
+	// is frameshift_variant,stop_lost, not stop_retained_variant.
+	diff := len(alt) - len(ref)
+	shifted := origStop + diff
+	if diff%3 == 0 && shifted >= 0 && shifted+3 <= mut.Len() &&
+		TranslateCodon(mut.Codon(shifted)) == '*' {
 		return true
 	}
 
