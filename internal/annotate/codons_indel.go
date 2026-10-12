@@ -159,6 +159,14 @@ func copyUpper(dst []byte, s string) int {
 func upperByte(b byte) byte { return b &^ 0x20 }
 func lowerByte(b byte) byte { return b | 0x20 }
 
+func lower(s string) string {
+	b := []byte(s)
+	for i := range b {
+		b[i] = lowerByte(b[i])
+	}
+	return string(b)
+}
+
 func upper(s string) string {
 	b := []byte(s)
 	for i := range b {

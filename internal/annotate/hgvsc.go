@@ -420,6 +420,9 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 			// gives aaG/aa for PTEN c.801+1del, the codon around c.801. Leaving
 			// this out blanked the column for every shifted row.
 			result.CodonChange = formatCodonChangeCDS(t.CDSSequence, delStartCDS, delEndCDS, "")
+			if g := genomicSpanCodons(v, t, delStartCDS, delEndCDS); g != "" {
+				result.CodonChange = g
+			}
 			return formatDeletionAcrossDonor(sc, ee, k)
 		}
 
@@ -430,6 +433,10 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 		// Codons are expanded around the unshifted deleted range (see above).
 		result.CodonChange = formatCodonChangeCDS(t.CDSSequence,
 			int64(sStart+1-result.HGVSOffset), int64(sEnd+1-result.HGVSOffset), "")
+		if g := genomicSpanCodons(v, t, int64(sStart+1-result.HGVSOffset),
+			int64(sEnd+1-result.HGVSOffset)); g != "" {
+			result.CodonChange = g
+		}
 		return cdsPosRangeStr(sStart+1, sEnd+1, "del")
 	}
 

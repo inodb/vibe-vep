@@ -26,10 +26,14 @@ import (
 //
 // Returns nil when the deletion is not of this shape.
 func spliceSpanProteinTerms(v *vcf.Variant, t *cache.Transcript) []string {
-	if len(v.Ref) < 2 || len(v.Alt) != 0 || !t.IsProteinCoding() {
+	if !t.IsProteinCoding() {
 		return nil
 	}
-	start, end := v.Pos, v.Pos+int64(len(v.Ref))-1
+	seq, start := deletedBases(v)
+	if len(seq) < 2 {
+		return nil
+	}
+	end := start + int64(len(seq)) - 1
 	if t.FindExon(start) == nil || t.FindExon(end) == nil {
 		return nil
 	}
@@ -47,7 +51,7 @@ func spliceSpanProteinTerms(v *vcf.Variant, t *cache.Transcript) []string {
 	if deleted%3 != 0 {
 		terms = []string{ConsequenceFrameshiftVariant}
 	}
-	if deletedSpanHasStop(v, t) {
+	if deletedSpanHasStop(seq, start, t) {
 		terms = append(terms, ConsequenceStopLost)
 	}
 	return terms
@@ -74,12 +78,11 @@ func deletedCDSBases(start, end int64, t *cache.Transcript) int64 {
 // transcript's orientation and in the frame the first deleted base sits in,
 // contains a stop codon. That sequence is what VEP translates as the reference
 // peptide for these deletions (see spliceSpanProteinTerms).
-func deletedSpanHasStop(v *vcf.Variant, t *cache.Transcript) bool {
-	seq := v.Ref
-	first := v.Pos
+func deletedSpanHasStop(seq string, start int64, t *cache.Transcript) bool {
+	first := start
 	if !t.IsForwardStrand() {
 		seq = ReverseComplement(seq)
-		first = v.Pos + int64(len(v.Ref)) - 1
+		first = start + int64(len(seq)) - 1
 	}
 	offset := 0
 	if cds := GenomicToCDS(first, t); cds >= 1 {
@@ -107,4 +110,69 @@ func min64(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+// genomicSpanCodons renders the Codons string for a deletion that crosses an
+// intron.
+//
+// VEP's Codons column reports the bases the deletion removes from the GENOME,
+// introns included, padded out to codon boundaries with the surviving flanks:
+// for CTNNB1 c.26_403del it is the whole 578-base reference allele over "-",
+// not the 378 spliced ones. Building the window from the CDS alone, as every
+// other deletion is built, left out the intronic bases and produced a shorter
+// string.
+//
+// Returns "" for a deletion that stays inside one exon, where the two are the
+// same and the ordinary CDS window is correct.
+func genomicSpanCodons(v *vcf.Variant, t *cache.Transcript, delStartCDS, delEndCDS int64) string {
+	n := int64(len(t.CDSSequence))
+	if delStartCDS < 1 || delEndCDS < delStartCDS || delEndCDS > n {
+		return ""
+	}
+	seq, start := deletedBases(v)
+	if len(seq) == 0 || withinOneExon(start, start+int64(len(seq))-1, t) {
+		return "" // no intron between the ends
+	}
+	lpad := (delStartCDS - 1) % 3
+	rpad := (3 - delEndCDS%3) % 3
+	if delEndCDS+rpad > n {
+		rpad = n - delEndCDS
+	}
+	left := t.CDSSequence[delStartCDS-1-lpad : delStartCDS-1]
+	right := t.CDSSequence[delEndCDS : delEndCDS+rpad]
+	core := seq
+	if t.IsReverseStrand() {
+		core = ReverseComplement(core)
+	}
+	alt := lower(left + right)
+	if alt == "" {
+		alt = "-"
+	}
+	return lower(left) + upper(core) + lower(right) + "/" + alt
+}
+
+// deletedBases returns the bases a variant removes and the genomic position of
+// the first of them. A VCF-style deletion carries an anchor base that both
+// alleles share and that nothing happens to; a MAF-style one, which is what
+// genome-nexus sends, carries only the deleted bases.
+func deletedBases(v *vcf.Variant) (seq string, start int64) {
+	shared := 0
+	for shared < len(v.Ref) && shared < len(v.Alt) && v.Ref[shared] == v.Alt[shared] {
+		shared++
+	}
+	if len(v.Alt)-shared > 0 {
+		return "", 0 // delins, not a pure deletion
+	}
+	return v.Ref[shared:], v.Pos + int64(shared)
+}
+
+// withinOneExon reports whether a genomic range lies inside a single exon, in
+// which case the deleted bases and the deleted CDS bases are the same sequence.
+func withinOneExon(start, end int64, t *cache.Transcript) bool {
+	for i := range t.Exons {
+		if start >= t.Exons[i].Start && end <= t.Exons[i].End {
+			return true
+		}
+	}
+	return false
 }
