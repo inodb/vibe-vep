@@ -89,7 +89,7 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 			CDNAStart:           ann.CDNAPosition,
 			CDNAEnd:             ann.CDNAPosition,
 			HGVSp:               ann.HGVSp,
-			HGVSc:               ann.HGVSc,
+			HGVSc:               prefixTranscript(ann.TranscriptID, ann.HGVSc),
 			Exon:                ann.ExonNumber,
 			Intron:              ann.IntronNumber,
 			Biotype:             ann.Biotype,
@@ -115,12 +115,12 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 		result.TranscriptConsequences = append(result.TranscriptConsequences, tc)
 	}
 
+	if opt.IncludeAnnotationSummary {
+		result.AnnotationSummary = buildAnnotationSummary(&result, anns, canonicalAnn, assembly)
+	}
+
 	// Sort transcript consequences: canonical first (genome-nexus convention).
 	sortCanonicalFirst(result.TranscriptConsequences)
-
-	if opt.IncludeAnnotationSummary {
-		result.AnnotationSummary = buildAnnotationSummary(variant, v, anns, canonicalAnn, assembly)
-	}
 
 	// Source fields are populated from annotation extras (same for all transcripts).
 	src := firstAnnotationWithExtras(anns)
@@ -217,21 +217,22 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 }
 
 // buildAnnotationSummary constructs the annotation_summary enrichment.
-func buildAnnotationSummary(variant string, v *vcf.Variant, anns []*annotate.Annotation, canonical *annotate.Annotation, assembly string) *GNAnnotationSummary {
-	ref, alt := alleleStrings(v)
-	start, end := mafCoordinates(v)
+func buildAnnotationSummary(result *GNAnnotation, anns []*annotate.Annotation, canonical *annotate.Annotation, assembly string) *GNAnnotationSummary {
+	ref, alt := splitAlleleString(result.AlleleString)
+	variantType := gnVariantType(ref, alt)
+	inframe := gnIsInframe(ref, alt)
 
 	summary := &GNAnnotationSummary{
-		Variant: variant,
+		Variant: result.Variant,
 		GenomicLocation: GNGenomicLocation{
-			Chromosome:      v.Chrom,
-			Start:           start,
-			End:             end,
+			Chromosome:      result.SeqRegionName,
+			Start:           result.Start,
+			End:             result.End,
 			ReferenceAllele: ref,
 			VariantAllele:   alt,
 		},
 		StrandSign:   "+",
-		VariantType:  resolveVariantType(ref, alt),
+		VariantType:  variantType,
 		AssemblyName: assembly,
 	}
 
@@ -239,14 +240,21 @@ func buildAnnotationSummary(variant string, v *vcf.Variant, anns []*annotate.Ann
 		summary.CanonicalTranscriptID = stripVersion(canonical.TranscriptID)
 	}
 
-	// Build transcript consequence summaries for all transcripts.
-	summaries := make([]GNTranscriptConsequenceSummary, 0, len(anns))
+	// result.TranscriptConsequences and anns are still index-aligned here: the
+	// list is only reordered for display after the summary is built. The
+	// pairing is what lets the Entrez gene id, which VEP does not report and
+	// genome-nexus looks up for itself, reach the summary.
+	summaries := make([]GNTranscriptConsequenceSummary, 0, len(result.TranscriptConsequences))
 	var canonicalSummary *GNTranscriptConsequenceSummary
-	for _, ann := range anns {
-		tcs := buildTranscriptConsequenceSummary(ann, v)
+	for i := range result.TranscriptConsequences {
+		tc := &result.TranscriptConsequences[i]
+		var ann *annotate.Annotation
+		if i < len(anns) {
+			ann = anns[i]
+		}
+		tcs := buildTranscriptConsequenceSummary(tc, ann, variantType, inframe)
 		summaries = append(summaries, tcs)
-		// Use the same canonical annotation selected by impact in the caller.
-		if canonical != nil && ann.TranscriptID == canonical.TranscriptID && canonicalSummary == nil {
+		if canonical != nil && ann != nil && ann.TranscriptID == canonical.TranscriptID && canonicalSummary == nil {
 			cp := tcs
 			canonicalSummary = &cp
 		}
@@ -266,57 +274,56 @@ func buildAnnotationSummary(variant string, v *vcf.Variant, anns []*annotate.Ann
 	return summary
 }
 
-// buildTranscriptConsequenceSummary builds a single transcript consequence summary.
-func buildTranscriptConsequenceSummary(ann *annotate.Annotation, v *vcf.Variant) GNTranscriptConsequenceSummary {
-	aminoAcids := formatAminoAcidsVEP(ann.AminoAcidChange)
-	aaRef, aaAlt := splitAminoAcids(aminoAcids)
+// splitAlleleString splits the "ref/alt" form genome-nexus reads the variant's
+// alleles back out of.
+func splitAlleleString(alleleString string) (ref, alt string) {
+	parts := strings.SplitN(alleleString, "/", 2)
+	if len(parts) != 2 {
+		return "", ""
+	}
+	return parts[0], parts[1]
+}
+
+func buildTranscriptConsequenceSummary(tc *GNTranscriptConsequence, ann *annotate.Annotation, variantType string, inframe bool) GNTranscriptConsequenceSummary {
+	aaRef, aaAlt := splitAminoAcids(tc.AminoAcids)
+	hgvspShort := gnResolveHgvspShort(tc, variantType, inframe)
 
 	tcs := GNTranscriptConsequenceSummary{
-		TranscriptID:          stripVersion(ann.TranscriptID),
-		CodonChange:           ann.CodonChange,
-		AminoAcids:            aminoAcids,
-		AminoAcidRef:          aaRef,
-		AminoAcidAlt:          aaAlt,
-		EntrezGeneID:          ann.EntrezGeneID,
-		HugoGeneSymbol:        ann.GeneName,
-		HGVSpShort:            hgvspToShort(ann.HGVSp),
-		HGVSp:                 hgvspStripTranscript(ann.HGVSp),
-		HGVSc:                 prefixTranscript(ann.TranscriptID, ann.HGVSc),
-		ConsequenceTerms:      firstConsequence(ann.Consequence),
-		VariantClassification: SOToMAFClassification(ann.Consequence, v),
-		Exon:                  ann.ExonNumber,
+		TranscriptID:   tc.TranscriptID,
+		CodonChange:    tc.Codons,
+		AminoAcids:     tc.AminoAcids,
+		AminoAcidRef:   aaRef,
+		AminoAcidAlt:   aaAlt,
+		HugoGeneSymbol: tc.GeneSymbol,
+		HGVSpShort:     hgvspShort,
+		HGVSp:          gnResolveHgvsp(tc),
+		HGVSc:          tc.HGVSc,
+		// Every term, comma-joined: this is the MAF Consequence column, which
+		// names all of them and not just the most severe.
+		ConsequenceTerms:      strings.Join(tc.ConsequenceTerms, ","),
+		VariantClassification: gnVariantClassification(pickHighestPriorityConsequence(tc.ConsequenceTerms), variantType, inframe),
+		Exon:                  tc.Exon,
+		ProteinPosition:       gnResolveProteinPosition(tc, hgvspShort),
+		SIFTScore:             tc.SIFTScore,
+		SIFTPrediction:        tc.SIFTPrediction,
+		PolyphenScore:         tc.PolyPhenScore,
+		PolyphenPrediction:    tc.PolyPhenPrediction,
 	}
 
 	// genome-nexus's RefSeqResolver reports the first RefSeq accession only.
-	if len(ann.RefSeqIDs) > 0 {
-		tcs.RefSeq = ann.RefSeqIDs[0]
+	if len(tc.RefseqTranscriptIds) > 0 {
+		tcs.RefSeq = tc.RefseqTranscriptIds[0]
 	}
 
-	if ann.ProteinPosition > 0 {
-		tcs.ProteinPosition = &GNIntegerRange{
-			Start: ann.ProteinPosition,
-			End:   ann.ProteinPosition,
-		}
+	// The Entrez gene id has no VEP-level field to come from; genome-nexus
+	// looks it up by gene, and vibe-vep carries it on the annotation.
+	if ann != nil {
+		tcs.EntrezGeneID = ann.EntrezGeneID
 	}
-
-	// SIFT/PolyPhen
-	if s := ann.GetExtraKey("sift.score"); s != "" {
-		if f, err := strconv.ParseFloat(s, 64); err == nil {
-			tcs.SIFTScore = &f
-		}
-	}
-	tcs.SIFTPrediction = ann.GetExtraKey("sift.prediction")
-	if s := ann.GetExtraKey("polyphen.score"); s != "" {
-		if f, err := strconv.ParseFloat(s, 64); err == nil {
-			tcs.PolyphenScore = &f
-		}
-	}
-	tcs.PolyphenPrediction = ann.GetExtraKey("polyphen.prediction")
 
 	return tcs
 }
 
-// resolveVariantType determines the variant type from ref/alt alleles.
 func resolveVariantType(ref, alt string) string {
 	refLen := len(ref)
 	altLen := len(alt)
