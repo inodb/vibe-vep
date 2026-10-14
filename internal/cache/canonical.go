@@ -51,10 +51,12 @@ type GeneEntrezMap map[string]string
 
 // Biomart TSV column indices (0-indexed).
 const (
-	biomartGeneCol    = 0
-	biomartEnsemblCol = 2  // ensembl_canonical_transcript
-	biomartMSKCol     = 11 // mskcc_canonical_transcript
-	biomartEntrezCol  = 31 // entrez_gene_id
+	biomartGeneCol        = 0
+	biomartEnsemblCol     = 2  // ensembl_canonical_transcript
+	biomartGenomeNexusCol = 5  // genome_nexus_canonical_transcript
+	biomartUniprotCol     = 8  // uniprot_canonical_transcript
+	biomartMSKCol         = 11 // mskcc_canonical_transcript
+	biomartEntrezCol      = 31 // entrez_gene_id
 
 	// biomartPrevSymbolsCol lists, comma separated, the symbols a gene used
 	// to be called.
@@ -283,4 +285,86 @@ func parsePreviousGeneSymbols(reader io.Reader) (map[string]string, error) {
 		}
 	}
 	return symbols, nil
+}
+
+// canonicalSourceCols names the isoform override tables the biomart file
+// carries, by the name the API asks for them by.
+var canonicalSourceCols = map[string]int{
+	IsoformSourceEnsembl:     biomartEnsemblCol,
+	IsoformSourceGenomeNexus: biomartGenomeNexusCol,
+	IsoformSourceUniprot:     biomartUniprotCol,
+	IsoformSourceMSKCC:       biomartMSKCol,
+}
+
+// The isoform override sources the API recognises.
+const (
+	IsoformSourceEnsembl     = "ensembl"
+	IsoformSourceGenomeNexus = "genome_nexus"
+	IsoformSourceUniprot     = "uniprot"
+	IsoformSourceMSKCC       = "mskcc"
+)
+
+// NormalizeIsoformSource resolves what an API caller asked for to a table
+// that exists. An unnamed source, and anything not recognised, means MSKCC.
+func NormalizeIsoformSource(source string) string {
+	normalized := strings.ToLower(strings.TrimSpace(source))
+	switch normalized {
+	case IsoformSourceEnsembl, IsoformSourceGenomeNexus, IsoformSourceUniprot:
+		return normalized
+	default:
+		return IsoformSourceMSKCC
+	}
+}
+
+// LoadCanonicalOverridesBySource reads every isoform override table the
+// biomart file carries, keyed by source name, so that a request naming one of
+// them gets that table rather than a silent fallback to another.
+func LoadCanonicalOverridesBySource(path string) (map[string]CanonicalOverrides, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open biomart canonicals: %w", err)
+	}
+	defer f.Close()
+	return parseCanonicalOverridesBySource(f)
+}
+
+func parseCanonicalOverridesBySource(reader io.Reader) (map[string]CanonicalOverrides, error) {
+	bySource := make(map[string]CanonicalOverrides, len(canonicalSourceCols))
+	widest := 0
+	for source, col := range canonicalSourceCols {
+		bySource[source] = make(CanonicalOverrides)
+		if col > widest {
+			widest = col
+		}
+	}
+
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+
+	// Header.
+	if !scanner.Scan() {
+		return bySource, nil
+	}
+
+	for scanner.Scan() {
+		fields := strings.Split(scanner.Text(), "\t")
+		if len(fields) <= widest {
+			continue
+		}
+		gene := strings.TrimSpace(fields[biomartGeneCol])
+		if gene == "" {
+			continue
+		}
+		for source, col := range canonicalSourceCols {
+			txID := strings.TrimSpace(fields[col])
+			if txID == "" || txID == "nan" {
+				continue
+			}
+			bySource[source][gene] = stripVersion(txID)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan biomart canonicals: %w", err)
+	}
+	return bySource, nil
 }

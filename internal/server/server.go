@@ -92,19 +92,17 @@ func (s *Server) SetOverrideTranscripts(source string, transcripts map[string]bo
 	if s.overrideTranscripts == nil {
 		s.overrideTranscripts = make(map[string]map[string]bool)
 	}
-	s.overrideTranscripts[strings.ToLower(source)] = transcripts
+	s.overrideTranscripts[cache.NormalizeIsoformSource(source)] = transcripts
 }
 
 // OverrideTranscripts returns the transcript ids the named source makes
-// canonical. An unnamed source means MSKCC, which is what the annotation
-// pipeline asks for and what genome-nexus defaults to.
+// canonical. An unnamed source, and anything not recognised, means MSKCC,
+// which is what the annotation pipeline asks for and what genome-nexus
+// falls back to.
 func (s *Server) OverrideTranscripts(source string) map[string]bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if source == "" {
-		source = "mskcc"
-	}
-	return s.overrideTranscripts[strings.ToLower(source)]
+	return s.overrideTranscripts[cache.NormalizeIsoformSource(source)]
 }
 
 // SetOfficialGeneSymbols records the retired-to-approved gene symbol map.

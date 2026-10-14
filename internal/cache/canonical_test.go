@@ -230,3 +230,64 @@ func TestParseBiomartCanonicals_EntrezColumn(t *testing.T) {
 	assert.Equal(t, "3845", entrez["KRAS"], "Entrez gene ID must come from col 31")
 	assert.NotEqual(t, "6/2/88", entrez["KRAS"], "col 27 is a date, not an Entrez ID")
 }
+
+func TestNormalizeIsoformSource(t *testing.T) {
+	// The three named alternatives resolve to themselves.
+	for _, source := range []string{"ensembl", "genome_nexus", "uniprot"} {
+		if got := NormalizeIsoformSource(source); got != source {
+			t.Errorf("NormalizeIsoformSource(%q) = %q, want %q", source, got, source)
+		}
+	}
+	// Everything else is MSKCC: an unnamed source, an unknown one, and
+	// MSKCC's own name in any spelling.
+	for _, source := range []string{"", "   ", "mskcc", "MSKCC", " MsKcC ", "something_else"} {
+		if got := NormalizeIsoformSource(source); got != IsoformSourceMSKCC {
+			t.Errorf("NormalizeIsoformSource(%q) = %q, want %q", source, got, IsoformSourceMSKCC)
+		}
+	}
+}
+
+func TestParseCanonicalOverridesBySource(t *testing.T) {
+	// Columns 0, 2, 5, 8 and 11 are the gene and its four canonical
+	// transcripts; the rest are padding to reach column 11.
+	row := func(gene, ensembl, genomeNexus, uniprot, mskcc string) string {
+		f := make([]string, 12)
+		f[0], f[2], f[5], f[8], f[11] = gene, ensembl, genomeNexus, uniprot, mskcc
+		return strings.Join(f, "\t")
+	}
+	input := strings.Join([]string{
+		"header",
+		row("CDKN2A", "ENST00000498124", "ENST00000579755", "ENST00000304494", "ENST00000579755"),
+		// A gene that names a transcript for only one source, and a version
+		// suffix that has to come off.
+		row("ONLYMSK", "", "", "", "ENST00000000001.7"),
+		// "nan" is how the table spells a gene with no canonical transcript.
+		row("NONE", "nan", "nan", "nan", "nan"),
+	}, "\n")
+
+	bySource, err := parseCanonicalOverridesBySource(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	want := map[string]string{
+		IsoformSourceEnsembl:     "ENST00000498124",
+		IsoformSourceGenomeNexus: "ENST00000579755",
+		IsoformSourceUniprot:     "ENST00000304494",
+		IsoformSourceMSKCC:       "ENST00000579755",
+	}
+	for source, txID := range want {
+		if got := bySource[source]["CDKN2A"]; got != txID {
+			t.Errorf("CDKN2A under %s = %q, want %q", source, got, txID)
+		}
+	}
+	if got := bySource[IsoformSourceMSKCC]["ONLYMSK"]; got != "ENST00000000001" {
+		t.Errorf("ONLYMSK under mskcc = %q, want the version stripped", got)
+	}
+	if _, ok := bySource[IsoformSourceEnsembl]["ONLYMSK"]; ok {
+		t.Error("ONLYMSK should not appear under ensembl")
+	}
+	if _, ok := bySource[IsoformSourceMSKCC]["NONE"]; ok {
+		t.Error(`a gene whose transcript is "nan" should not appear at all`)
+	}
+}

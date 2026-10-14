@@ -19,11 +19,6 @@ type GNMarshalOptions struct {
 	IncludeSignal            bool
 	IncludeMyVariantInfo     bool
 
-	// IsoformOverrideSource names the isoform override table that decides
-	// which transcript is canonical ("mskcc"; anything else falls back to
-	// Ensembl's own flag). It is the API's isoformOverrideSource parameter.
-	IsoformOverrideSource string
-
 	// OverrideTranscripts is the set of transcript ids the isoform override
 	// source names canonical, across all genes. Empty leaves the annotations'
 	// own canonical flags alone.

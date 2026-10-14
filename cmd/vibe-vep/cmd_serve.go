@@ -370,11 +370,14 @@ func loadCancerGenes(logger *zap.Logger, assemblies []string) (cancer, curated m
 	return nil, nil
 }
 
-// loadOverrideTranscripts loads the isoform override tables that decide which
-// transcript a variant is reported on. The set is read across all genes
-// rather than per gene on purpose: a gene the GENCODE release still calls by
-// an older symbol -- WHSC1 where the table says NSD2 -- would otherwise lose
-// its override entirely.
+// loadOverrideTranscripts loads every isoform override table the biomart file
+// carries -- MSKCC, UniProt, Ensembl and Genome Nexus -- so a request naming
+// one of them gets that table rather than a silent fallback to another.
+//
+// Each is read as a set of transcript ids across all genes rather than per
+// gene on purpose: a gene the GENCODE release still calls by an older symbol
+// -- WHSC1 where the table says NSD2 -- would otherwise lose its override
+// entirely.
 func loadOverrideTranscripts(logger *zap.Logger, srv *server.Server, assemblies []string) {
 	for _, name := range assemblies {
 		normalized, err := normalizeAssembly(strings.TrimSpace(name))
@@ -385,13 +388,22 @@ func loadOverrideTranscripts(logger *zap.Logger, srv *server.Server, assemblies 
 		if !found || canonicalPath == "" {
 			continue
 		}
-		mskcc, ensembl, _, err := cache.LoadBiomartCanonicals(canonicalPath)
+		bySource, err := cache.LoadCanonicalOverridesBySource(canonicalPath)
 		if err != nil {
 			logger.Warn("could not load isoform overrides", zap.Error(err))
 			continue
 		}
-		srv.SetOverrideTranscripts("mskcc", transcriptSet(mskcc, cdkn2aMSKCCSecondCanonical))
-		srv.SetOverrideTranscripts("ensembl", transcriptSet(ensembl))
+		counts := make([]zap.Field, 0, len(bySource)+1)
+		counts = append(counts, zap.String("path", canonicalPath))
+		for source, overrides := range bySource {
+			extra := []string(nil)
+			if source == cache.IsoformSourceMSKCC {
+				extra = append(extra, cdkn2aMSKCCSecondCanonical)
+			}
+			srv.SetOverrideTranscripts(source, transcriptSet(overrides, extra...))
+			counts = append(counts, zap.Int(source, len(overrides)))
+		}
+		logger.Info("loaded isoform overrides", counts...)
 
 		if symbols, err := cache.LoadPreviousGeneSymbols(canonicalPath); err != nil {
 			logger.Warn("could not load previous gene symbols", zap.Error(err))
@@ -400,10 +412,6 @@ func loadOverrideTranscripts(logger *zap.Logger, srv *server.Server, assemblies 
 			logger.Info("loaded previous gene symbols", zap.Int("symbols", len(symbols)))
 		}
 
-		logger.Info("loaded isoform overrides",
-			zap.String("path", canonicalPath),
-			zap.Int("mskcc", len(mskcc)),
-			zap.Int("ensembl", len(ensembl)))
 		return
 	}
 }
