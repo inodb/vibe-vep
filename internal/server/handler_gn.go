@@ -352,6 +352,7 @@ func (s *Server) parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions 
 		CuratedGenes:             curated,
 		OfficialGeneSymbols:      s.OfficialGeneSymbols(),
 		Revue:                    s.Revue(),
+		UniprotIDs:               s.uniprotLookup(r),
 		// genome-nexus is deployed with overwrite_by_confirmed_revue_only on,
 		// so an entry still under review does not displace a prediction.
 		RevueConfirmedOnly: true,
@@ -381,4 +382,17 @@ func parseCommaGenomicLocation(s string) (input.GenomicLocation, error) {
 		ReferenceAllele: parts[3],
 		VariantAllele:   parts[4],
 	}, nil
+}
+
+// uniprotLookup returns the transcript-to-UniProt lookup for the assembly a
+// request names, or nil where no mapping is loaded.
+func (s *Server) uniprotLookup(r *http.Request) func(string) string {
+	ctx := s.getAssembly(r.PathValue("assembly"))
+	if ctx == nil {
+		ctx = s.soleAssembly()
+	}
+	if ctx == nil || ctx.uniprot == nil {
+		return nil
+	}
+	return ctx.uniprot.LookupByTranscript
 }

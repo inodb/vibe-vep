@@ -176,6 +176,10 @@ type GNTranscriptConsequenceSummary struct {
 	SIFTScore             *float64        `json:"siftScore,omitempty"`
 	SIFTPrediction        string          `json:"siftPrediction,omitempty"`
 
+	// UniprotID names the protein entry the transcript translates to, which
+	// clients use to line a variant up against protein-level annotation.
+	UniprotID string `json:"uniprotId,omitempty"`
+
 	// IsVue marks a protein change that came from reVUE's published evidence
 	// rather than from the sequence.
 	IsVue bool `json:"isVue,omitempty"`

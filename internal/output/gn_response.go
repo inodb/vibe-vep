@@ -40,6 +40,9 @@ type GNMarshalOptions struct {
 	// release the annotation came from still uses the old one.
 	OfficialGeneSymbols map[string]string
 
+	// UniprotIDs maps a transcript to the protein entry it translates to.
+	UniprotIDs func(transcriptID string) string
+
 	// Revue is the catalogue of variants whose published protein effect is
 	// not the one the sequence predicts. Nil leaves every prediction alone.
 	Revue *revue.Store
@@ -359,6 +362,10 @@ func buildTranscriptConsequenceSummary(tc *GNTranscriptConsequence, ann *annotat
 	// looks it up by gene, and vibe-vep carries it on the annotation.
 	if ann != nil {
 		tcs.EntrezGeneID = ann.EntrezGeneID
+	}
+
+	if opt.UniprotIDs != nil {
+		tcs.UniprotID = opt.UniprotIDs(tc.TranscriptID)
 	}
 
 	return tcs

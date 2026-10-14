@@ -204,6 +204,7 @@ func (s *Server) Handler() http.Handler {
 	// Health and info endpoints.
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /info", s.handleInfo)
+	mux.HandleFunc("GET /version", s.handleVersion)
 
 	// Ensembl VEP compatibility endpoints.
 	mux.HandleFunc("GET /ensembl/{assembly}/vep/human/region/{region}/{allele}", s.handleEnsemblRegionGet)
