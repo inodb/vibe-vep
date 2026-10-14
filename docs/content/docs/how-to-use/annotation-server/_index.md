@@ -59,3 +59,10 @@ resemble them, and the server logs at startup which of them it found:
 
 Without the canonical transcript table the server falls back to Ensembl's own
 canonical flags, which for a cancer panel is usually the wrong transcript.
+
+`VUEs.json` is the one that moves: reVUE publishes new findings, and a Genome
+Nexus deployment re-reads the catalogue every time it starts. This server
+reads the downloaded copy instead, which keeps a run reproducible but means a
+stale copy quietly reports the predicted effect for a variant the catalogue
+has since revised. It logs the number of effects it loaded at startup, and
+`vibe-vep download` refreshes it.
