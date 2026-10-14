@@ -15,6 +15,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
+	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
 	"github.com/inodb/vibe-vep/internal/datasource/pfam"
 	"github.com/inodb/vibe-vep/internal/datasource/ptm"
 	"github.com/inodb/vibe-vep/internal/datasource/uniprot"
@@ -181,6 +183,11 @@ func runServe(logger *zap.Logger, cfg runServeConfig) error {
 			zap.Duration("elapsed", time.Since(start)))
 	}
 
+	if cancer, curated := loadCancerGenes(logger, assemblyNames); len(cancer) > 0 {
+		srv.SetCancerGenes(cancer, curated)
+	}
+	loadOverrideTranscripts(logger, srv, assemblyNames)
+
 	// Ensure cleanup on shutdown.
 	defer func() {
 		for _, cr := range cacheResults {
@@ -314,4 +321,93 @@ func loadUniprotStore(logger *zap.Logger, assembly string) *uniprot.Store {
 		zap.Duration("elapsed", time.Since(start)))
 
 	return store
+}
+
+// loadCancerGenes loads the OncoKB cancer gene list, which decides which of
+// two overlapping genes a variant is reported against. It is looked for where
+// the config points, then beside the downloaded reference data, then in the
+// working directory, so a checkout can serve without extra configuration.
+func loadCancerGenes(logger *zap.Logger, assemblies []string) (cancer, curated map[string]bool) {
+	var candidates []string
+	if p := viper.GetString("oncokb.cancer-gene-list"); p != "" {
+		candidates = append(candidates, p)
+	}
+	for _, name := range assemblies {
+		normalized, err := normalizeAssembly(strings.TrimSpace(name))
+		if err != nil {
+			continue
+		}
+		if rawDir := RawDir(normalized); rawDir != "" {
+			candidates = append(candidates, filepath.Join(rawDir, CancerGeneListFileName))
+		}
+	}
+	candidates = append(candidates, CancerGeneListFileName)
+
+	for _, path := range candidates {
+		cgl, err := oncokb.LoadCancerGeneList(path)
+		if err != nil {
+			continue
+		}
+		cancer, curated = cgl.Genes(), cgl.CuratedGenes()
+		logger.Info("loaded cancer gene list",
+			zap.String("path", path),
+			zap.Int("genes", len(cancer)),
+			zap.Int("curated", len(curated)))
+		return cancer, curated
+	}
+
+	logger.Warn("no cancer gene list found; a variant in two genes that each " +
+		"name a canonical transcript may be reported against the wrong one")
+	return nil, nil
+}
+
+// loadOverrideTranscripts loads the isoform override tables that decide which
+// transcript a variant is reported on. The set is read across all genes
+// rather than per gene on purpose: a gene the GENCODE release still calls by
+// an older symbol -- WHSC1 where the table says NSD2 -- would otherwise lose
+// its override entirely.
+func loadOverrideTranscripts(logger *zap.Logger, srv *server.Server, assemblies []string) {
+	for _, name := range assemblies {
+		normalized, err := normalizeAssembly(strings.TrimSpace(name))
+		if err != nil {
+			continue
+		}
+		_, _, canonicalPath, _, found := FindGENCODEFiles(normalized)
+		if !found || canonicalPath == "" {
+			continue
+		}
+		mskcc, ensembl, _, err := cache.LoadBiomartCanonicals(canonicalPath)
+		if err != nil {
+			logger.Warn("could not load isoform overrides", zap.Error(err))
+			continue
+		}
+		srv.SetOverrideTranscripts("mskcc", transcriptSet(mskcc, cdkn2aMSKCCSecondCanonical))
+		srv.SetOverrideTranscripts("ensembl", transcriptSet(ensembl))
+		logger.Info("loaded isoform overrides",
+			zap.String("path", canonicalPath),
+			zap.Int("mskcc", len(mskcc)),
+			zap.Int("ensembl", len(ensembl)))
+		return
+	}
+}
+
+// cdkn2aMSKCCSecondCanonical is the one transcript genome-nexus adds to the
+// MSKCC override set by hand. CDKN2A is transcribed into two proteins from
+// overlapping reading frames, and MSK reports both: the table names p14ARF's
+// ENST00000579755 and this is p16INK4a's.
+const cdkn2aMSKCCSecondCanonical = "ENST00000304494"
+
+// transcriptSet collects the transcript ids an override table names, plus any
+// extras, dropping the version suffix so they compare against VEP's bare ids.
+func transcriptSet(overrides cache.CanonicalOverrides, extra ...string) map[string]bool {
+	set := make(map[string]bool, len(overrides)+len(extra))
+	for _, txID := range overrides {
+		if txID != "" {
+			set[txID] = true
+		}
+	}
+	for _, txID := range extra {
+		set[txID] = true
+	}
+	return set
 }

@@ -36,6 +36,17 @@ type Server struct {
 	logger          *zap.Logger
 	version         string
 	myVariantClient *myvariantinfo.Client
+
+	// cancerGenes and curatedGenes are the OncoKB cancer gene list and the
+	// curated subset of it. genome-nexus uses them to decide which gene a
+	// variant falling in two of them is reported against, so without them
+	// those variants can land on the wrong gene.
+	cancerGenes  map[string]bool
+	curatedGenes map[string]bool
+
+	// overrideTranscripts holds, per isoform override source, the transcript
+	// ids that source names canonical. Keyed by lowercase source name.
+	overrideTranscripts map[string]map[string]bool
 }
 
 // New creates a new Server.
@@ -46,6 +57,45 @@ func New(logger *zap.Logger, version string) *Server {
 		version:         version,
 		myVariantClient: myvariantinfo.NewClient(),
 	}
+}
+
+// SetCancerGenes records the OncoKB cancer gene list and its curated subset,
+// used to decide which of two overlapping genes a variant is reported against.
+func (s *Server) SetCancerGenes(cancer, curated map[string]bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cancerGenes = cancer
+	s.curatedGenes = curated
+}
+
+// CancerGenes returns the OncoKB cancer gene list and its curated subset.
+func (s *Server) CancerGenes() (cancer, curated map[string]bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cancerGenes, s.curatedGenes
+}
+
+// SetOverrideTranscripts records the transcript ids an isoform override
+// source names canonical.
+func (s *Server) SetOverrideTranscripts(source string, transcripts map[string]bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.overrideTranscripts == nil {
+		s.overrideTranscripts = make(map[string]map[string]bool)
+	}
+	s.overrideTranscripts[strings.ToLower(source)] = transcripts
+}
+
+// OverrideTranscripts returns the transcript ids the named source makes
+// canonical. An unnamed source means MSKCC, which is what the annotation
+// pipeline asks for and what genome-nexus defaults to.
+func (s *Server) OverrideTranscripts(source string) map[string]bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if source == "" {
+		source = "mskcc"
+	}
+	return s.overrideTranscripts[strings.ToLower(source)]
 }
 
 // AddAssembly registers an assembly with its annotator and sources.
@@ -171,16 +221,16 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.RUnlock()
 
 	type assemblyInfo struct {
-		Name             string `json:"name"`
-		TranscriptCount  int    `json:"transcript_count"`
-		AnnotationSources int   `json:"annotation_sources"`
+		Name              string `json:"name"`
+		TranscriptCount   int    `json:"transcript_count"`
+		AnnotationSources int    `json:"annotation_sources"`
 	}
 
 	assemblies := make([]assemblyInfo, 0, len(s.assemblies))
 	for _, ctx := range s.assemblies {
 		assemblies = append(assemblies, assemblyInfo{
-			Name:             ctx.assembly,
-			TranscriptCount:  ctx.cache.TranscriptCount(),
+			Name:              ctx.assembly,
+			TranscriptCount:   ctx.cache.TranscriptCount(),
 			AnnotationSources: len(ctx.sources),
 		})
 	}

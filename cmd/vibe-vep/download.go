@@ -469,16 +469,17 @@ func formatSize(bytes int64) string {
 
 // Annotation source data file names.
 const (
-	ClinVarFileName      = "clinvar.vcf.gz"
-	SignalFileName       = "signaldb_all_variants_frequencies.txt"
-	DbSnpFileName              = "dbsnp.vcf.gz"
-	EnsemblPredDBName          = "ensembl_sift_polyphen.sqlite"
-	EnsemblTranslationMD5Name  = "translation_md5.txt.gz"
-	EnsemblPredictionsName     = "protein_function_predictions.txt.gz"
-	PfamAFileName              = "pfamA.txt"
-	PfamBiomartFileName        = "ensembl_biomart_pfam.txt"
-	PtmFileName                = "ptm.json.gz"
-	UniprotMappingFileName     = "enst_to_uniprot_mapping_id.txt"
+	ClinVarFileName           = "clinvar.vcf.gz"
+	SignalFileName            = "signaldb_all_variants_frequencies.txt"
+	DbSnpFileName             = "dbsnp.vcf.gz"
+	EnsemblPredDBName         = "ensembl_sift_polyphen.sqlite"
+	EnsemblTranslationMD5Name = "translation_md5.txt.gz"
+	EnsemblPredictionsName    = "protein_function_predictions.txt.gz"
+	PfamAFileName             = "pfamA.txt"
+	PfamBiomartFileName       = "ensembl_biomart_pfam.txt"
+	PtmFileName               = "ptm.json.gz"
+	UniprotMappingFileName    = "enst_to_uniprot_mapping_id.txt"
+	CancerGeneListFileName    = "cancerGeneList.tsv"
 )
 
 // GnomadFileName returns the expected filename for the given assembly.

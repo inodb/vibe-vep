@@ -41,7 +41,7 @@ func (s *Server) handleGNGenomicGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	opts := parseGNMarshalOptions(r)
+	opts := s.parseGNMarshalOptions(r)
 	s.enrichMyVariantInfo(&opts, v, ctx.assembly, anns)
 	data, err := output.MarshalGNAnnotation(inputLabel, v, anns, ctx.assembly, opts)
 	if err != nil {
@@ -72,7 +72,7 @@ func (s *Server) handleGNGenomicPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	baseOpts := parseGNMarshalOptions(r)
+	baseOpts := s.parseGNMarshalOptions(r)
 	results := make([]json.RawMessage, 0, len(locations))
 	for _, gl := range locations {
 		v := gl.ToVariant()
@@ -130,7 +130,7 @@ func (s *Server) handleGNHGVSGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	opts := parseGNMarshalOptions(r)
+	opts := s.parseGNMarshalOptions(r)
 	s.enrichMyVariantInfo(&opts, v, ctx.assembly, anns)
 	data, err := output.MarshalGNAnnotation(notation, v, anns, ctx.assembly, opts)
 	if err != nil {
@@ -161,7 +161,7 @@ func (s *Server) handleGNHGVSPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	baseOpts := parseGNMarshalOptions(r)
+	baseOpts := s.parseGNMarshalOptions(r)
 	results := make([]json.RawMessage, 0, len(notations))
 	for _, notation := range notations {
 		variants, err := s.resolveHGVS(ctx, notation)
@@ -336,15 +336,20 @@ func convertMyVariantInfo(src *myvariantinfo.MyVariantInfo) *output.GNMyVariantI
 
 // parseGNMarshalOptions extracts GN marshal options from query parameters.
 // Supports both comma-separated (?fields=a,b) and repeated (?fields=a&fields=b).
-func parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions {
+func (s *Server) parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions {
 	fields := strings.Join(r.URL.Query()["fields"], ",")
+	source := r.URL.Query().Get("isoformOverrideSource")
+	cancer, curated := s.CancerGenes()
 	return output.GNMarshalOptions{
 		IncludeAnnotationSummary: strings.Contains(fields, "annotation_summary"),
 		IncludeClinVar:           strings.Contains(fields, "clinvar"),
 		IncludeHotspots:          strings.Contains(fields, "hotspots"),
 		IncludeSignal:            strings.Contains(fields, "signal"),
 		IncludeMyVariantInfo:     strings.Contains(fields, "my_variant_info"),
-		IsoformOverrideSource:    r.URL.Query().Get("isoformOverrideSource"),
+		IsoformOverrideSource:    source,
+		OverrideTranscripts:      s.OverrideTranscripts(source),
+		CancerGenes:              cancer,
+		CuratedGenes:             curated,
 	}
 }
 
@@ -365,11 +370,10 @@ func parseCommaGenomicLocation(s string) (input.GenomicLocation, error) {
 	}
 
 	return input.GenomicLocation{
-		Chromosome:     parts[0],
-		Start:          start,
-		End:            end,
+		Chromosome:      parts[0],
+		Start:           start,
+		End:             end,
 		ReferenceAllele: parts[3],
-		VariantAllele:  parts[4],
+		VariantAllele:   parts[4],
 	}, nil
 }
-

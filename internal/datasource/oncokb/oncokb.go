@@ -12,6 +12,31 @@ import (
 type Annotation struct {
 	HugoSymbol string
 	GeneType   string // "ONCOGENE", "TSG", or "ONCOGENE,TSG"
+
+	// OncoKBAnnotated marks the genes OncoKB curates, a subset of the list.
+	// genome-nexus prefers a curated gene over a merely listed one when two
+	// genes overlapping a variant each offer a canonical transcript.
+	OncoKBAnnotated bool
+}
+
+// CuratedGenes returns the symbols OncoKB curates.
+func (c CancerGeneList) CuratedGenes() map[string]bool {
+	genes := make(map[string]bool)
+	for symbol, a := range c {
+		if a.OncoKBAnnotated {
+			genes[symbol] = true
+		}
+	}
+	return genes
+}
+
+// Genes returns every symbol in the list, curated or not.
+func (c CancerGeneList) Genes() map[string]bool {
+	genes := make(map[string]bool, len(c))
+	for symbol := range c {
+		genes[symbol] = true
+	}
+	return genes
 }
 
 // CancerGeneList maps Hugo Symbol to Annotation.
@@ -42,12 +67,15 @@ func LoadCancerGeneList(path string) (CancerGeneList, error) {
 
 	hugoIdx := -1
 	geneTypeIdx := -1
+	annotatedIdx := -1
 	for i, col := range header {
 		switch col {
 		case "Hugo Symbol":
 			hugoIdx = i
 		case "Gene Type":
 			geneTypeIdx = i
+		case "OncoKB Annotated":
+			annotatedIdx = i
 		}
 	}
 	if hugoIdx < 0 {
@@ -68,9 +96,14 @@ func LoadCancerGeneList(path string) (CancerGeneList, error) {
 		if hugo == "" {
 			continue
 		}
+		annotated := false
+		if annotatedIdx >= 0 && annotatedIdx < len(fields) {
+			annotated = strings.EqualFold(strings.TrimSpace(fields[annotatedIdx]), "Yes")
+		}
 		cgl[hugo] = &Annotation{
-			HugoSymbol: hugo,
-			GeneType:   geneType,
+			HugoSymbol:      hugo,
+			GeneType:        geneType,
+			OncoKBAnnotated: annotated,
 		}
 	}
 	if err := scanner.Err(); err != nil {

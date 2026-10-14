@@ -24,6 +24,17 @@ type GNMarshalOptions struct {
 	// Ensembl's own flag). It is the API's isoformOverrideSource parameter.
 	IsoformOverrideSource string
 
+	// OverrideTranscripts is the set of transcript ids the isoform override
+	// source names canonical, across all genes. Empty leaves the annotations'
+	// own canonical flags alone.
+	OverrideTranscripts map[string]bool
+
+	// CuratedGenes and CancerGenes are the OncoKB curated genes and the whole
+	// cancer gene list. They decide which gene a variant falling in two of
+	// them is reported against.
+	CuratedGenes map[string]bool
+	CancerGenes  map[string]bool
+
 	// MyVariantInfoData holds pre-fetched myvariant.info data to include in the response.
 	// The handler populates this before calling MarshalGNAnnotation.
 	MyVariantInfoData *GNMyVariantInfoAnnotation
@@ -62,7 +73,7 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 	// genome-nexus chooses it: the isoform override table names the candidates,
 	// and the variant's most severe consequence breaks a tie between them.
 	result.MostSevereConsequence = mostSevereConsequence(anns)
-	canonicalAnn, canonicalIDs := resolveCanonical(anns, opt.IsoformOverrideSource, result.MostSevereConsequence)
+	canonicalAnn, canonicalIDs := resolveCanonical(anns, opt, result.MostSevereConsequence)
 
 	for _, ann := range anns {
 		canonical := ""
