@@ -39,6 +39,10 @@ RUN apt-get update && \
 
 COPY --from=builder /vibe-vep /usr/local/bin/vibe-vep
 COPY data/ /data/
+# The cancer gene list decides which gene a variant falling in two of them is
+# reported against. It ships with the source rather than being downloaded, so
+# it has to be copied in separately.
+COPY cancerGeneList.tsv /data/
 
 ENV VIBE_VEP_DATA_DIR=/data
 EXPOSE 8080

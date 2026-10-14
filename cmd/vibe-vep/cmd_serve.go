@@ -345,6 +345,11 @@ func loadCancerGenes(logger *zap.Logger, assemblies []string) (cancer, curated m
 			candidates = append(candidates, filepath.Join(rawDir, CancerGeneListFileName))
 		}
 	}
+	// The cancer gene list says nothing about an assembly, so it may also sit
+	// beside the per-assembly directories rather than inside one.
+	if dataDir := DataDir(); dataDir != "" {
+		candidates = append(candidates, filepath.Join(dataDir, CancerGeneListFileName))
+	}
 	candidates = append(candidates, CancerGeneListFileName)
 
 	for _, path := range candidates {
