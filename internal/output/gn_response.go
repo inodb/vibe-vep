@@ -310,7 +310,14 @@ func splitAlleleString(alleleString string) (ref, alt string) {
 
 func buildTranscriptConsequenceSummary(tc *GNTranscriptConsequence, ann *annotate.Annotation, variantType string, inframe bool, officialGeneSymbols map[string]string) GNTranscriptConsequenceSummary {
 	aaRef, aaAlt := splitAminoAcids(tc.AminoAcids)
-	hgvspShort := gnResolveHgvspShort(tc, variantType, inframe)
+
+	// A splice site past the stop codon is named for the last residue of the
+	// protein it sits beyond, so the length has to come from the transcript.
+	proteinLength := 0
+	if ann != nil {
+		proteinLength = ann.ProteinLength
+	}
+	hgvspShort := gnResolveHgvspShort(tc, proteinLength, variantType, inframe)
 
 	tcs := GNTranscriptConsequenceSummary{
 		TranscriptID:   tc.TranscriptID,

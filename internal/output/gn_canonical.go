@@ -49,40 +49,40 @@ var effectPriority = map[string]int{
 	"splice_donor_5th_base_variant":       10,
 	"splice_region_variant":               10,
 	"splice_donor_region_variant":         10,
-	"splice_polypyrimidine_tract_variant": 10,
-	"synonymous_variant":                  11,
-	"start_retained_variant":              11,
-	"stop_retained_variant":               11,
-	"incomplete_terminal_codon_variant":   12,
+	"splice_polypyrimidine_tract_variant": 11,
+	"synonymous_variant":                  12,
+	"start_retained_variant":              12,
+	"stop_retained_variant":               12,
+	"incomplete_terminal_codon_variant":   13,
 	// modifier
-	"coding_sequence_variant":                        13,
-	"mature_mirna_variant":                           13,
-	"exon_variant":                                   13,
-	"5_prime_utr_variant":                            14,
-	"5_prime_utr_premature_start_codon_gain_variant": 14,
-	"3_prime_utr_variant":                            15,
-	"non_coding_exon_variant":                        15,
-	"non_coding_transcript_exon_variant":             15,
-	"non_coding_transcript_variant":                  16,
-	"nc_transcript_variant":                          16,
-	"intron_variant":                                 16,
-	"intragenic_variant":                             16,
-	"intragenic":                                     16,
-	"nmd_transcript_variant":                         17,
-	"coding_transcript_variant":                      18,
-	"upstream_gene_variant":                          19,
-	"downstream_gene_variant":                        19,
-	"tfbs_ablation":                                  20,
-	"tfbs_amplification":                             20,
-	"tf_binding_site_variant":                        20,
-	"regulatory_region_ablation":                     20,
-	"regulatory_region_amplification":                20,
-	"regulatory_region_variant":                      20,
-	"regulatory_region":                              20,
-	"intergenic_variant":                             21,
-	"intergenic_region":                              21,
-	"sequence_variant":                               21,
-	"":                                               22,
+	"coding_sequence_variant":                        14,
+	"mature_mirna_variant":                           14,
+	"exon_variant":                                   14,
+	"5_prime_utr_variant":                            15,
+	"5_prime_utr_premature_start_codon_gain_variant": 15,
+	"3_prime_utr_variant":                            16,
+	"non_coding_exon_variant":                        16,
+	"non_coding_transcript_exon_variant":             16,
+	"non_coding_transcript_variant":                  17,
+	"nc_transcript_variant":                          17,
+	"intron_variant":                                 17,
+	"intragenic_variant":                             17,
+	"intragenic":                                     17,
+	"nmd_transcript_variant":                         18,
+	"coding_transcript_variant":                      19,
+	"upstream_gene_variant":                          20,
+	"downstream_gene_variant":                        20,
+	"tfbs_ablation":                                  21,
+	"tfbs_amplification":                             21,
+	"tf_binding_site_variant":                        21,
+	"regulatory_region_ablation":                     21,
+	"regulatory_region_amplification":                21,
+	"regulatory_region_variant":                      21,
+	"regulatory_region":                              21,
+	"intergenic_variant":                             22,
+	"intergenic_region":                              22,
+	"sequence_variant":                               22,
+	"":                                               23,
 }
 
 // rankEffect returns the severity rank of a consequence term. An unknown term
@@ -291,32 +291,46 @@ func preferCancerGenes(anns []*annotate.Annotation, curated, cancer map[string]b
 	return anns
 }
 
-// transcriptWithMostSevereConsequence breaks a tie between transcripts. A
-// transcript that carries the variant's most severe consequence term wins
-// outright; otherwise the most severe term anyone carries decides, and the
-// first transcript to reach it wins. Order therefore matters, and it is the
-// order the annotations were produced in.
+// transcriptWithMostSevereConsequence breaks a tie between transcripts. The
+// transcripts carrying the variant's most severe consequence term are
+// preferred, and among those the ones reaching the most severe term anyone
+// reaches. Only if that still leaves several does the first one win, so the
+// order the annotations arrive in decides as little as possible.
 func transcriptWithMostSevereConsequence(anns []*annotate.Annotation, mostSevere string) *annotate.Annotation {
-	highest := math.MaxInt32
-	var best *annotate.Annotation
+	if len(anns) == 0 {
+		return nil
+	}
 
-	for _, ann := range anns {
-		for _, term := range splitConsequence(ann.Consequence) {
-			if p := rankEffect(term); p < highest {
-				best = ann
-				highest = p
+	target := strings.ToLower(strings.TrimSpace(mostSevere))
+	var candidates []*annotate.Annotation
+	if target != "" {
+		for _, ann := range anns {
+			for _, term := range splitConsequence(ann.Consequence) {
+				if strings.ToLower(strings.TrimSpace(term)) == target {
+					candidates = append(candidates, ann)
+					break
+				}
 			}
-			if strings.TrimSpace(term) == mostSevere {
+		}
+	}
+	if len(candidates) == 0 {
+		candidates = anns
+	}
+
+	best := math.MaxInt32
+	for _, ann := range candidates {
+		for _, term := range splitConsequence(ann.Consequence) {
+			if p := rankEffect(term); p < best {
+				best = p
+			}
+		}
+	}
+	for _, ann := range candidates {
+		for _, term := range splitConsequence(ann.Consequence) {
+			if rankEffect(term) == best {
 				return ann
 			}
 		}
 	}
-
-	if best != nil {
-		return best
-	}
-	if len(anns) > 0 {
-		return anns[0]
-	}
-	return nil
+	return candidates[0]
 }

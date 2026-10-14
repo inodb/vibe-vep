@@ -67,6 +67,7 @@ type Annotation struct {
 	HGVSOffset         int               // 3' shift distance applied to reach the HGVS representation
 	ProteinStart       int64             // VEP protein_start: unshifted position of the change
 	ProteinEnd         int64             // VEP protein_end
+	ProteinLength      int               // Length of the transcript's protein, in residues
 	Consequence        string            // SO consequence term
 	Impact             string            // HIGH, MODERATE, LOW, MODIFIER
 	CDSPosition        int64             // Position in CDS, 0 if not in CDS

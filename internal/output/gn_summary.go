@@ -31,11 +31,12 @@ var aa3to1 = [][2]string{
 }
 
 // spliceSiteVariants are the terms that make genome-nexus name a protein
-// change p.X<n>_splice instead of translating one.
+// change p.X<n>_splice instead of translating one. A splice region variant is
+// not one of them: it can sit far enough from the junction to leave a real
+// protein change worth naming.
 var spliceSiteVariants = map[string]bool{
 	"splice_acceptor_variant": true,
 	"splice_donor_variant":    true,
-	"splice_region_variant":   true,
 }
 
 // cDNAExtractor pulls the coding position out of an HGVSc notation. It is
@@ -46,6 +47,17 @@ var cDNAExtractor = regexp.MustCompile(`^.*[cn].-?\*?(\d+).*$`)
 // digits finds the numbers in a protein change, for reading a position back
 // out of a name genome-nexus has already built.
 var digits = regexp.MustCompile(`\d+`)
+
+// A coding position written from the 5'UTR carries a minus sign that
+// cDNAExtractor drops, so c.-309_60+142del reads as 309 rather than -309.
+// These three patterns recognise the forms where that matters: a range
+// starting in the 5'UTR, whose second coordinate is the one in the CDS, and a
+// single 5'UTR position at an intron boundary.
+var (
+	cDNAUTRStartRange  = regexp.MustCompile(`^.*[cn]\.-\d+_.*$`)
+	cDNARangeSecondPos = regexp.MustCompile(`^.*_(\d+).*$`)
+	cDNAUTRStartSplice = regexp.MustCompile(`^.*[cn]\.-\d+[+-].*$`)
+)
 
 // alleleLength counts a MAF allele, where "-" means the allele is absent.
 func alleleLength(allele string) int {
@@ -147,32 +159,35 @@ func gnVariantClassification(term, variantType string, inframe bool) string {
 
 // gnVariantMap is genome-nexus's consequence term to MAF classification table.
 var gnVariantMap = map[string]string{
-	"splice_acceptor_variant":                        "Splice_Site",
-	"splice_donor_variant":                           "Splice_Site",
-	"transcript_ablation":                            "Splice_Site",
-	"exon_loss_variant":                              "Splice_Site",
-	"stop_gained":                                    "Nonsense_Mutation",
-	"frameshift_variant":                             "Frame_Shift",
-	"stop_lost":                                      "Nonstop_Mutation",
-	"initiator_codon_variant":                        "Translation_Start_Site",
-	"start_lost":                                     "Translation_Start_Site",
-	"inframe_insertion":                              "In_Frame_Ins",
-	"inframe_deletion":                               "In_Frame_Del",
-	"disruptive_inframe_insertion":                   "In_Frame_Ins",
-	"disrupting_inframe_deletion":                    "In_Frame_Del",
-	"missense_variant":                               "Missense_Mutation",
-	"protein_altering_variant":                       "Missense_Mutation",
-	"coding_sequence_variant":                        "Missense_Mutation",
-	"coding_transcript_variant":                      "Missense_Mutation",
-	"conservative_missense_variant":                  "Missense_Mutation",
-	"rare_amino_acid_variant":                        "Missense_Mutation",
-	"transcript_amplification":                       "Intron",
-	"feature_elongation":                             "Feature_Elongation",
-	"feature_truncation":                             "Feature_Elongation",
-	"sequence_variant":                               "Sequence_Variant",
-	"splice_region_variant":                          "Splice_Region",
-	"splice_donor_region_variant":                    "Splice_Region",
-	"splice_polypyrimidine_tract_variant":            "Splice_Region",
+	"splice_acceptor_variant":       "Splice_Site",
+	"splice_donor_variant":          "Splice_Site",
+	"transcript_ablation":           "Splice_Site",
+	"exon_loss_variant":             "Splice_Site",
+	"stop_gained":                   "Nonsense_Mutation",
+	"frameshift_variant":            "Frame_Shift",
+	"stop_lost":                     "Nonstop_Mutation",
+	"initiator_codon_variant":       "Translation_Start_Site",
+	"start_lost":                    "Translation_Start_Site",
+	"inframe_insertion":             "In_Frame_Ins",
+	"inframe_deletion":              "In_Frame_Del",
+	"disruptive_inframe_insertion":  "In_Frame_Ins",
+	"disrupting_inframe_deletion":   "In_Frame_Del",
+	"missense_variant":              "Missense_Mutation",
+	"protein_altering_variant":      "Missense_Mutation",
+	"coding_sequence_variant":       "Missense_Mutation",
+	"coding_transcript_variant":     "Missense_Mutation",
+	"conservative_missense_variant": "Missense_Mutation",
+	"rare_amino_acid_variant":       "Missense_Mutation",
+	"transcript_amplification":      "Intron",
+	"feature_elongation":            "Feature_Elongation",
+	"feature_truncation":            "Feature_Elongation",
+	"sequence_variant":              "Sequence_Variant",
+	"splice_region_variant":         "Splice_Region",
+	"splice_donor_region_variant":   "Splice_Region",
+	// A polypyrimidine tract variant sits 3 to 15 bases before the acceptor
+	// site. Where it overlaps the splice region the splice region term is
+	// reported alongside it and wins, so on its own it is an intron variant.
+	"splice_polypyrimidine_tract_variant":            "Intron",
 	"splice_donor_5th_base_variant":                  "Splice_Region",
 	"intron_variant":                                 "Intron",
 	"intragenic":                                     "Intron",
@@ -214,19 +229,20 @@ var gnVariantMap = map[string]string{
 }
 
 // gnResolveHgvsp returns the protein change a transcript reports, or nothing
-// where the change is a splice variant: a splice variant has no protein
+// where the variant is at a splice site: a disturbed junction has no protein
 // change worth naming, and genome-nexus builds p.X<n>_splice from the coding
-// position instead.
+// position instead. A splice region variant keeps its protein change, since
+// it can sit far enough from the junction to have a real one.
 //
 // It asks for the classification without the variant's alleles, exactly as
-// genome-nexus does, which leaves every non-splice term classified
-// Targeted_Region here. Only the word "splice" is ever read off the answer.
+// genome-nexus does, which leaves every other term classified Targeted_Region
+// here. Only Splice_Site is ever read off the answer.
 func gnResolveHgvsp(tc *GNTranscriptConsequence) string {
 	if tc.HGVSp == "" {
 		return ""
 	}
 	class := gnVariantClassification(pickHighestPriorityConsequence(tc.ConsequenceTerms), "", false)
-	if strings.Contains(strings.ToLower(class), "splice") {
+	if strings.EqualFold(class, "Splice_Site") {
 		return ""
 	}
 	return normalizeHgvsp(tc.HGVSp)
@@ -248,12 +264,12 @@ func normalizeHgvsp(hgvsp string) string {
 // genome-nexus's three-way cascade: translate the reported protein change
 // where there is one, otherwise read a position out of the coding change, and
 // failing that build a name from the amino acids alone.
-func gnResolveHgvspShort(tc *GNTranscriptConsequence, variantType string, inframe bool) string {
+func gnResolveHgvspShort(tc *GNTranscriptConsequence, proteinLength int, variantType string, inframe bool) string {
 	if hgvsp := gnResolveHgvsp(tc); hgvsp != "" {
 		return shortenHgvsp(hgvsp)
 	}
 	if tc.HGVSc != "" {
-		if short := hgvspShortFromHgvsc(tc, variantType, inframe); short != "" {
+		if short := hgvspShortFromHgvsc(tc, proteinLength, variantType, inframe); short != "" {
 			return short
 		}
 	}
@@ -273,16 +289,32 @@ func shortenHgvsp(hgvsp string) string {
 }
 
 // hgvspShortFromHgvsc names a protein change for a variant that has none,
-// from the coding position alone. A splice variant is named for the residue
-// its coding position falls in; a variant with no amino acids at all is named
-// as reaching a stop there.
-func hgvspShortFromHgvsc(tc *GNTranscriptConsequence, variantType string, inframe bool) string {
+// from the coding position alone. A splice site is named for the residue the
+// junction sits beside; a variant with no amino acids at all is named as
+// reaching a stop there.
+//
+// A position outside the coding sequence needs interpreting rather than
+// dividing by three. The regex cannot see the minus sign on a 5'UTR
+// coordinate, so c.-309+2 would otherwise land in the middle of the protein
+// when the junction is before its start, and c.*8+2 would land near the start
+// when the junction is past its end. Both are anchored to the end of the
+// protein they are actually beside.
+func hgvspShortFromHgvsc(tc *GNTranscriptConsequence, proteinLength int, variantType string, inframe bool) string {
 	m := cDNAExtractor.FindStringSubmatch(tc.HGVSc)
 	if m == nil {
 		return ""
 	}
-	// "c.*" is the 3'UTR, which has no protein position to report.
-	if strings.Contains(tc.HGVSc, "c.*") {
+
+	firstTerm := ""
+	if len(tc.ConsequenceTerms) > 0 {
+		firstTerm = tc.ConsequenceTerms[0]
+	}
+	atSpliceSite := spliceSiteVariants[firstTerm]
+
+	// "c.*" is the 3'UTR, which has no protein position to report -- unless
+	// the variant is at a splice site, which does.
+	inThreePrimeUTR := strings.Contains(tc.HGVSc, "c.*")
+	if inThreePrimeUTR && !atSpliceSite {
 		return ""
 	}
 
@@ -290,14 +322,31 @@ func hgvspShortFromHgvsc(tc *GNTranscriptConsequence, variantType string, infram
 	if err != nil {
 		return ""
 	}
+	if cDNAUTRStartRange.MatchString(tc.HGVSc) {
+		if rm := cDNARangeSecondPos.FindStringSubmatch(tc.HGVSc); rm != nil {
+			if second, err := strconv.Atoi(rm[1]); err == nil && second >= 1 {
+				cPos = second
+			}
+		}
+	}
 	if cPos < 1 {
 		cPos = 1
 	}
 	pPos := (cPos + 2) / 3
 
-	if len(tc.ConsequenceTerms) > 0 && spliceSiteVariants[tc.ConsequenceTerms[0]] {
+	if atSpliceSite {
+		switch {
+		case inThreePrimeUTR:
+			if proteinLength <= 0 {
+				return ""
+			}
+			pPos = proteinLength
+		case cDNAUTRStartSplice.MatchString(tc.HGVSc):
+			pPos = 1
+		}
 		return "p.X" + strconv.Itoa(pPos) + "_splice"
 	}
+
 	if tc.AminoAcids == "" {
 		class := gnVariantClassification(pickHighestPriorityConsequence(tc.ConsequenceTerms), variantType, inframe)
 		if strings.HasPrefix(strings.ToLower(class), "frame_shift") {
@@ -339,12 +388,17 @@ func hgvspShortFromAminoAcids(tc *GNTranscriptConsequence) string {
 		return "p." + parts[0] + "del"
 
 	default:
-		short := "p." + parts[0] + strconv.FormatInt(tc.ProteinStart, 10)
+		if parts[0] == "" {
+			return ""
+		}
+		short := "p." + parts[0][:1] + strconv.FormatInt(tc.ProteinStart, 10)
 		if strings.Contains(term, "frameshift_variant") {
 			return short + "fs"
 		}
+		// A single amino acid with no alternate is VEP saying the residue is
+		// unchanged.
 		if len(parts) < 2 {
-			return ""
+			return short + "="
 		}
 		return short + parts[1]
 	}
