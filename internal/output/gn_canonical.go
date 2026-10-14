@@ -9,12 +9,12 @@ import (
 
 // A MAF row describes exactly one transcript, and every annotation column is
 // read off that transcript alone, so picking it is the single most consequential
-// decision in the response. genome-nexus makes that decision in two steps, and
-// this file reproduces both: IsoformAnnotationEnricher, which re-marks the
-// canonical flag from an isoform override table, and CanonicalTranscriptResolver
-// with TranscriptConsequencePrioritizer, which breaks a tie between several
-// canonical transcripts. Serving the genome-nexus API directly means making the
-// same choice genome-nexus would have made from the same annotations.
+// decision in the response. This file reproduces how genome-nexus picks it:
+// IsoformAnnotationEnricher narrows the field to the transcripts worth
+// considering and marks them canonical, then CanonicalTranscriptResolver and
+// TranscriptConsequencePrioritizer separate whatever is left. Serving the
+// genome-nexus API directly means making the same choice it would have made
+// from the same annotations.
 
 // effectPriority ranks Sequence Ontology terms by severity, lowest number most
 // severe. The table is genome-nexus's TranscriptConsequencePrioritizer map,
