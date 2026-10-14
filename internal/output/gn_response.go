@@ -279,6 +279,13 @@ func buildAnnotationSummary(result *GNAnnotation, anns []*annotate.Annotation, c
 	// list is only reordered for display after the summary is built. The
 	// pairing is what lets the Entrez gene id, which VEP does not report and
 	// genome-nexus looks up for itself, reach the summary.
+	// The reVUE catalogue is keyed by this, and it is the same for every
+	// transcript the variant reaches.
+	revueKey := ""
+	if opt.Revue != nil {
+		revueKey = genomicLocationKey(summary.GenomicLocation)
+	}
+
 	summaries := make([]GNTranscriptConsequenceSummary, 0, len(result.TranscriptConsequences))
 	var canonicalSummary *GNTranscriptConsequenceSummary
 	for i := range result.TranscriptConsequences {
@@ -288,7 +295,9 @@ func buildAnnotationSummary(result *GNAnnotation, anns []*annotate.Annotation, c
 			ann = anns[i]
 		}
 		tcs := buildTranscriptConsequenceSummary(tc, ann, variantType, inframe, opt)
-		applyRevisedEffect(&tcs, genomicLocationKey(summary.GenomicLocation), opt)
+		if revueKey != "" {
+			applyRevisedEffect(&tcs, revueKey, opt)
+		}
 		summaries = append(summaries, tcs)
 		if canonical != nil && ann != nil && ann.TranscriptID == canonical.TranscriptID && canonicalSummary == nil {
 			cp := tcs
