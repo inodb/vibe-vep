@@ -48,6 +48,14 @@ type GNMarshalOptions struct {
 // MarshalGNAnnotation builds a GNAnnotation from a variant and its annotations,
 // then marshals it to JSON. This produces a genome-nexus compatible response.
 func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotation, assembly string, opts ...GNMarshalOptions) ([]byte, error) {
+	// Order the annotations the way VEP orders transcript consequences,
+	// because the choice of canonical transcript reads back to it: where two
+	// candidates are equally severe, the first one listed wins. CDKN2A
+	// 9:21971036 reaches both ENST00000304494 and ENST00000579755 as
+	// missense, both are MSKCC canonical, and the order alone decides which
+	// protein change the MAF reports.
+	anns = sortedByTranscriptID(anns)
+
 	ref, alt := alleleStrings(v)
 
 	start, end := mafCoordinates(v)
@@ -472,4 +480,16 @@ func officialGeneSymbol(symbol string, officialGeneSymbols map[string]string) st
 		return official
 	}
 	return symbol
+}
+
+// sortedByTranscriptID returns the annotations in ascending transcript ID
+// order, which is the order Ensembl VEP emits them in. The input is left
+// alone.
+func sortedByTranscriptID(anns []*annotate.Annotation) []*annotate.Annotation {
+	sorted := make([]*annotate.Annotation, len(anns))
+	copy(sorted, anns)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].TranscriptID < sorted[j].TranscriptID
+	})
+	return sorted
 }
