@@ -350,6 +350,7 @@ func (s *Server) parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions 
 		OverrideTranscripts:      s.OverrideTranscripts(source),
 		CancerGenes:              cancer,
 		CuratedGenes:             curated,
+		OfficialGeneSymbols:      s.OfficialGeneSymbols(),
 	}
 }
 

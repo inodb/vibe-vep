@@ -383,6 +383,14 @@ func loadOverrideTranscripts(logger *zap.Logger, srv *server.Server, assemblies 
 		}
 		srv.SetOverrideTranscripts("mskcc", transcriptSet(mskcc, cdkn2aMSKCCSecondCanonical))
 		srv.SetOverrideTranscripts("ensembl", transcriptSet(ensembl))
+
+		if symbols, err := cache.LoadPreviousGeneSymbols(canonicalPath); err != nil {
+			logger.Warn("could not load previous gene symbols", zap.Error(err))
+		} else {
+			srv.SetOfficialGeneSymbols(symbols)
+			logger.Info("loaded previous gene symbols", zap.Int("symbols", len(symbols)))
+		}
+
 		logger.Info("loaded isoform overrides",
 			zap.String("path", canonicalPath),
 			zap.Int("mskcc", len(mskcc)),

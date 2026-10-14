@@ -55,6 +55,10 @@ const (
 	biomartEnsemblCol = 2  // ensembl_canonical_transcript
 	biomartMSKCol     = 11 // mskcc_canonical_transcript
 	biomartEntrezCol  = 31 // entrez_gene_id
+
+	// biomartPrevSymbolsCol lists, comma separated, the symbols a gene used
+	// to be called.
+	biomartPrevSymbolsCol = 23 // previous_symbols
 )
 
 // parseBiomartCanonicals parses a Genome Nexus biomart TSV, extracting
@@ -197,4 +201,86 @@ func DownloadCanonicalOverrides(assembly, destPath string) error {
 	}
 
 	return nil
+}
+
+// LoadPreviousGeneSymbols maps a retired gene symbol to the approved one, so
+// that a GENCODE release naming a gene WHSC1 can still be reported as NSD2.
+//
+// A retired symbol that some other gene has since taken as its own approved
+// name is left alone -- ERF is now a gene in its own right even though it was
+// once ETF1 -- and so is one that two genes both claim, since there would be
+// no way to say which was meant.
+func LoadPreviousGeneSymbols(path string) (map[string]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open biomart canonicals: %w", err)
+	}
+	defer f.Close()
+	return parsePreviousGeneSymbols(f)
+}
+
+func parsePreviousGeneSymbols(reader io.Reader) (map[string]string, error) {
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+
+	// Header.
+	if !scanner.Scan() {
+		return map[string]string{}, nil
+	}
+
+	type row struct {
+		official string
+		previous []string
+	}
+	var rows []row
+	approved := make(map[string]bool)
+
+	for scanner.Scan() {
+		fields := strings.Split(scanner.Text(), "\t")
+		if len(fields) <= biomartPrevSymbolsCol {
+			continue
+		}
+		official := strings.TrimSpace(fields[biomartGeneCol])
+		if official == "" {
+			continue
+		}
+		approved[official] = true
+
+		var previous []string
+		for _, p := range strings.Split(fields[biomartPrevSymbolsCol], ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				previous = append(previous, p)
+			}
+		}
+		if len(previous) > 0 {
+			rows = append(rows, row{official: official, previous: previous})
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan biomart canonicals: %w", err)
+	}
+
+	candidates := make(map[string]map[string]bool)
+	for _, r := range rows {
+		for _, prev := range r.previous {
+			if approved[prev] {
+				continue
+			}
+			if candidates[prev] == nil {
+				candidates[prev] = make(map[string]bool)
+			}
+			candidates[prev][r.official] = true
+		}
+	}
+
+	symbols := make(map[string]string, len(candidates))
+	for prev, official := range candidates {
+		if len(official) != 1 {
+			continue
+		}
+		for name := range official {
+			symbols[prev] = name
+		}
+	}
+	return symbols, nil
 }

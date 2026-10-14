@@ -47,6 +47,10 @@ type Server struct {
 	// overrideTranscripts holds, per isoform override source, the transcript
 	// ids that source names canonical. Keyed by lowercase source name.
 	overrideTranscripts map[string]map[string]bool
+
+	// officialGeneSymbols maps a retired gene symbol to the approved one, so
+	// a gene the GENCODE release still calls WHSC1 is reported as NSD2.
+	officialGeneSymbols map[string]string
 }
 
 // New creates a new Server.
@@ -96,6 +100,20 @@ func (s *Server) OverrideTranscripts(source string) map[string]bool {
 		source = "mskcc"
 	}
 	return s.overrideTranscripts[strings.ToLower(source)]
+}
+
+// SetOfficialGeneSymbols records the retired-to-approved gene symbol map.
+func (s *Server) SetOfficialGeneSymbols(symbols map[string]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.officialGeneSymbols = symbols
+}
+
+// OfficialGeneSymbols returns the retired-to-approved gene symbol map.
+func (s *Server) OfficialGeneSymbols() map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.officialGeneSymbols
 }
 
 // AddAssembly registers an assembly with its annotator and sources.

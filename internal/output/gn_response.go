@@ -35,6 +35,11 @@ type GNMarshalOptions struct {
 	CuratedGenes map[string]bool
 	CancerGenes  map[string]bool
 
+	// OfficialGeneSymbols maps a retired gene symbol to the approved one.
+	// The MAF names the gene by its approved symbol even where the GENCODE
+	// release the annotation came from still uses the old one.
+	OfficialGeneSymbols map[string]string
+
 	// MyVariantInfoData holds pre-fetched myvariant.info data to include in the response.
 	// The handler populates this before calling MarshalGNAnnotation.
 	MyVariantInfoData *GNMyVariantInfoAnnotation
@@ -127,7 +132,7 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 	}
 
 	if opt.IncludeAnnotationSummary {
-		result.AnnotationSummary = buildAnnotationSummary(&result, anns, canonicalAnn, assembly)
+		result.AnnotationSummary = buildAnnotationSummary(&result, anns, canonicalAnn, assembly, opt.OfficialGeneSymbols)
 	}
 
 	// Sort transcript consequences: canonical first (genome-nexus convention).
@@ -228,7 +233,7 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 }
 
 // buildAnnotationSummary constructs the annotation_summary enrichment.
-func buildAnnotationSummary(result *GNAnnotation, anns []*annotate.Annotation, canonical *annotate.Annotation, assembly string) *GNAnnotationSummary {
+func buildAnnotationSummary(result *GNAnnotation, anns []*annotate.Annotation, canonical *annotate.Annotation, assembly string, officialGeneSymbols map[string]string) *GNAnnotationSummary {
 	ref, alt := splitAlleleString(result.AlleleString)
 	variantType := gnVariantType(ref, alt)
 	inframe := gnIsInframe(ref, alt)
@@ -263,7 +268,7 @@ func buildAnnotationSummary(result *GNAnnotation, anns []*annotate.Annotation, c
 		if i < len(anns) {
 			ann = anns[i]
 		}
-		tcs := buildTranscriptConsequenceSummary(tc, ann, variantType, inframe)
+		tcs := buildTranscriptConsequenceSummary(tc, ann, variantType, inframe, officialGeneSymbols)
 		summaries = append(summaries, tcs)
 		if canonical != nil && ann != nil && ann.TranscriptID == canonical.TranscriptID && canonicalSummary == nil {
 			cp := tcs
@@ -295,7 +300,7 @@ func splitAlleleString(alleleString string) (ref, alt string) {
 	return parts[0], parts[1]
 }
 
-func buildTranscriptConsequenceSummary(tc *GNTranscriptConsequence, ann *annotate.Annotation, variantType string, inframe bool) GNTranscriptConsequenceSummary {
+func buildTranscriptConsequenceSummary(tc *GNTranscriptConsequence, ann *annotate.Annotation, variantType string, inframe bool, officialGeneSymbols map[string]string) GNTranscriptConsequenceSummary {
 	aaRef, aaAlt := splitAminoAcids(tc.AminoAcids)
 	hgvspShort := gnResolveHgvspShort(tc, variantType, inframe)
 
@@ -305,7 +310,7 @@ func buildTranscriptConsequenceSummary(tc *GNTranscriptConsequence, ann *annotat
 		AminoAcids:     tc.AminoAcids,
 		AminoAcidRef:   aaRef,
 		AminoAcidAlt:   aaAlt,
-		HugoGeneSymbol: tc.GeneSymbol,
+		HugoGeneSymbol: officialGeneSymbol(tc.GeneSymbol, officialGeneSymbols),
 		HGVSpShort:     hgvspShort,
 		HGVSp:          gnResolveHgvsp(tc),
 		HGVSc:          tc.HGVSc,
@@ -458,4 +463,13 @@ func splitAminoAcids(aa string) (ref, alt string) {
 		return parts[0], parts[1]
 	}
 	return aa, ""
+}
+
+// officialGeneSymbol reports a gene by its approved symbol. A symbol with no
+// known replacement, which is nearly all of them, is returned unchanged.
+func officialGeneSymbol(symbol string, officialGeneSymbols map[string]string) string {
+	if official, ok := officialGeneSymbols[symbol]; ok {
+		return official
+	}
+	return symbol
 }
