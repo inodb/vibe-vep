@@ -144,7 +144,7 @@ func TestCompareGNToVEP_NoTranscripts(t *testing.T) {
 func TestFloatScoresMatch(t *testing.T) {
 	assert.True(t, floatScoresMatch("0", "0"))
 	assert.True(t, floatScoresMatch("0.43", "0.43"))
-	assert.True(t, floatScoresMatch("0.431", "0.433"))  // within 0.005
+	assert.True(t, floatScoresMatch("0.431", "0.433")) // within 0.005
 	assert.False(t, floatScoresMatch("0.43", "0.50"))
 	assert.True(t, floatScoresMatch("", ""))
 	assert.False(t, floatScoresMatch("0.5", ""))

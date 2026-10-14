@@ -2,6 +2,7 @@ package annotate
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/vcf"
@@ -20,6 +21,31 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 	// Skip upstream/downstream/intergenic
 	switch result.Consequence {
 	case ConsequenceUpstreamGene, ConsequenceDownstreamGene, ConsequenceIntergenicVariant:
+		return ""
+	}
+
+	// A variant whose first base lies outside the transcript has no c.
+	// coordinate to start from, and VEP emits no HGVSc for one: RAD51C
+	// 17:56769924 deletes 91 bases ending inside exon 1 and VEP leaves the
+	// field empty while still reporting coding_sequence_variant,
+	// 5_prime_UTR_variant. Extrapolating a coordinate from the nearest exon,
+	// as genomicToHGVScPos will happily do, invents a position the transcript
+	// does not have.
+	if !t.Contains(v.Pos) {
+		return ""
+	}
+
+	// A variant lying across the 5'UTR and the coding sequence, and reaching
+	// no splice site on the way, gets no c. coordinate from VEP: all 25 rows
+	// in a VEP111 MSK-IMPACT MAF whose consequence is exactly
+	// coding_sequence_variant with 5_prime_UTR_variant leave HGVSc empty,
+	// while every combination that adds a splice or intron term is named.
+	// coding_sequence_variant is VEP saying it cannot describe the change,
+	// and with one UTR term and nothing else there is no anchor left to
+	// count from.
+	if strings.Count(result.Consequence, ",") == 1 &&
+		hasTerm(result.Consequence, ConsequenceCodingSequenceVariant) &&
+		hasTerm(result.Consequence, Consequence5PrimeUTR) {
 		return ""
 	}
 
@@ -62,6 +88,16 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 		if endPosStr == "" {
 			return ""
 		}
+		// An MNV whose alternate allele is the reverse complement of the
+		// reference is an inversion, and HGVS gives it its own operator:
+		// ATRX X:76938207 AA>TT is c.2540_2541inv, not c.2540_2541delinsAA.
+		// This holds on either strand, since reverse-complementing both
+		// alleles preserves the relation. It accounts for every one of the
+		// 161 inv calls in a VEP111 MSK-IMPACT MAF and nothing else: the
+		// other 7,263 same-length multi-base changes there are delins.
+		if isInversion(ref, alt) {
+			return prefix + startPosStr + "_" + endPosStr + "inv"
+		}
 		return prefix + startPosStr + "_" + endPosStr + "delins" + alt
 	}
 
@@ -69,17 +105,22 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 	refLen := len(v.Ref)
 	altLen := len(v.Alt)
 
-	if altLen > refLen {
-		return formatHGVScInsertion(v, t, prefix, refLen, altLen)
+	// A longer alternate allele is only an insertion when the reference
+	// survives inside it. MAF rows typed INS are not always pure insertions -
+	// NF1 17:29686003 is ref C alt GG - and the insertion path assumes the
+	// alt begins with the ref, so it read that as inserting a single G and
+	// dropped the C>G substitution entirely. VEP calls it c.8067delinsGG.
+	if altLen > refLen && !isDelIns(v.Ref, v.Alt) {
+		return formatHGVScInsertion(v, t, prefix, refLen, altLen, result)
 	}
 
-	return formatHGVScDeletion(v, t, prefix, refLen, altLen)
+	return formatHGVScDeletion(v, t, prefix, refLen, altLen, result)
 }
 
 // formatHGVScInsertion handles the insertion path of FormatHGVSc.
 // It computes the inserted sequence on the coding strand using a stack buffer
 // to avoid allocations from ReverseComplement.
-func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, refLen, altLen int) string {
+func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, refLen, altLen int, result *ConsequenceResult) string {
 	insLen := altLen - refLen
 
 	// Compute inserted sequence on coding strand into a stack buffer.
@@ -114,10 +155,77 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 			cdsIdx = 0
 		}
 
+		// Codons are reported at the UNSHIFTED position, with the inserted
+		// bases in the order the variant gives them. VEP writes the HGVS at
+		// the 3'-shifted position but expands codons around where the change
+		// actually sits: SMARCA2 c.705_707dup is -/CAG, the allele as it
+		// appears in the MAF, not the -/GCA the same bases become once they
+		// have been walked 41 bases down the repeat.
+		//
+		// This runs before the shift because shiftInsertionBuf rotates seq in
+		// place. Unshifting the anchor afterwards is not enough on its own -
+		// that was the bug, and it left the position right but the bases
+		// rotated. The anchor here is the same value that subtracting the
+		// offset used to produce.
+		result.CodonChange = formatCodonChangeCDS(t.CDSSequence,
+			int64(cdsIdx)+2, int64(cdsIdx)+1, string(seq))
+
 		// Shift insertion in place (modifies seq), stops at exon boundary
 		maxIdx := cdsExonEndIdx(cdsIdx, t)
 		shiftedIdx := shiftInsertionBuf(seq, cdsIdx, t.CDSSequence, maxIdx)
+		result.HGVSOffset = shiftedIdx - cdsIdx
 		seqLen := len(seq)
+
+		// The shift stops at the exon edge; HGVS does not (see
+		// insertionShiftIntoIntron).
+		if k, rotated, eEnd, okShift := insertionShiftIntoIntron(seq, shiftedIdx, t); okShift {
+			if g := CDSToGenomic(int64(shiftedIdx+1), t); g != 0 {
+				if exon := t.FindExon(g); exon != nil {
+					result.HGVSOffset += k
+					// A frameshifting insertion that ends up inside the intron
+					// has no protein product to describe: VEP emits no HGVSp
+					// and genome-nexus renders p.<residue><pos>fs from the
+					// protein position (KDM6A c.225+1dup is p.K75fs, not
+					// p.A76Gfs*6).
+					//
+					// An in-frame one still gets a description -- EGFL7
+					// c.313+1_313+3dup is p.G103dup to VEP -- so the withdrawal
+					// keys on the frame, not on landing in the intron.
+					if insLen%3 != 0 {
+						result.SuppressHGVSp = true
+					}
+					if result.SuppressHGVSp {
+						pos := result.ProteinStart
+						if pos < 1 {
+							pos = result.ProteinPosition
+						}
+						if cd := GetCodon(t.CDSSequence, pos); len(cd) == 3 {
+							if aa := TranslateCodon(cd); aa != 0 {
+								result.AminoAcidsVEP = string(aa)
+							}
+						}
+					}
+					return formatInsertionInIntron(rotated, exon, t, eEnd, k)
+				}
+			}
+		}
+
+		// HGVS defines insertion and duplication as mutually exclusive: an
+		// insertion is a change "where the insertion is not a copy of a sequence
+		// immediately 5'", and a duplication is a copy inserted "directly 3' of
+		// the original copy of that sequence". So whenever the inserted bases are
+		// a tandem copy of what precedes them, "ins" is not a valid description.
+		//
+		// This deliberately diverges from Ensembl VEP, which only writes "dup"
+		// when the 3' shift moved the variant. Across a VEP111 MSK-IMPACT MAF
+		// 6,769 of VEP's 8,124 "ins" descriptions are tandem copies by the
+		// reference sequence -- e.g. c.1663_1664insC inserted into a run of seven
+		// C's, which HGVS requires be written c.1663dup. VEP also contradicts
+		// itself on 541 rows, writing "ins" at the CDS level and "dup" at the
+		// protein level for the same variant (ASXL2 c.353_354insCAG / p.S117dup).
+		// Matching VEP here would cost nothing in accuracy but would emit
+		// descriptions that fail to match ClinVar and LOVD, which normalize to
+		// "dup". Concordance with vep111 on HGVSc is ~1.4pp lower as a result.
 
 		// Check dup: inserted bases match preceding bases at shifted position.
 		// Go optimizes string([]byte) == string comparisons to avoid allocation.
@@ -133,6 +241,31 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 		if afterStart >= 0 && afterEnd <= len(t.CDSSequence) &&
 			t.CDSSequence[afterStart:afterEnd] == string(seq) {
 			return cdsPosRangeStr(afterStart+1, afterEnd, "dup")
+		}
+
+		// The two CDS bases the insertion sits between are consecutive
+		// numbers, but at an exon's edge they are an intron apart on the
+		// genome and HGVS names the intron base: MET c.3028_3028+1insT, not
+		// c.3028_3029insT, and on the reverse strand TP53 c.97-1_97insAG,
+		// not c.96_97insAG. Where nothing shifted the flanks are the two
+		// bases the variant itself lies between; where the insertion walked
+		// to the exon edge the anchor is that last coding base.
+		if shiftedIdx+2 <= len(t.CDSSequence) && cdsExonEndIdx(shiftedIdx, t) == shiftedIdx {
+			anchorG := v.Pos
+			step := int64(1)
+			if t.IsReverseStrand() {
+				anchorG, step = v.Pos+1, -1
+			}
+			if shiftedIdx != cdsIdx {
+				if g := CDSToGenomic(int64(shiftedIdx+1), t); g != 0 {
+					anchorG = g
+				}
+			}
+			afterStr := genomicToHGVScPos(anchorG, t)
+			beforeStr := genomicToHGVScPos(anchorG+step, t)
+			if afterStr != "" && beforeStr != "" {
+				return prefix + afterStr + "_" + beforeStr + "ins" + string(seq)
+			}
 		}
 
 		// Plain insertion at shifted CDS position
@@ -157,6 +290,31 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 	// These paths use string concat (less common, not on the hot path).
 	insertedSeq := string(seq)
 
+	// Only the CDS-based block above filled in the Codons string, so an
+	// insertion anchored on the intronic side of a junction came out with
+	// none at all - 59 rows, and with it the stop_gained test that reads the
+	// altered codons. The codons are still well defined: the insertion sits
+	// between two bases, and whichever of them is coding gives the anchor.
+	//
+	// seq is unrotated here because shiftInsertionBuf runs only inside that
+	// block, so these are the bases as the variant gives them - which is what
+	// the Codons field shows.
+	if result.CodonChange == "" && len(t.CDSSequence) > 0 {
+		insAfter, insBefore := v.Pos, v.Pos+1
+		if t.IsReverseStrand() {
+			insAfter, insBefore = v.Pos+1, v.Pos
+		}
+		anchor := GenomicToCDS(insAfter, t)
+		if anchor < 1 {
+			if next := GenomicToCDS(insBefore, t); next >= 1 {
+				anchor = next - 1
+			}
+		}
+		if anchor >= 1 {
+			result.CodonChange = formatCodonChangeCDS(t.CDSSequence, anchor+1, anchor, insertedSeq)
+		}
+	}
+
 	dup := checkDuplication(v, t, insertedSeq)
 	if dup.isDup {
 		if dup.cdsStart == dup.cdsEnd {
@@ -169,6 +327,12 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 	// is intronic (CDS=0) and the other is exonic. The CDS-based dup check
 	// above bails when the anchor is intronic, but the inserted base may
 	// still duplicate the exon boundary base.
+	// A pure insertion inside the intron may shift 3' into the exon.
+	if shifted, k, ok := insertionShiftIntronToExon(v, t, insertedSeq); ok {
+		result.HGVSOffset = k
+		return shifted
+	}
+
 	if sjDup := checkSpliceJunctionDup(v, t, insertedSeq); sjDup.isDup {
 		if sjDup.cdsStart == sjDup.cdsEnd {
 			return "c." + strconv.FormatInt(sjDup.cdsStart, 10) + "dup"
@@ -176,29 +340,144 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 		return "c." + strconv.FormatInt(sjDup.cdsStart, 10) + "_" + strconv.FormatInt(sjDup.cdsEnd, 10) + "dup"
 	}
 
-	insAfterPos := v.Pos
-	insBeforePos := v.Pos + 1
-	if t.IsReverseStrand() {
-		insAfterPos = v.Pos + 1
-		insBeforePos = v.Pos
+	// Both flanks intronic: shift and test for a duplication against the
+	// cached intron flank, which the CDS-based checks above cannot see.
+	if dupStr, ok := intronicInsertionDup(v, t, insertedSeq, result); ok {
+		return dupStr
 	}
+
+	insAfterPos := v.Pos
+	step := int64(1)
+	if t.IsReverseStrand() {
+		insAfterPos, step = v.Pos+1, -1
+	}
+
+	// Nothing above has shifted this one: with neither flank a coding base the
+	// CDS-space walk never saw it. HGVS still writes it 3'-most, and the intron
+	// flanks and UTR tails hold the sequence to walk it with -- VEP has GATA3
+	// c.1047+2_1047+3insTT where vibe-vep wrote c.1047+1_1047+2insTT, and
+	// c.1047+1_1047+2insTT.
+	//
+	// Calling the result a duplication where the shifted bases repeat what
+	// they now follow is left alone: it is HGVS-correct and VEP does it on
+	// the forward strand (RBM10 c.-71dup), but on the reverse strand VEP
+	// writes ins, and turning it on here adds 29 of those divergences --
+	// the same reverse-strand duplication question already settled for the
+	// coding sequence.
+	shifted, insAfterPos, k := genomicInsertionShift(insAfterPos, step, insertedSeq, t)
+	result.HGVSOffset += k
 	afterStr := genomicToHGVScPos(insAfterPos, t)
-	beforeStr := genomicToHGVScPos(insBeforePos, t)
-	return prefix + afterStr + "_" + beforeStr + "ins" + insertedSeq
+	beforeStr := genomicToHGVScPos(insAfterPos+step, t)
+	return prefix + afterStr + "_" + beforeStr + "ins" + shifted
+}
+
+// ProteinUndescribableHGVSc reports whether VEP declines to name a protein
+// change for a variant written as this HGVSc.
+//
+// It names one only where the variant's coordinates sit in the coding
+// sequence. An insertion is the exception: its two coordinates are the bases
+// it falls between, so one of them may be the neighbouring intron base
+// without any coding base being touched, and one coordinate inside the CDS is
+// enough.
+//
+// This holds without exception across a VEP111 MSK-IMPACT MAF. Of the 3,835
+// variants whose HGVSc range leaves the CDS, the only 54 given an HGVSp are
+// insertions keeping one coordinate inside it -- 48 written c.N_N+1ins and 6
+// c.N-1_Nins. Every deletion, duplication, delins and inversion reaching an
+// intron or a UTR has none, and so does every single-coordinate variant whose
+// one position is outside the CDS, all 13,348 of them.
+func ProteinUndescribableHGVSc(hgvsc string) bool {
+	if i := strings.Index(hgvsc, ":c."); i >= 0 {
+		hgvsc = hgvsc[i+3:]
+	} else if strings.HasPrefix(hgvsc, "c.") {
+		hgvsc = hgvsc[2:]
+	} else {
+		// No HGVSc, or an n. position on a non-coding transcript, which has
+		// no protein to describe either way.
+		return false
+	}
+
+	// The coordinates run up to the operator, which is lower case; a
+	// substitution has none and stops at its upper-case reference base.
+	end, isIns := len(hgvsc), false
+	for j := 0; j < len(hgvsc); j++ {
+		c := hgvsc[j]
+		if c >= 'a' && c <= 'z' {
+			end, isIns = j, strings.HasPrefix(hgvsc[j:], "ins")
+			break
+		}
+		if c >= 'A' && c <= 'Z' || c == '=' {
+			end = j
+			break
+		}
+	}
+
+	anyCDS, allCDS := false, true
+	for rest := hgvsc[:end]; ; {
+		part := rest
+		if k := strings.IndexByte(rest, '_'); k >= 0 {
+			part, rest = rest[:k], rest[k+1:]
+		} else {
+			rest = ""
+		}
+		if coordinateIsCoding(part) {
+			anyCDS = true
+		} else {
+			allCDS = false
+		}
+		if rest == "" {
+			break
+		}
+	}
+	if isIns {
+		return !anyCDS
+	}
+	return !allCDS
+}
+
+// coordinateIsCoding reports whether an HGVS c. coordinate names a coding
+// base: plain digits, with no intron offset and no UTR marker.
+func coordinateIsCoding(p string) bool {
+	if p == "" || p[0] == '*' || p[0] == '-' {
+		return false
+	}
+	for j := 0; j < len(p); j++ {
+		if p[j] < '0' || p[j] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isInversion reports whether alt is the reverse complement of ref, compared
+// in place rather than against an allocated reverse complement.
+func isInversion(ref, alt string) bool {
+	if len(ref) != len(alt) || len(ref) < 2 {
+		return false
+	}
+	for i := 0; i < len(ref); i++ {
+		if alt[i] != Complement(ref[len(ref)-1-i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // formatHGVScDeletion handles the deletion (and delins) path of FormatHGVSc.
 // It avoids calling ReverseComplement for the ref/alt at the top since the
 // deletion CDS path only needs CDS positions and possibly RC of the extra alt bases.
-func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, refLen, altLen int) string {
+func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, refLen, altLen int, result *ConsequenceResult) string {
 	// Compute actual shared prefix length on genomic strand
 	sharedLen := 0
 	for sharedLen < refLen && sharedLen < altLen && v.Ref[sharedLen] == v.Alt[sharedLen] {
 		sharedLen++
 	}
-	if sharedLen == 0 {
-		sharedLen = 1
-	}
+	// A VCF-style deletion carries an anchor base the ref and alt share, which
+	// the loop above finds. When they share nothing the variant replaces every
+	// base it covers, so clipping one anyway would drop the inserted allele and
+	// turn a delins into a plain deletion: KIT ref=AGTGGAA alt=C came out as
+	// c.1669_1674del where VEP has c.1667_1673delinsC. A pure MAF deletion has
+	// no alt at all and is unaffected either way.
 	if sharedLen > altLen {
 		sharedLen = altLen
 	}
@@ -234,6 +513,12 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 	if delStartCDS > 0 && delEndCDS > 0 && len(t.CDSSequence) > 0 {
 		if len(extraAlt) > 0 {
 			// Delins: no 3' shift per HGVS convention.
+			codingExtra := extraAlt
+			if t.IsReverseStrand() {
+				codingExtra = ReverseComplement(extraAlt)
+			}
+			result.CodonChange = formatCodonChangeCDS(t.CDSSequence,
+				delStartCDS, delEndCDS, codingExtra)
 			// Write RC of extra alt directly into the output buffer for reverse strand.
 			var buf [128]byte
 			n := copy(buf[:], "c.")
@@ -256,10 +541,75 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 			}
 			return string(buf[:n])
 		}
+		// A deletion whose 3' end reaches the exon edge may keep shifting into
+		// the intron (see deletionShiftIntoIntron).
+		if sc, ee, _, k, ok := deletionShiftIntoIntron(v, t); ok {
+			result.HGVSOffset = int(sc - delStartCDS)
+			if result.HGVSOffset < 0 {
+				result.HGVSOffset = 0
+			}
+			// Codons are still reported, and at the UNSHIFTED position: VEP
+			// gives aaG/aa for PTEN c.801+1del, the codon around c.801. Leaving
+			// this out blanked the column for every shifted row.
+			result.CodonChange = formatCodonChangeCDS(t.CDSSequence, delStartCDS, delEndCDS, "")
+			if g := genomicSpanCodons(v, t, delStartCDS, delEndCDS); g != "" {
+				result.CodonChange = g
+			}
+			return formatDeletionAcrossDonor(sc, ee, k)
+		}
+
 		// Pure deletion: apply 3' shift (stops at exon boundary)
 		maxIdx := cdsExonEndIdx(int(delEndCDS-1), t)
 		sStart, sEnd := shiftDeletionThreePrime(int(delStartCDS-1), int(delEndCDS-1), t.CDSSequence, maxIdx)
+
+		// shiftDeletionThreePrime indexes CDSSequence, so it can go no further
+		// than the last coding base. A deletion that reaches it may still keep
+		// moving into the 3'UTR, where HGVS numbers the bases *1, *2 and so
+		// on: VEP has PIK3CA c.3204_*1del and EP300 c.*2_*3del, which stopping
+		// at the stop codon rendered as c.3203_3207del and c.7244_7245del.
+		// codingBaseAt reads the stored 3' tail, so the genomic shift sees the
+		// sequence this one cannot.
+		if sEnd == len(t.CDSSequence)-1 {
+			k := genomicDeletionShift(delStartGenomic, delEndGenomic, t,
+				func(pos int64) (byte, bool) { return refAlleleBase(pos, v, t) })
+			if k > sStart-int(delStartCDS-1) {
+				d := int64(k)
+				if t.IsReverseStrand() {
+					d = -d
+				}
+				gs, ge := delStartGenomic+d, delEndGenomic+d
+				startStr, endStr := genomicToHGVScPos(gs, t), genomicToHGVScPos(ge, t)
+				if startStr != "" && endStr != "" {
+					result.HGVSOffset = k
+					result.CodonChange = formatCodonChangeCDS(t.CDSSequence, delStartCDS, delEndCDS, "")
+					if g := genomicSpanCodons(v, t, delStartCDS, delEndCDS); g != "" {
+						result.CodonChange = g
+					}
+					if gs == ge {
+						return prefix + startStr + "del"
+					}
+					return prefix + startStr + "_" + endStr + "del"
+				}
+			}
+		}
+		result.HGVSOffset = sStart - int(delStartCDS-1)
+		// Codons are expanded around the unshifted deleted range (see above).
+		result.CodonChange = formatCodonChangeCDS(t.CDSSequence,
+			int64(sStart+1-result.HGVSOffset), int64(sEnd+1-result.HGVSOffset), "")
+		if g := genomicSpanCodons(v, t, int64(sStart+1-result.HGVSOffset),
+			int64(sEnd+1-result.HGVSOffset)); g != "" {
+			result.CodonChange = g
+		}
 		return cdsPosRangeStr(sStart+1, sEnd+1, "del")
+	}
+
+	// Before falling back, a purely intronic pure deletion may still 3'-shift
+	// across the junction into the exon (see shiftedIntronicDelCDS).
+	if len(extraAlt) == 0 {
+		if sStart, sEnd, k := shiftedIntronicDelCDS(v, t); sStart > 0 {
+			result.HGVSOffset = k
+			return cdsPosRangeStr(int(sStart), int(sEnd), "del")
+		}
 	}
 
 	// Fall back to genomic-based positions for intronic/UTR/non-coding deletions.
@@ -267,6 +617,38 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 	codingExtraAlt := extraAlt
 	if t.IsReverseStrand() && len(extraAlt) > 0 {
 		codingExtraAlt = ReverseComplement(extraAlt)
+	}
+
+	// A deletion running from an exon into the following intron can still be
+	// 3'-shifted, using the stored intron flank (see straddlingDeletionShift).
+	if len(extraAlt) == 0 {
+		// The genomic shift applies the HGVS rule directly, reading each base
+		// through codingBaseAt, so it is asked first. The three below each
+		// describe one arrangement of exon and intron and are approximations
+		// of the same rule; they answer only where the genomic one has no
+		// sequence to compare and returns nothing.
+		k := genomicDeletionShift(delStartGenomic, delEndGenomic, t,
+			func(pos int64) (byte, bool) { return refAlleleBase(pos, v, t) })
+		if k == 0 {
+			k, _ = straddlingDeletionShift(v, t)
+		}
+		if k == 0 {
+			// The donor flank did not reach; the next exon may be nearer.
+			k, _ = acceptorSideDeletionShift(v, t)
+		}
+		if k == 0 {
+			// Or the deletion starts upstream of the start codon.
+			k = utr5DeletionShift(v, t)
+		}
+		if k > 0 {
+			d := int64(k)
+			if t.IsReverseStrand() {
+				d = -d
+			}
+			delStartGenomic += d
+			delEndGenomic += d
+			result.HGVSOffset = k
+		}
 	}
 
 	delStartStr := genomicToHGVScPos(delStartGenomic, t)
@@ -282,6 +664,626 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 	}
 	delEndStr := genomicToHGVScPos(delEndGenomic, t)
 	return prefix + delStartStr + "_" + delEndStr + "del"
+}
+
+// insertionShiftIntronToExon walks a pure insertion sitting inside an intron 3'
+// into the following exon, using the acceptor flank to cross the gap.
+//
+// checkSpliceJunctionDup below handles the single-base case where one flank is
+// already exonic. This is the general one: POLD1 inserts a G between the last
+// two bases of an intron whose exon then opens GGGGGG, and VEP reports the
+// result as c.2959dup, six bases inside the exon.
+//
+// Positions are addressed on one axis where the exon's first coding base is E
+// and E-k is the kth intron base before it, so the walk does not care which
+// side of the junction it is on.
+func insertionShiftIntronToExon(v *vcf.Variant, t *cache.Transcript, insertedSeq string) (string, int, bool) {
+	if insertedSeq == "" || len(t.CDSSequence) == 0 || !t.IsProteinCoding() {
+		return "", 0, false
+	}
+	insAfter := v.Pos // base the insertion follows, in coding order
+	if t.IsReverseStrand() {
+		insAfter = v.Pos + 1
+	}
+	if GenomicToCDS(insAfter, t) >= 1 {
+		return "", 0, false // already exonic; the CDS path handles it
+	}
+
+	// The exon the insertion is moving toward.
+	idx := t.FindNearestExonIdx(insAfter)
+	if idx < 0 {
+		return "", 0, false
+	}
+	var exon *cache.Exon
+	for _, i := range [3]int{idx - 1, idx, idx + 1} {
+		if i < 0 || i >= len(t.Exons) {
+			continue
+		}
+		e := &t.Exons[i]
+		if !e.IsCoding() {
+			continue
+		}
+		if t.IsReverseStrand() && e.End < insAfter {
+			exon = e
+			break
+		}
+		if !t.IsReverseStrand() && e.Start > insAfter {
+			exon = e
+			break
+		}
+	}
+	if exon == nil || exon.IntronBeforeLen == 0 {
+		return "", 0, false
+	}
+	firstCoding := exon.Start
+	if t.IsReverseStrand() {
+		firstCoding = exon.End
+	}
+	eCDS := GenomicToCDS(firstCoding, t)
+	if eCDS < 1 {
+		return "", 0, false
+	}
+	// How far before the exon the insertion currently sits.
+	gap := firstCoding - insAfter
+	if t.IsReverseStrand() {
+		gap = insAfter - firstCoding
+	}
+	if gap < 1 || gap > int64(exon.IntronBeforeLen) {
+		return "", 0, false
+	}
+
+	f := int64(exon.IntronBeforeLen)
+	cds := t.CDSSequence
+	baseAt := func(p int64) (byte, bool) {
+		if p >= eCDS {
+			if int(p) > len(cds) {
+				return 0, false
+			}
+			return cds[p-1], true
+		}
+		return exon.IntronBeforeBase(int(f - (eCDS - p)))
+	}
+
+	L := len(insertedSeq)
+	a := eCDS - gap // axis position the insertion follows
+	k := 0
+	for {
+		entering, ok := baseAt(a + int64(k) + 1)
+		if !ok || entering != insertedSeq[k%L] {
+			break
+		}
+		k++
+	}
+	if k == 0 || a+int64(k) < eCDS {
+		return "", 0, false // never made it into the exon
+	}
+	end := a + int64(k)
+
+	// Duplication when the L bases it now follows repeat the insert.
+	rotated := insertedSeq[k%L:] + insertedSeq[:k%L]
+	start := end - int64(L) + 1
+	match := start >= 1
+	for i := 0; match && i < L; i++ {
+		b, ok := baseAt(start + int64(i))
+		if !ok || b != rotated[i] {
+			match = false
+		}
+	}
+	// A duplication may begin before the exon does. baseAt already reads
+	// those bases, and refusing to name them left EGFR c.2284-5_2290dup --
+	// twelve bases, five of them intronic -- as c.2290_2291insTCCAGGAAGCCT.
+	axisPos := func(p int64) string {
+		if p >= eCDS {
+			return strconv.FormatInt(p, 10)
+		}
+		return strconv.FormatInt(eCDS, 10) + "-" + strconv.FormatInt(eCDS-p, 10)
+	}
+	if match {
+		if L == 1 {
+			return "c." + axisPos(end) + "dup", k, true
+		}
+		return "c." + axisPos(start) + "_" + axisPos(end) + "dup", k, true
+	}
+	return "c." + strconv.FormatInt(end, 10) + "_" + strconv.FormatInt(end+1, 10) + "ins" + rotated, k, true
+}
+
+// insertionShiftIntoIntron continues an insertion's 3' shift past the end of an
+// exon using the stored intron flank.
+//
+// shiftInsertionBuf stops at the exon edge, but HGVS does not: an insertion
+// sitting on the last base of an exon keeps moving while the intron repeats it.
+// KDM6A c.225dup is c.225+1dup to VEP, the duplicated base being the first base
+// of the intron rather than the last of the exon.
+//
+// seq is the inserted sequence on the coding strand and shiftedIdx the 0-based
+// CDS index of the base the insertion currently follows. Returns how far it
+// moved, the rotated sequence, and the exon's last CDS position.
+func insertionShiftIntoIntron(seq []byte, shiftedIdx int, t *cache.Transcript) (k int, rotated []byte, exonEndCDS int64, ok bool) {
+	if len(seq) == 0 || shiftedIdx < 0 {
+		return 0, nil, 0, false
+	}
+	g := CDSToGenomic(int64(shiftedIdx+1), t)
+	if g == 0 {
+		return 0, nil, 0, false
+	}
+	exon := t.FindExon(g)
+	if exon == nil {
+		return 0, nil, 0, false
+	}
+	exonCodingEnd := exon.End
+	if t.IsReverseStrand() {
+		exonCodingEnd = exon.Start
+	}
+	eEnd := GenomicToCDS(exonCodingEnd, t)
+	if eEnd < 1 || int64(shiftedIdx+1) != eEnd {
+		return 0, nil, 0, false // not sitting on the exon's last base
+	}
+
+	L := len(seq)
+	n := 0
+	for {
+		entering, okB := exon.IntronAfterBase(n)
+		if !okB || entering != seq[n%L] {
+			break
+		}
+		n++
+	}
+	if n == 0 {
+		return 0, nil, 0, false
+	}
+	r := make([]byte, L)
+	for i := 0; i < L; i++ {
+		r[i] = seq[(i+n%L)%L]
+	}
+	return n, r, eEnd, true
+}
+
+// formatInsertionInIntron renders an insertion that has moved k bases past the
+// end of an exon, as a duplication when the bases it now follows repeat it,
+// otherwise as a plain insertion between two intronic positions.
+//
+// The duplicated stretch can straddle the boundary: RPS6KB2 is c.777_798+12dup,
+// starting inside the exon and ending twelve bases into the intron. Positions
+// are therefore addressed on a single axis where exonEndCDS+j is the jth intron
+// base, and rendered back into c. notation at the end.
+func formatInsertionInIntron(rotated []byte, exon *cache.Exon, t *cache.Transcript, exonEndCDS int64, k int) string {
+	L := len(rotated)
+	baseAt := func(p int64) (byte, bool) {
+		if p <= exonEndCDS {
+			if p < 1 || int(p) > len(t.CDSSequence) {
+				return 0, false
+			}
+			return t.CDSSequence[p-1], true
+		}
+		return exon.IntronAfterBase(int(p - exonEndCDS - 1))
+	}
+	pos := func(p int64) string {
+		if p <= exonEndCDS {
+			return strconv.FormatInt(p, 10)
+		}
+		return strconv.FormatInt(exonEndCDS, 10) + "+" + strconv.FormatInt(p-exonEndCDS, 10)
+	}
+
+	end := exonEndCDS + int64(k)
+	start := end - int64(L) + 1
+	match := start >= 1
+	for i := 0; match && i < L; i++ {
+		b, ok := baseAt(start + int64(i))
+		if !ok || b != rotated[i] {
+			match = false
+		}
+	}
+	if match {
+		if L == 1 {
+			return "c." + pos(end) + "dup"
+		}
+		return "c." + pos(start) + "_" + pos(end) + "dup"
+	}
+	return "c." + pos(end) + "_" + pos(end+1) + "ins" + string(rotated)
+}
+
+// utr5DeletionShift handles a pure deletion that starts upstream of the start
+// codon and ends inside the CDS.
+//
+// The base leaving the front sits in the 5'UTR, which the cache now keeps a
+// tail of, so the shift is computable where before it was not:
+//
+//	SMAD4  c.-28_12del -> c.-27_13del
+//	MYCN   c.-35_33del -> c.-34_34del
+//
+// c. numbering has no zero, so positions step from -1 straight to 1.
+// Returns how far the deletion may move 3'.
+func utr5DeletionShift(v *vcf.Variant, t *cache.Transcript) int {
+	refLen := len(v.Ref)
+	if refLen == 0 || len(v.Alt) != 0 || len(t.CDSSequence) == 0 || t.UTR5Len == 0 {
+		return 0
+	}
+	lo, hi := v.Pos, v.Pos+int64(refLen)-1
+	codingStart, codingEnd := lo, hi
+	if t.IsReverseStrand() {
+		codingStart, codingEnd = hi, lo
+	}
+	if GenomicToCDS(codingStart, t) >= 1 {
+		return 0 // starts inside the CDS; a different shape
+	}
+	endCDS := GenomicToCDS(codingEnd, t)
+	if endCDS < 1 {
+		return 0 // never reaches the CDS
+	}
+
+	// The 5'UTR tail is contiguous with the CDS, so this only applies when no
+	// intron sits between the deletion's start and the start codon -- i.e. the
+	// start and the first coding base share an exon. Without this check a
+	// deletion beginning in an INTRON walks the same way, counts intronic bases
+	// as 5'UTR and shifts against sequence that is not there, which regressed
+	// 83 rows of HGVSc.
+	startExon := t.FindExon(codingStart)
+	if startExon == nil {
+		return 0
+	}
+	firstCoding := codingStart
+	for i := int64(0); i <= int64(t.UTR5Len); i++ {
+		q := firstCoding
+		if t.IsReverseStrand() {
+			q = codingStart - i
+		} else {
+			q = codingStart + i
+		}
+		if GenomicToCDS(q, t) >= 1 {
+			firstCoding = q
+			break
+		}
+	}
+	if e := t.FindExon(firstCoding); e == nil || e != startExon {
+		return 0
+	}
+
+	// How far upstream of the CDS the deletion begins, by walking in.
+	var upstream int64
+	p := codingStart
+	for upstream <= int64(t.UTR5Len) {
+		if GenomicToCDS(p, t) >= 1 {
+			break
+		}
+		upstream++
+		if t.IsReverseStrand() {
+			p--
+		} else {
+			p++
+		}
+	}
+	if upstream < 1 || upstream > int64(t.UTR5Len) {
+		return 0
+	}
+
+	cds := t.CDSSequence
+	baseAt := func(c int64) (byte, bool) {
+		if c > 0 {
+			if int(c) > len(cds) {
+				return 0, false
+			}
+			return cds[c-1], true
+		}
+		return t.UTR5BaseAt(int(-c))
+	}
+	next := func(c int64) int64 {
+		if c == -1 {
+			return 1
+		}
+		return c + 1
+	}
+
+	front, back := -upstream, endCDS
+	k := 0
+	for {
+		leaving, ok1 := baseAt(front)
+		entering, ok2 := baseAt(next(back))
+		if !ok1 || !ok2 || leaving != entering {
+			break
+		}
+		front, back = next(front), next(back)
+		k++
+	}
+	return k
+}
+
+// acceptorSideDeletionShift handles the same shape as straddlingDeletionShift --
+// a deletion running from an exon into the following intron -- but reads the
+// flank of the NEXT exon rather than the previous one.
+//
+// HGVS numbers an intronic position from whichever exon is nearer, so a
+// deletion written c.715_863-229del ends 229 bases before the next exon while
+// sitting far further than that beyond the previous one. Walking the donor
+// flank would mean crossing most of the intron; the acceptor flank reaches it
+// in 229. Both flanks are stored, and this is the one that was going unread.
+//
+// Returns the shift distance and the CDS position the deletion starts at after
+// shifting, or zeros when the shape does not apply or the flank is too short.
+func acceptorSideDeletionShift(v *vcf.Variant, t *cache.Transcript) (shift int, newStartCDS int64) {
+	refLen := len(v.Ref)
+	if refLen == 0 || len(v.Alt) != 0 || len(t.CDSSequence) == 0 || !t.IsProteinCoding() {
+		return 0, 0
+	}
+	lo, hi := v.Pos, v.Pos+int64(refLen)-1
+	codingStart, codingEnd := lo, hi
+	if t.IsReverseStrand() {
+		codingStart, codingEnd = hi, lo
+	}
+	startCDS := GenomicToCDS(codingStart, t)
+	if startCDS < 1 || GenomicToCDS(codingEnd, t) > 0 {
+		return 0, 0
+	}
+	idx := t.FindExonIdx(codingStart)
+	if idx < 0 {
+		return 0, 0
+	}
+	// Exons are sorted ascending by genomic start, so transcript order runs
+	// forward on the plus strand and backward on the minus.
+	next := idx + 1
+	if t.IsReverseStrand() {
+		next = idx - 1
+	}
+	if next < 0 || next >= len(t.Exons) {
+		return 0, 0
+	}
+	nextExon := &t.Exons[next]
+
+	// How many intronic bases lie between the deletion's 3' end and that exon.
+	var gap int64
+	if t.IsReverseStrand() {
+		gap = codingEnd - nextExon.End
+	} else {
+		gap = nextExon.Start - codingEnd
+	}
+	if gap < 1 {
+		return 0, 0
+	}
+	f := int64(nextExon.IntronBeforeLen)
+	if f == 0 || gap > f {
+		return 0, 0 // the flank does not reach back that far
+	}
+
+	cds := t.CDSSequence
+	k := 0
+	for {
+		// Acceptor-relative position of the base entering at the back, counted
+		// as a positive distance before the exon.
+		rel := gap - 1 - int64(k)
+		if rel < 1 {
+			break // reached the exon boundary itself
+		}
+		entering, ok := nextExon.IntronBeforeBase(int(f - rel))
+		ci := int(startCDS) - 1 + k
+		if !ok || ci >= len(cds) || entering != cds[ci] {
+			break
+		}
+		k++
+	}
+	if k == 0 {
+		return 0, 0
+	}
+	return k, startCDS + int64(k)
+}
+
+// deletionShiftIntoIntron handles a pure deletion whose 3' end reaches the end
+// of an exon and can keep shifting 3' into the following intron.
+//
+// HGVS places a deletion as far 3' as possible and does not stop at a splice
+// boundary. CYLD c.2099del sits on the last base of an exon whose intron opens
+// with the same base, so VEP reports c.2099+1del: the deletion has moved onto
+// the essential donor base. vibe-vep stopped at the exon end and reported the
+// unshifted c.2099del.
+//
+// Returns the post-shift exonic start (1-based CDS), the exon's last CDS
+// position, the deletion length, and how many bases it moved into the intron.
+// ok is false when the shape does not apply or no flank is stored.
+func deletionShiftIntoIntron(v *vcf.Variant, t *cache.Transcript) (startCDS, exonEndCDS int64, delLen, k int, ok bool) {
+	refLen := len(v.Ref)
+	if refLen == 0 || len(v.Alt) != 0 || len(t.CDSSequence) == 0 || !t.IsProteinCoding() {
+		return 0, 0, 0, 0, false
+	}
+	lo, hi := v.Pos, v.Pos+int64(refLen)-1
+	codingStart, codingEnd := lo, hi
+	if t.IsReverseStrand() {
+		codingStart, codingEnd = hi, lo
+	}
+	sCDS := GenomicToCDS(codingStart, t)
+	eCDS := GenomicToCDS(codingEnd, t)
+	if sCDS < 1 || eCDS < 1 {
+		return 0, 0, 0, 0, false // not fully exonic
+	}
+	exon := t.FindExon(codingEnd)
+	if exon == nil {
+		return 0, 0, 0, 0, false
+	}
+	exonCodingEnd := exon.End
+	if t.IsReverseStrand() {
+		exonCodingEnd = exon.Start
+	}
+	eEnd := GenomicToCDS(exonCodingEnd, t)
+	if eEnd < 1 {
+		return 0, 0, 0, 0, false
+	}
+
+	// Shift within the exon first, exactly as the ordinary path does.
+	sStart, sEnd := shiftDeletionThreePrime(int(sCDS-1), int(eCDS-1), t.CDSSequence, int(eEnd-1))
+	if int64(sEnd) != eEnd-1 {
+		return 0, 0, 0, 0, false // 3' end never reaches the exon edge; nothing to cross
+	}
+	s := int64(sStart) + 1
+	L := sEnd - sStart + 1
+
+	// Keep going into the intron. Position p is CDS while p <= eEnd, and the
+	// (p-eEnd)th intron base beyond that, so one accessor covers both sides.
+	cds := t.CDSSequence
+	baseAt := func(p int64) (byte, bool) {
+		if p <= eEnd {
+			if p < 1 || int(p) > len(cds) {
+				return 0, false
+			}
+			return cds[p-1], true
+		}
+		return exon.IntronAfterBase(int(p - eEnd - 1))
+	}
+	n := 0
+	for {
+		leaving, okL := baseAt(s + int64(n))
+		entering, okE := baseAt(eEnd + int64(n) + 1)
+		if !okL || !okE || leaving != entering {
+			break
+		}
+		n++
+	}
+	if n == 0 {
+		return 0, 0, 0, 0, false
+	}
+	return s + int64(n), eEnd, L, n, true
+}
+
+// formatDeletionAcrossDonor renders a deletion that has shifted k bases past the
+// end of an exon, keeping whatever exonic part remains.
+func formatDeletionAcrossDonor(startCDS, exonEndCDS int64, k int) string {
+	if startCDS <= exonEndCDS {
+		// Part of the deletion is still exonic: c.START_EXONEND+k del
+		return "c." + strconv.FormatInt(startCDS, 10) + "_" +
+			strconv.FormatInt(exonEndCDS, 10) + "+" + strconv.Itoa(k) + "del"
+	}
+	// Entirely intronic now: c.EXONEND+a_EXONEND+k del. Only the first
+	// coordinate carries the c. prefix -- repeating it for the second gave
+	// PTEN c.164+1_c.164+5del.
+	a := int(startCDS - exonEndCDS)
+	anchor := strconv.FormatInt(exonEndCDS, 10) + "+"
+	if a == k {
+		return "c." + anchor + strconv.Itoa(k) + "del"
+	}
+	return "c." + anchor + strconv.Itoa(a) + "_" + anchor + strconv.Itoa(k) + "del"
+}
+
+// deletionHitsDonor reports whether the shifted deletion covers the first two
+// intron bases, the essential donor dinucleotide.
+func deletionHitsDonor(delLen, k int) bool {
+	first := k - delLen + 1
+	if first < 1 {
+		first = 1
+	}
+	return first <= 2 && k >= 1
+}
+
+// straddlingDeletionShift computes how far a pure deletion running from an exon
+// into the following intron may be shifted 3'.
+//
+// HGVS places a deletion as far 3' as possible. Each step is allowed when the
+// base leaving the front of the deleted span equals the base entering at the
+// back; here the front is exonic and the back is intronic, so the test needs
+// intron sequence. That is what Exon.IntronAfterPacked carries.
+//
+//	MET  vibe c.3015_3028+6del -> VEP c.3016_3028+7del  (offset 1)
+//	B2M  vibe c.59_67+237del   -> VEP c.61_67+239del    (offset 2)
+//
+// Returns the shift distance and the CDS position the deletion starts at after
+// shifting. Returns 0 when the shape does not apply or no flank is stored, in
+// which case the caller keeps the unshifted description.
+func straddlingDeletionShift(v *vcf.Variant, t *cache.Transcript) (shift int, newStartCDS int64) {
+	refLen := len(v.Ref)
+	if refLen == 0 || len(v.Alt) != 0 || len(t.CDSSequence) == 0 || !t.IsProteinCoding() {
+		return 0, 0
+	}
+	lo, hi := v.Pos, v.Pos+int64(refLen)-1
+
+	// Orient the span: codingStart is the 5' end of the deletion on the coding
+	// strand, codingEnd the 3' end.
+	codingStart, codingEnd := lo, hi
+	if t.IsReverseStrand() {
+		codingStart, codingEnd = hi, lo
+	}
+	startCDS := GenomicToCDS(codingStart, t)
+	if startCDS < 1 || GenomicToCDS(codingEnd, t) > 0 {
+		return 0, 0 // not a straddle: either the 5' end is intronic or the 3' end is still coding
+	}
+	exon := t.FindExon(codingStart)
+	if exon == nil {
+		return 0, 0
+	}
+
+	// How many intronic bases the deletion already covers.
+	exonCodingEnd := exon.End
+	if t.IsReverseStrand() {
+		exonCodingEnd = exon.Start
+	}
+	tail := codingEnd - exonCodingEnd
+	if t.IsReverseStrand() {
+		tail = exonCodingEnd - codingEnd
+	}
+	if tail < 1 {
+		return 0, 0
+	}
+
+	cds := t.CDSSequence
+	k := 0
+	for {
+		fi := int(tail) + k // 0-based index of the base just past the deletion
+		ci := int(startCDS) - 1 + k
+		entering, ok := exon.IntronAfterBase(fi)
+		if !ok || ci >= len(cds) || entering != cds[ci] {
+			break
+		}
+		k++
+	}
+	if k == 0 {
+		return 0, 0
+	}
+	return k, startCDS + int64(k)
+}
+
+// shiftedIntronicDelCDS handles a pure deletion lying entirely within an intron
+// immediately 5' (on the coding strand) of a coding exon, where the deleted
+// bases keep repeating into that exon. HGVS assigns the most 3' position
+// possible, so such a deletion slides across the splice junction: POLD1 deletes
+// a G from the last intron base of an exon that opens GGGGGG, and VEP reports
+// c.2959del with hgvs_offset 6, not c.2954-1del.
+//
+// No intron sequence is needed, which matters because vibe-vep has none. The
+// deleted bases come from the variant itself and the run continues in
+// CDSSequence, so sliding k bases is allowed while the exon base at j matches
+// deleted[j%L]. Once k reaches L the deletion lies wholly inside the exon;
+// below that it still straddles the junction and HGVS keeps the intronic form.
+//
+// Returns the 1-based CDS range it lands on and the shift distance, or zeros.
+func shiftedIntronicDelCDS(v *vcf.Variant, t *cache.Transcript) (cdsStart, cdsEnd int64, shift int) {
+	refLen := len(v.Ref)
+	if refLen == 0 || len(v.Alt) != 0 || len(t.CDSSequence) == 0 || !t.IsProteinCoding() {
+		return 0, 0, 0
+	}
+	delStartGenomic := v.Pos
+	delEndGenomic := v.Pos + int64(refLen) - 1
+	if GenomicToCDS(delStartGenomic, t) > 0 || GenomicToCDS(delEndGenomic, t) > 0 {
+		return 0, 0, 0 // touches coding sequence; the exonic path handles it
+	}
+
+	delSeq := v.Ref
+	next := delEndGenomic + 1
+	if t.IsReverseStrand() {
+		delSeq = ReverseComplement(delSeq)
+		next = delStartGenomic - 1
+	}
+	exonStart := GenomicToCDS(next, t)
+	if exonStart < 1 {
+		return 0, 0, 0
+	}
+
+	k := 0
+	for {
+		idx := int(exonStart) - 1 + k
+		if idx >= len(t.CDSSequence) || t.CDSSequence[idx] != delSeq[k%refLen] {
+			break
+		}
+		k++
+	}
+	if k < refLen {
+		return 0, 0, 0
+	}
+	cdsStart = exonStart + int64(k-refLen)
+	return cdsStart, cdsStart + int64(refLen) - 1, k
 }
 
 // cdsPosRangeStr builds a CDS position string like "c.34del", "c.34_36del",
@@ -470,12 +1472,23 @@ func intronicHGVScPos(pos int64, t *cache.Transcript) string {
 		distToDownstream = downstreamExon.Start - pos
 	}
 
-	// Pick the closer exon boundary
+	// Pick the closer exon boundary. Equidistant, HGVS counts from the exon
+	// the transcript reaches first, so the position takes a + offset -- and
+	// which exon that is depends on the strand, where this used to take the
+	// genomically lower one either way. RECQL4 ENST00000428558 has a one-base
+	// intron on the reverse strand and VEP writes c.2295+1C>T, not c.2296-1C>T.
 	useUpstream := true
-	if upstreamExon == nil {
+	switch {
+	case upstreamExon == nil:
 		useUpstream = false
-	} else if downstreamExon != nil && distToDownstream < distToUpstream {
+	case downstreamExon == nil:
+		useUpstream = true
+	case distToDownstream < distToUpstream:
 		useUpstream = false
+	case distToDownstream > distToUpstream:
+		useUpstream = true
+	default:
+		useUpstream = t.IsForwardStrand()
 	}
 
 	if t.IsForwardStrand() {

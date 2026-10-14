@@ -360,7 +360,12 @@ func TestDatahub_DeletionSpanningSpliceDonor(t *testing.T) {
 	// vibe-vep: splice_donor_variant (because deletion spans into splice site)
 	//
 	// vibe-vep correctly upgrades to splice_donor when the deletion overlaps
-	// the splice donor site. This is the correct higher-impact consequence.
+	// the splice donor site, and also reports coding_sequence_variant because
+	// the deletion starts inside the CDS. That co-term is what VEP does: of the
+	// multi-base variants with a splice donor/acceptor term in a VEP111
+	// MSK-IMPACT MAF, those overlapping coding sequence carry
+	// coding_sequence_variant (DEL 2,706 of 3,533; DNP 269 of 319), while the
+	// ones that stay inside the intron (c.718-22_718-2del) do not.
 
 	tr := &cache.Transcript{
 		ID: "ENST_DELSPLICE", GeneName: "DELSPLICE", Chrom: "1",
@@ -377,9 +382,17 @@ func TestDatahub_DeletionSpanningSpliceDonor(t *testing.T) {
 	v := &vcf.Variant{Chrom: "1", Pos: 1008, Ref: "GAAAAA", Alt: "G"}
 	result := PredictConsequence(v, tr)
 
-	if result.Consequence != ConsequenceSpliceDonor {
-		t.Errorf("deletion spanning splice donor should be splice_donor_variant, got %q",
-			result.Consequence)
+	// The deleted bases run to +3, so the span also covers the donor region
+	// and intronic sequence, and VEP names each region it touches. Grouping
+	// the VEP111 MSK-IMPACT MAF's exon-spanning donor deletions by how far
+	// into the intron they reach: those ending at +3/+4 are reported as
+	// splice_donor_variant,splice_donor_region_variant,coding_sequence_variant,
+	// intron_variant 51 times, and those reaching +5 or beyond swap
+	// donor_region for splice_donor_5th_base_variant.
+	want := ConsequenceSpliceDonor + "," + ConsequenceSpliceDonorRegion + "," +
+		ConsequenceCodingSequenceVariant + "," + ConsequenceIntronVariant
+	if result.Consequence != want {
+		t.Errorf("deletion spanning splice donor should be %q, got %q", want, result.Consequence)
 	}
 }
 
@@ -591,9 +604,14 @@ func TestDatahub_LargeDeletion5UTRSpanningStartCodon(t *testing.T) {
 	v := &vcf.Variant{Chrom: "1", Pos: 995, Ref: "AAAAAAAAAAATGGCTAA", Alt: "A"}
 	result := PredictConsequence(v, tr)
 
-	if result.Consequence != ConsequenceStartLost {
-		t.Errorf("large 5'UTR deletion spanning start codon should be start_lost, got %q",
-			result.Consequence)
+	// VEP pairs start_lost with 5_prime_UTR_variant when the variant begins
+	// upstream of the CDS. Across the VEP111 MSK-IMPACT MAF every such row does
+	// so -- SMAD4 c.-27_13del, MYCN c.-34_34del, CDH1 c.-33_14del and four more
+	// -- and emits no HGVSp, leaving genome-nexus to render its p.*N*
+	// placeholder. This test previously asserted the bare term.
+	if result.Consequence != ConsequenceStartLost5PrimeUTR {
+		t.Errorf("large 5'UTR deletion spanning start codon should be %q, got %q",
+			ConsequenceStartLost5PrimeUTR, result.Consequence)
 	}
 }
 

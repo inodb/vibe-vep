@@ -170,9 +170,9 @@ func TestDiffWriter_MappedColumns(t *testing.T) {
 	var buf bytes.Buffer
 	// Simulate comparing Protein_Change (left) vs HGVSp_Short (right)
 	dw := NewDiffWriter(&buf,
-		[]string{"Protein_Change"},           // display name
-		[]string{"Protein_Change"},           // left column name
-		[]string{"HGVSp_Short"},              // right column name
+		[]string{"Protein_Change"}, // display name
+		[]string{"Protein_Change"}, // left column name
+		[]string{"HGVSp_Short"},    // right column name
 		false, 0)
 
 	dw.WriteHeader()

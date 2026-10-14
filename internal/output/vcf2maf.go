@@ -52,7 +52,7 @@ type VCF2MAFWriter struct {
 	assembly      string
 	tumorSampleID string
 	sources       []annotate.AnnotationSource
-	sourceKeys    []string // pre-built Extra map keys for source columns
+	sourceKeys    []string        // pre-built Extra map keys for source columns
 	excludeCols   map[string]bool // columns to exclude from output
 	headerWritten bool
 }
@@ -165,8 +165,8 @@ func (m *VCF2MAFWriter) WriteRow(v *vcf.Variant, ann *annotate.Annotation, allAn
 	writeField("")              // Matched_Norm_Sample_Barcode
 
 	if ann != nil {
-		writeField(ann.HGVSc)              // HGVSc
-		writeField(ann.HGVSp)              // HGVSp
+		writeField(ann.HGVSc)               // HGVSc
+		writeField(ann.HGVSp)               // HGVSp
 		writeField(HGVSpToShort(ann.HGVSp)) // HGVSp_Short
 		writeField(ann.TranscriptID)        // Transcript_ID
 		writeField(ann.ExonNumber)          // Exon_Number

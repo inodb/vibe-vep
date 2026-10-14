@@ -29,40 +29,33 @@ type GNMarshalOptions struct {
 func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotation, assembly string, opts ...GNMarshalOptions) ([]byte, error) {
 	ref, alt := alleleStrings(v)
 
-	end := v.Pos + int64(len(v.Ref)) - 1
-	if end < v.Pos {
-		end = v.Pos // insertions
-	}
+	start, end := mafCoordinates(v)
 
 	// Build HGVSg-style variant notation for the "variant" field.
 	variant := fmt.Sprintf("%s:g.%d%s>%s", v.Chrom, v.Pos, ref, alt)
 
 	result := GNAnnotation{
-		Variant:              variant,
-		OriginalVariantQuery: input,
-		HGVSg:               variant,
-		ID:                   annotate.FormatVariantID(v.Chrom, v.Pos, v.Ref, v.Alt),
-		AssemblyName:         assembly,
-		SeqRegionName:        v.Chrom,
-		Start:                v.Pos,
-		End:                  end,
-		AlleleString:         ref + "/" + alt,
-		Strand:               1,
+		Variant:               variant,
+		OriginalVariantQuery:  input,
+		HGVSg:                 variant,
+		ID:                    annotate.FormatVariantID(v.Chrom, v.Pos, v.Ref, v.Alt),
+		AssemblyName:          assembly,
+		SeqRegionName:         v.Chrom,
+		Start:                 start,
+		End:                   end,
+		AlleleString:          ref + "/" + alt,
+		Strand:                1,
 		SuccessfullyAnnotated: true,
 	}
 
 	// Find most severe consequence and best canonical transcript.
 	// When multiple genes overlap (e.g. EGFR + EGFR-AS1), pick the canonical
 	// with highest impact (protein-coding missense > non-coding).
-	bestImpact := -1
+	result.MostSevereConsequence = mostSevereConsequence(anns)
 	var canonicalAnn *annotate.Annotation
 	canonicalImpact := -1
 	for _, ann := range anns {
 		impact := annotate.ImpactRank(ann.Impact)
-		if impact > bestImpact {
-			bestImpact = impact
-			result.MostSevereConsequence = firstConsequence(ann.Consequence)
-		}
 		if ann.IsCanonicalEnsembl && impact > canonicalImpact {
 			canonicalAnn = ann
 			canonicalImpact = impact
@@ -75,29 +68,32 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 			canonical = "1"
 		}
 
+		pStart, pEnd := proteinRange(ann)
 		tc := GNTranscriptConsequence{
-			TranscriptID:     stripVersion(ann.TranscriptID),
-			GeneSymbol:       ann.GeneName,
-			GeneID:           ann.GeneID,
-			HGNCId:           ann.HGNCId,
-			ProteinID:        ann.ProteinID,
-			ConsequenceTerms: splitConsequence(ann.Consequence),
-			Impact:           ann.Impact,
-			VariantAllele:    ann.Allele,
-			AminoAcids:       formatAminoAcidsVEP(ann.AminoAcidChange),
-			Codons:           ann.CodonChange,
-			ProteinStart:     ann.ProteinPosition,
-			ProteinEnd:       ann.ProteinPosition,
-			CDSStart:         ann.CDSPosition,
-			CDSEnd:           ann.CDSPosition,
-			CDNAStart:        ann.CDNAPosition,
-			CDNAEnd:          ann.CDNAPosition,
-			HGVSp:            ann.HGVSp,
-			HGVSc:            ann.HGVSc,
-			Exon:             ann.ExonNumber,
-			Intron:           ann.IntronNumber,
-			Biotype:          ann.Biotype,
-			Canonical:        canonical,
+			TranscriptID:        stripVersion(ann.TranscriptID),
+			GeneSymbol:          ann.GeneName,
+			GeneID:              ann.GeneID,
+			HGNCId:              ann.HGNCId,
+			ProteinID:           ann.ProteinID,
+			ConsequenceTerms:    splitConsequence(ann.Consequence),
+			Impact:              ann.Impact,
+			VariantAllele:       ann.Allele,
+			AminoAcids:          aminoAcidsField(ann),
+			Codons:              ann.CodonChange,
+			ProteinStart:        pStart,
+			ProteinEnd:          pEnd,
+			CDSStart:            ann.CDSPosition,
+			CDSEnd:              ann.CDSPosition,
+			CDNAStart:           ann.CDNAPosition,
+			CDNAEnd:             ann.CDNAPosition,
+			HGVSp:               ann.HGVSp,
+			HGVSc:               ann.HGVSc,
+			Exon:                ann.ExonNumber,
+			Intron:              ann.IntronNumber,
+			Biotype:             ann.Biotype,
+			Canonical:           canonical,
+			RefseqTranscriptIds: ann.RefSeqIDs,
+			HGVSOffset:          ann.HGVSOffset,
 		}
 
 		// SIFT/PolyPhen from annotation source extras.
@@ -226,16 +222,13 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 // buildAnnotationSummary constructs the annotation_summary enrichment.
 func buildAnnotationSummary(variant string, v *vcf.Variant, anns []*annotate.Annotation, canonical *annotate.Annotation, assembly string) *GNAnnotationSummary {
 	ref, alt := alleleStrings(v)
-	end := v.Pos + int64(len(v.Ref)) - 1
-	if end < v.Pos {
-		end = v.Pos
-	}
+	start, end := mafCoordinates(v)
 
 	summary := &GNAnnotationSummary{
 		Variant: variant,
 		GenomicLocation: GNGenomicLocation{
 			Chromosome:      v.Chrom,
-			Start:           v.Pos,
+			Start:           start,
 			End:             end,
 			ReferenceAllele: ref,
 			VariantAllele:   alt,
@@ -295,6 +288,11 @@ func buildTranscriptConsequenceSummary(ann *annotate.Annotation, v *vcf.Variant)
 		ConsequenceTerms:      firstConsequence(ann.Consequence),
 		VariantClassification: SOToMAFClassification(ann.Consequence, v),
 		Exon:                  ann.ExonNumber,
+	}
+
+	// genome-nexus's RefSeqResolver reports the first RefSeq accession only.
+	if len(ann.RefSeqIDs) > 0 {
+		tcs.RefSeq = ann.RefSeqIDs[0]
 	}
 
 	if ann.ProteinPosition > 0 {

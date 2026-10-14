@@ -54,12 +54,12 @@ const (
 	biomartGeneCol    = 0
 	biomartEnsemblCol = 2  // ensembl_canonical_transcript
 	biomartMSKCol     = 11 // mskcc_canonical_transcript
-	biomartEntrezCol  = 27 // entrez_gene_id
+	biomartEntrezCol  = 31 // entrez_gene_id
 )
 
 // parseBiomartCanonicals parses a Genome Nexus biomart TSV, extracting
 // the gene symbol (col 0), Ensembl canonical transcript (col 2),
-// MSKCC canonical transcript (col 11), and Entrez gene ID (col 27).
+// MSKCC canonical transcript (col 11), and Entrez gene ID (col 31).
 func parseBiomartCanonicals(reader io.Reader) (mskcc, ensembl CanonicalOverrides, entrez GeneEntrezMap, err error) {
 	mskcc = make(CanonicalOverrides)
 	ensembl = make(CanonicalOverrides)
@@ -98,7 +98,7 @@ func parseBiomartCanonicals(reader io.Reader) (mskcc, ensembl CanonicalOverrides
 			mskcc[hgnc] = stripVersion(mskTx)
 		}
 
-		// Entrez gene ID (col 27)
+		// Entrez gene ID (col 31)
 		if len(fields) > biomartEntrezCol {
 			if eid := fields[biomartEntrezCol]; eid != "" && eid != "nan" {
 				entrez[hgnc] = eid

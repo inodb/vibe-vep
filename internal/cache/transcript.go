@@ -1,7 +1,10 @@
 // Package cache provides VEP cache loading functionality.
 package cache
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 // CDSRegion represents a contiguous coding segment within an exon,
 // with its pre-computed cumulative CDS offset for O(log n) lookup.
@@ -19,6 +22,7 @@ type Transcript struct {
 	ProteinID       string // Ensembl protein ID (e.g., ENSP00000493376), empty if non-coding
 	HGNCId          string // HGNC identifier (e.g., HGNC:14825), empty if not available
 	EntrezGeneID    string // NCBI Entrez gene ID (e.g., "673"), empty if not available
+	RefSeqIDs       []string // RefSeq mRNA accessions (versioned), in GENCODE metadata order
 	Chrom           string // Chromosome
 	Start           int64  // Transcript start (1-based)
 	End             int64  // Transcript end (1-based, inclusive)
@@ -31,6 +35,17 @@ type Transcript struct {
 	CDSStart        int64  // CDS start (genomic, 1-based), 0 if non-coding
 	CDSEnd          int64  // CDS end (genomic, 1-based), 0 if non-coding
 	CDSSequence     string // Coding DNA sequence (loaded on demand)
+	// UTR5Packed holds up to UTR5TailBases of 5'UTR immediately preceding the
+	// CDS, 2-bit packed like the intron flanks. A deletion that starts
+	// upstream of the start codon needs these bases to 3'-shift; without
+	// them c.-28_12del cannot become c.-27_13del.
+	UTR5Packed      []byte
+	UTR5Len         uint16
+	// CDSStartOffset is how many bases of the first codon are missing from a
+	// 5'-incomplete CDS (GENCODE cds_start_NF): 0, 1 or 2. VEP numbers c.1 from
+	// the first base of that notional complete codon, so CDSSequence is padded
+	// by this many bases and CDS positions are shifted to match.
+	CDSStartOffset  int
 	UTR3Sequence    string // 3'UTR sequence immediately following CDSSequence (for stop scanning)
 	ProteinLength   int    // Protein length in amino acids (persisted, unlike ProteinSequence)
 	ProteinSequence string // Translated protein sequence (loaded on demand)
@@ -46,6 +61,75 @@ type Exon struct {
 	CDSStart int64 // CDS portion start, 0 if entirely non-coding
 	CDSEnd   int64 // CDS portion end, 0 if entirely non-coding
 	Frame    int   // Reading frame (0, 1, or 2), -1 if non-coding
+	// IntronBeforePacked/IntronAfterPacked hold up to IntronFlankBases of the
+	// adjacent intron in CODING orientation, empty for non-coding exons. They
+	// exist so a deletion at an exon edge can still be 3'-shifted past the
+	// boundary; see the note on IntronFlankBases.
+	//
+	// Stored two bits per base, four to a byte, because these are carried for
+	// every coding exon of every transcript: 1.4M flanks, where plain bytes
+	// cost four times as much cache. The lengths are separate since the final
+	// byte is usually partial.
+	IntronBeforePacked []byte
+	IntronAfterPacked  []byte
+	IntronBeforeLen    uint8
+	IntronAfterLen     uint8
+}
+
+// UTR5TailBases is how much 5'UTR is retained. Measured against VEP111, a
+// deletion reaching upstream of the start codon starts at most 330 bases out.
+const UTR5TailBases = 500
+
+// UTR5BaseAt returns the base at c.-k (k >= 1), the kth base upstream of the
+// start codon.
+func (t *Transcript) UTR5BaseAt(k int) (byte, bool) {
+	// The stored tail ends at c.-1, so c.-k sits that many from the end.
+	return unpackBase(t.UTR5Packed, int(t.UTR5Len), int(t.UTR5Len)-k)
+}
+
+// packedBases is the 2-bit alphabet; anything else (an N in an assembly gap)
+// cannot be encoded and truncates the flank, which is the right behaviour
+// anyway: a shift cannot be validated across a base we do not know.
+const packedBases = "ACGT"
+
+// PackDNA2Bit encodes a DNA string two bits per base, stopping at the first
+// base outside ACGT. It returns the packed bytes and how many bases they hold.
+func PackDNA2Bit(s string) ([]byte, int) {
+	n := 0
+	for n < len(s) {
+		if strings.IndexByte(packedBases, s[n]) < 0 {
+			break
+		}
+		n++
+	}
+	if n == 0 {
+		return nil, 0
+	}
+	buf := make([]byte, (n+3)/4)
+	for i := 0; i < n; i++ {
+		code := byte(strings.IndexByte(packedBases, s[i]))
+		buf[i/4] |= code << (uint(3-i%4) * 2)
+	}
+	return buf, n
+}
+
+// IntronAfterBase returns the i-th base (0-based) of the intron flank 3' of the
+// exon in coding orientation.
+func (e *Exon) IntronAfterBase(i int) (byte, bool) {
+	return unpackBase(e.IntronAfterPacked, int(e.IntronAfterLen), i)
+}
+
+// IntronBeforeBase returns the i-th base (0-based) of the intron flank 5' of
+// the exon in coding orientation.
+func (e *Exon) IntronBeforeBase(i int) (byte, bool) {
+	return unpackBase(e.IntronBeforePacked, int(e.IntronBeforeLen), i)
+}
+
+func unpackBase(buf []byte, n, i int) (byte, bool) {
+	if i < 0 || i >= n {
+		return 0, false
+	}
+	return packedBases[(buf[i/4]>>(uint(3-i%4)*2))&3], true
 }
 
 // BuildCDSIndex pre-computes CDS region offsets and exonic base counts

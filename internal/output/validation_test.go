@@ -58,12 +58,12 @@ func TestSelectBestAnnotation_VersionMismatch(t *testing.T) {
 	}
 	vepAnns := []*annotate.Annotation{
 		{
-			TranscriptID: "ENST00000311936.8",
-			GeneName:     "KRAS",
-			Consequence:  "missense_variant",
-			Biotype:      "protein_coding",
+			TranscriptID:       "ENST00000311936.8",
+			GeneName:           "KRAS",
+			Consequence:        "missense_variant",
+			Biotype:            "protein_coding",
 			IsCanonicalMSK:     true,
-		IsCanonicalEnsembl: true,
+			IsCanonicalEnsembl: true,
 		},
 		{
 			TranscriptID: "ENST00000256078.5",

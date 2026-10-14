@@ -25,6 +25,20 @@ func formatAASequence(aas string) string {
 	return b.String()
 }
 
+// insertedPeptide returns the residues an HGVSp names for an inserted
+// sequence. Nothing is translated past a stop, so it ends at the first one.
+// Of the 377 delins descriptions in a VEP111 MSK-IMPACT MAF that reach a stop
+// at all, every one ends there: KIT p.Tyr568_Leu576delinsTer, never
+// delinsTerCys.
+func insertedPeptide(aas string) string {
+	for i := 0; i < len(aas); i++ {
+		if aas[i] == '*' {
+			return aas[:i+1]
+		}
+	}
+	return aas
+}
+
 // FormatHGVSp formats the HGVS protein notation for a consequence result.
 // Returns an empty string for non-coding consequences.
 //
@@ -40,6 +54,21 @@ func FormatHGVSp(result *ConsequenceResult) string {
 	// ProteinPosition guard to be robust against early-return code paths that
 	// may not set ProteinPosition.
 	if conseq == ConsequenceStartLost {
+		// VEP writes p.Met1? for the great majority (516 of 613 start_lost rows
+		// in a VEP111 MSK-IMPACT MAF) but names the affected residue when the
+		// change lands past the start codon: c.7del is p.V3?, c.4del is p.A2?.
+		// Both are the same p.<residue><position>? form; position 1 just
+		// happens to be Met. Only diverge when we have both, since some paths
+		// reach here without setting ProteinPosition.
+		if result.ProteinPosition > 1 && result.RefAA != 0 {
+			var b [32]byte
+			n := copy(b[:], "p.")
+			n += copy(b[n:], aaThree(result.RefAA))
+			n += putInt64(b[n:], result.ProteinPosition)
+			b[n] = '?'
+			n++
+			return string(b[:n])
+		}
 		return "p.Met1?"
 	}
 
@@ -70,7 +99,7 @@ func FormatHGVSp(result *ConsequenceResult) string {
 				n += putInt64(buf[n:], result.ProteinEndPosition)
 			}
 			n += copy(buf[n:], "delins")
-			return string(buf[:n]) + formatAASequence(result.InsertedAAs)
+			return string(buf[:n]) + formatAASequence(insertedPeptide(result.InsertedAAs))
 		}
 		// p.Xxx###Xxx (max ~15 chars)
 		n += copy(buf[n:], "p.")
@@ -89,6 +118,41 @@ func FormatHGVSp(result *ConsequenceResult) string {
 		return string(buf[:n])
 
 	case ConsequenceStopGained:
+		// A multi-codon MNV that introduces a stop alters more than the single
+		// residue, and VEP describes the whole span rather than collapsing it
+		// to a nonsense call: c.1125_1126delinsTT is p.K375_Q376delinsN* and
+		// c.1284_1285inv is p.Y428_Y429delins*, not p.K375* / p.Y428*.
+		// predictMNVConsequence already recorded the span on the delins fields.
+		// A pure insertion that introduces a stop still brackets the insertion
+		// point: VEP writes p.E288_T289ins* for c.863_864insGTA, not p.E288*.
+		// The delins form below covers the case where the anchor codon also
+		// changed; this one is the plain insertion.
+		if !result.IsDelIns && len(result.InsertedAAs) > 0 && result.RefAA != 0 && result.EndAA != 0 {
+			n += copy(buf[n:], "p.")
+			n += copy(buf[n:], aaThree(result.RefAA))
+			n += putInt64(buf[n:], pos)
+			buf[n] = '_'
+			n++
+			n += copy(buf[n:], aaThree(result.EndAA))
+			n += putInt64(buf[n:], pos+1)
+			n += copy(buf[n:], "ins")
+			return string(buf[:n]) + formatAASequence(insertedPeptide(result.InsertedAAs))
+		}
+		if result.IsDelIns && len(result.InsertedAAs) > 0 {
+			n += copy(buf[n:], "p.")
+			if result.RefAA != 0 {
+				n += copy(buf[n:], aaThree(result.RefAA))
+			}
+			n += putInt64(buf[n:], pos)
+			if result.ProteinEndPosition > result.ProteinPosition && result.EndAA != 0 {
+				buf[n] = '_'
+				n++
+				n += copy(buf[n:], aaThree(result.EndAA))
+				n += putInt64(buf[n:], result.ProteinEndPosition)
+			}
+			n += copy(buf[n:], "delins")
+			return string(buf[:n]) + formatAASequence(insertedPeptide(result.InsertedAAs))
+		}
 		// p.Xxx###Ter
 		n += copy(buf[n:], "p.")
 		n += copy(buf[n:], aaThree(result.RefAA))
@@ -97,15 +161,22 @@ func FormatHGVSp(result *ConsequenceResult) string {
 		return string(buf[:n])
 
 	case ConsequenceStopLost:
-		// p.Ter###Xxxext*N or p.Ter###Xxxext*?
+		// p.Ter###XxxextTer### or p.Ter###XxxextTer?
+		//
+		// The extension's terminator is spelled out like every other residue
+		// in the three-letter form. genome-nexus shortens this to the p.*###
+		// Xext*### that the MAF's HGVSp_Short column carries, which is why the
+		// short column agreed while this one did not: every one of the 480
+		// extensions in a VEP111 MSK-IMPACT MAF writes extTer here.
 		n += copy(buf[n:], "p.Ter")
 		n += putInt64(buf[n:], pos)
 		n += copy(buf[n:], aaThree(result.AltAA))
+		n += copy(buf[n:], "extTer")
 		if result.StopLostExtDist > 0 {
-			n += copy(buf[n:], "ext*")
 			n += putInt64(buf[n:], int64(result.StopLostExtDist))
 		} else {
-			n += copy(buf[n:], "ext*?")
+			buf[n] = '?'
+			n++
 		}
 		return string(buf[:n])
 
@@ -126,10 +197,21 @@ func FormatHGVSp(result *ConsequenceResult) string {
 		if result.AltAA != 0 {
 			n += copy(buf[n:], aaThree(result.AltAA))
 		}
+		// A frameshift whose first new codon is already a stop is written as a
+		// plain nonsense change: VEP reports p.Ser70Ter, not p.Ser70TerfsTer1.
+		if result.AltAA == '*' && result.FrameshiftStopDist == 1 {
+			return string(buf[:n])
+		}
 		if result.FrameshiftStopDist > 0 {
 			n += copy(buf[n:], "fsTer")
 			n += putInt64(buf[n:], int64(result.FrameshiftStopDist))
+		} else if result.AltAA != 0 {
+			// No downstream stop found, but the new residue is known: VEP writes
+			// fsTer? (p.Pro315GlnfsTer?), shortening to p.P315Qfs*?.
+			n += copy(buf[n:], "fsTer?")
 		} else {
+			// Neither the new residue nor a stop is known — VEP writes a bare
+			// fs, as on splice-site deletions (p.K267fs).
 			n += copy(buf[n:], "fs")
 		}
 		return string(buf[:n])
@@ -148,7 +230,7 @@ func FormatHGVSp(result *ConsequenceResult) string {
 		}
 		if len(result.InsertedAAs) > 0 {
 			n += copy(buf[n:], "delins")
-			return string(buf[:n]) + formatAASequence(result.InsertedAAs)
+			return string(buf[:n]) + formatAASequence(insertedPeptide(result.InsertedAAs))
 		}
 		n += copy(buf[n:], "del")
 		return string(buf[:n])
@@ -168,7 +250,7 @@ func FormatHGVSp(result *ConsequenceResult) string {
 				n += putInt64(buf[n:], result.ProteinEndPosition)
 			}
 			n += copy(buf[n:], "delins")
-			return string(buf[:n]) + formatAASequence(result.InsertedAAs)
+			return string(buf[:n]) + formatAASequence(insertedPeptide(result.InsertedAAs))
 		}
 		if result.IsDup {
 			if result.RefAA != 0 {
@@ -195,7 +277,7 @@ func FormatHGVSp(result *ConsequenceResult) string {
 		}
 		n += putInt64(buf[n:], pos+1)
 		n += copy(buf[n:], "ins")
-		return string(buf[:n]) + formatAASequence(result.InsertedAAs)
+		return string(buf[:n]) + formatAASequence(insertedPeptide(result.InsertedAAs))
 
 	case ConsequenceSpliceDonor, ConsequenceSpliceAcceptor:
 		n += copy(buf[n:], "p.X")

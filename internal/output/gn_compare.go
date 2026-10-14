@@ -11,25 +11,25 @@ import (
 
 // GNAnnotation represents a genome-nexus annotation response.
 type GNAnnotation struct {
-	Variant               string                    `json:"variant"`
-	OriginalVariantQuery  string                    `json:"originalVariantQuery"`
-	HGVSg                 string                    `json:"hgvsg"`
-	ID                    string                    `json:"id"`
-	AssemblyName          string                    `json:"assembly_name"`
-	SeqRegionName         string                    `json:"seq_region_name"`
-	Start                 int64                     `json:"start"`
-	End                   int64                     `json:"end"`
-	AlleleString          string                    `json:"allele_string"`
-	Strand                int                       `json:"strand"`
-	MostSevereConsequence string                    `json:"most_severe_consequence"`
-	TranscriptConsequences []GNTranscriptConsequence `json:"transcript_consequences"`
-	SuccessfullyAnnotated bool                      `json:"successfully_annotated"`
-	AnnotationSummary     *GNAnnotationSummary      `json:"annotation_summary,omitempty"`
-	ClinVar               *GNClinVar                `json:"clinvar,omitempty"`
-	ColocatedVariants     []GNColocatedVariant       `json:"colocatedVariants,omitempty"`
-	Hotspots              *GNHotspots               `json:"hotspots,omitempty"`
-	SignalAnnotation      *GNSignalAnnotation        `json:"signalAnnotation,omitempty"`
-	MyVariantInfo         *GNMyVariantInfoAnnotation `json:"my_variant_info,omitempty"`
+	Variant                string                     `json:"variant"`
+	OriginalVariantQuery   string                     `json:"originalVariantQuery"`
+	HGVSg                  string                     `json:"hgvsg"`
+	ID                     string                     `json:"id"`
+	AssemblyName           string                     `json:"assembly_name"`
+	SeqRegionName          string                     `json:"seq_region_name"`
+	Start                  int64                      `json:"start"`
+	End                    int64                      `json:"end"`
+	AlleleString           string                     `json:"allele_string"`
+	Strand                 int                        `json:"strand"`
+	MostSevereConsequence  string                     `json:"most_severe_consequence"`
+	TranscriptConsequences []GNTranscriptConsequence  `json:"transcript_consequences"`
+	SuccessfullyAnnotated  bool                       `json:"successfully_annotated"`
+	AnnotationSummary      *GNAnnotationSummary       `json:"annotation_summary,omitempty"`
+	ClinVar                *GNClinVar                 `json:"clinvar,omitempty"`
+	ColocatedVariants      []GNColocatedVariant       `json:"colocatedVariants,omitempty"`
+	Hotspots               *GNHotspots                `json:"hotspots,omitempty"`
+	SignalAnnotation       *GNSignalAnnotation        `json:"signalAnnotation,omitempty"`
+	MyVariantInfo          *GNMyVariantInfoAnnotation `json:"my_variant_info,omitempty"`
 }
 
 // GNMyVariantInfoAnnotation wraps the myvariant.info annotation in genome-nexus format.
@@ -39,13 +39,13 @@ type GNMyVariantInfoAnnotation struct {
 
 // GNMyVariantInfo holds the transformed myvariant.info data.
 type GNMyVariantInfo struct {
-	Dbsnp        *GNDbsnp               `json:"dbsnp,omitempty"`
-	GnomadExome  *GNGnomad              `json:"gnomadExome,omitempty"`
-	GnomadGenome *GNGnomad              `json:"gnomadGenome,omitempty"`
-	Vcf          *GNVcf                 `json:"vcf,omitempty"`
-	Variant      string                 `json:"variant,omitempty"`
-	Query        string                 `json:"query,omitempty"`
-	Hgvs         string                 `json:"hgvs,omitempty"`
+	Dbsnp        *GNDbsnp  `json:"dbsnp,omitempty"`
+	GnomadExome  *GNGnomad `json:"gnomadExome,omitempty"`
+	GnomadGenome *GNGnomad `json:"gnomadGenome,omitempty"`
+	Vcf          *GNVcf    `json:"vcf,omitempty"`
+	Variant      string    `json:"variant,omitempty"`
+	Query        string    `json:"query,omitempty"`
+	Hgvs         string    `json:"hgvs,omitempty"`
 }
 
 // GNDbsnp holds dbSNP rsid.
@@ -70,19 +70,19 @@ type GNVcf struct {
 
 // GNSignalAnnotation represents SIGNAL annotation in the GN response.
 type GNSignalAnnotation struct {
-	License    string            `json:"license"`
+	License    string             `json:"license"`
 	Annotation []GNSignalMutation `json:"annotation"`
 }
 
 // GNSignalMutation represents a SIGNAL mutation entry.
 type GNSignalMutation struct {
-	HugoGeneSymbol  string              `json:"hugoGeneSymbol,omitempty"`
-	Chromosome      string              `json:"chromosome,omitempty"`
-	StartPosition   int64               `json:"startPosition,omitempty"`
-	EndPosition     int64               `json:"endPosition,omitempty"`
-	ReferenceAllele string              `json:"referenceAllele,omitempty"`
-	VariantAllele   string              `json:"variantAllele,omitempty"`
-	MutationStatus  string              `json:"mutationStatus,omitempty"`
+	HugoGeneSymbol    string               `json:"hugoGeneSymbol,omitempty"`
+	Chromosome        string               `json:"chromosome,omitempty"`
+	StartPosition     int64                `json:"startPosition,omitempty"`
+	EndPosition       int64                `json:"endPosition,omitempty"`
+	ReferenceAllele   string               `json:"referenceAllele,omitempty"`
+	VariantAllele     string               `json:"variantAllele,omitempty"`
+	MutationStatus    string               `json:"mutationStatus,omitempty"`
 	CountsByTumorType []GNCountByTumorType `json:"countsByTumorType,omitempty"`
 }
 
@@ -118,8 +118,8 @@ type GNColocatedVariant struct {
 
 // GNHotspots represents cancer hotspot annotation.
 type GNHotspots struct {
-	License    string              `json:"license,omitempty"`
-	Annotation [][]GNHotspotEntry  `json:"annotation"`
+	License    string             `json:"license,omitempty"`
+	Annotation [][]GNHotspotEntry `json:"annotation"`
 }
 
 // GNHotspotEntry represents a single hotspot hit.
@@ -134,15 +134,15 @@ type GNHotspotEntry struct {
 // GNAnnotationSummary is the enriched annotation summary returned when
 // ?fields=annotation_summary is requested.
 type GNAnnotationSummary struct {
-	Variant                        string                              `json:"variant"`
-	GenomicLocation                GNGenomicLocation                   `json:"genomicLocation"`
-	StrandSign                     string                              `json:"strandSign"`
-	VariantType                    string                              `json:"variantType"`
-	AssemblyName                   string                              `json:"assemblyName"`
-	CanonicalTranscriptID          string                              `json:"canonicalTranscriptId"`
-	TranscriptConsequenceSummary   *GNTranscriptConsequenceSummary     `json:"transcriptConsequenceSummary"`
-	TranscriptConsequenceSummaries []GNTranscriptConsequenceSummary    `json:"transcriptConsequenceSummaries"`
-	TranscriptConsequences         []GNTranscriptConsequenceSummary    `json:"transcriptConsequences"`
+	Variant                        string                           `json:"variant"`
+	GenomicLocation                GNGenomicLocation                `json:"genomicLocation"`
+	StrandSign                     string                           `json:"strandSign"`
+	VariantType                    string                           `json:"variantType"`
+	AssemblyName                   string                           `json:"assemblyName"`
+	CanonicalTranscriptID          string                           `json:"canonicalTranscriptId"`
+	TranscriptConsequenceSummary   *GNTranscriptConsequenceSummary  `json:"transcriptConsequenceSummary"`
+	TranscriptConsequenceSummaries []GNTranscriptConsequenceSummary `json:"transcriptConsequenceSummaries"`
+	TranscriptConsequences         []GNTranscriptConsequenceSummary `json:"transcriptConsequences"`
 }
 
 // GNGenomicLocation represents a genomic location in the annotation summary.
@@ -156,24 +156,25 @@ type GNGenomicLocation struct {
 
 // GNTranscriptConsequenceSummary is the enriched per-transcript summary.
 type GNTranscriptConsequenceSummary struct {
-	TranscriptID          string            `json:"transcriptId"`
-	CodonChange           string            `json:"codonChange,omitempty"`
-	AminoAcids            string            `json:"aminoAcids,omitempty"`
-	AminoAcidRef          string            `json:"aminoAcidRef,omitempty"`
-	AminoAcidAlt          string            `json:"aminoAcidAlt,omitempty"`
-	EntrezGeneID          string            `json:"entrezGeneId,omitempty"`
-	HugoGeneSymbol        string            `json:"hugoGeneSymbol,omitempty"`
-	HGVSpShort            string            `json:"hgvspShort,omitempty"`
-	HGVSp                 string            `json:"hgvsp,omitempty"`
-	HGVSc                 string            `json:"hgvsc,omitempty"`
-	ConsequenceTerms      string            `json:"consequenceTerms,omitempty"`
-	VariantClassification string            `json:"variantClassification,omitempty"`
-	Exon                  string            `json:"exon,omitempty"`
-	ProteinPosition       *GNIntegerRange   `json:"proteinPosition,omitempty"`
-	PolyphenScore         *float64          `json:"polyphenScore,omitempty"`
-	PolyphenPrediction    string            `json:"polyphenPrediction,omitempty"`
-	SIFTScore             *float64          `json:"siftScore,omitempty"`
-	SIFTPrediction        string            `json:"siftPrediction,omitempty"`
+	TranscriptID          string          `json:"transcriptId"`
+	CodonChange           string          `json:"codonChange,omitempty"`
+	AminoAcids            string          `json:"aminoAcids,omitempty"`
+	AminoAcidRef          string          `json:"aminoAcidRef,omitempty"`
+	AminoAcidAlt          string          `json:"aminoAcidAlt,omitempty"`
+	EntrezGeneID          string          `json:"entrezGeneId,omitempty"`
+	HugoGeneSymbol        string          `json:"hugoGeneSymbol,omitempty"`
+	HGVSpShort            string          `json:"hgvspShort,omitempty"`
+	HGVSp                 string          `json:"hgvsp,omitempty"`
+	HGVSc                 string          `json:"hgvsc,omitempty"`
+	ConsequenceTerms      string          `json:"consequenceTerms,omitempty"`
+	VariantClassification string          `json:"variantClassification,omitempty"`
+	Exon                  string          `json:"exon,omitempty"`
+	RefSeq                string          `json:"refSeq,omitempty"`
+	ProteinPosition       *GNIntegerRange `json:"proteinPosition,omitempty"`
+	PolyphenScore         *float64        `json:"polyphenScore,omitempty"`
+	PolyphenPrediction    string          `json:"polyphenPrediction,omitempty"`
+	SIFTScore             *float64        `json:"siftScore,omitempty"`
+	SIFTPrediction        string          `json:"siftPrediction,omitempty"`
 }
 
 // GNIntegerRange represents a start/end integer range.
@@ -184,32 +185,34 @@ type GNIntegerRange struct {
 
 // GNTranscriptConsequence represents a transcript consequence from genome-nexus.
 type GNTranscriptConsequence struct {
-	TranscriptID       string   `json:"transcript_id"`
-	GeneSymbol         string   `json:"gene_symbol"`
-	GeneID             string   `json:"gene_id"`
-	HGNCId             string   `json:"hgnc_id,omitempty"`
-	ProteinID          string   `json:"protein_id,omitempty"`
-	ConsequenceTerms   []string `json:"consequence_terms"`
-	Impact             string   `json:"impact"`
-	VariantAllele      string   `json:"variant_allele"`
-	AminoAcids         string   `json:"amino_acids"`
-	Codons             string   `json:"codons"`
-	ProteinStart       int64    `json:"protein_start"`
-	ProteinEnd         int64    `json:"protein_end"`
-	CDSStart           int64    `json:"cds_start"`
-	CDSEnd             int64    `json:"cds_end"`
-	CDNAStart          int64    `json:"cdna_start"`
-	CDNAEnd            int64    `json:"cdna_end"`
-	HGVSp              string   `json:"hgvsp"`
-	HGVSc              string   `json:"hgvsc"`
-	Exon               string   `json:"exon"`
-	Intron             string   `json:"intron"`
-	Biotype            string   `json:"biotype"`
-	Canonical          string   `json:"canonical"`
-	SIFTScore          *float64 `json:"sift_score"`
-	SIFTPrediction     string   `json:"sift_prediction"`
-	PolyPhenScore      *float64 `json:"polyphen_score"`
-	PolyPhenPrediction string   `json:"polyphen_prediction"`
+	TranscriptID        string   `json:"transcript_id"`
+	GeneSymbol          string   `json:"gene_symbol"`
+	GeneID              string   `json:"gene_id"`
+	HGNCId              string   `json:"hgnc_id,omitempty"`
+	ProteinID           string   `json:"protein_id,omitempty"`
+	ConsequenceTerms    []string `json:"consequence_terms"`
+	Impact              string   `json:"impact"`
+	VariantAllele       string   `json:"variant_allele"`
+	AminoAcids          string   `json:"amino_acids"`
+	Codons              string   `json:"codons"`
+	ProteinStart        int64    `json:"protein_start"`
+	ProteinEnd          int64    `json:"protein_end"`
+	CDSStart            int64    `json:"cds_start"`
+	CDSEnd              int64    `json:"cds_end"`
+	CDNAStart           int64    `json:"cdna_start"`
+	CDNAEnd             int64    `json:"cdna_end"`
+	HGVSp               string   `json:"hgvsp"`
+	HGVSc               string   `json:"hgvsc"`
+	Exon                string   `json:"exon"`
+	Intron              string   `json:"intron"`
+	Biotype             string   `json:"biotype"`
+	RefseqTranscriptIds []string `json:"refseq_transcript_ids,omitempty"`
+	HGVSOffset          int      `json:"hgvs_offset,omitempty"`
+	Canonical           string   `json:"canonical"`
+	SIFTScore           *float64 `json:"sift_score"`
+	SIFTPrediction      string   `json:"sift_prediction"`
+	PolyPhenScore       *float64 `json:"polyphen_score"`
+	PolyPhenPrediction  string   `json:"polyphen_prediction"`
 }
 
 // ParseGNAnnotation parses a JSON line into a GNAnnotation.
@@ -242,21 +245,21 @@ type GNVariantComparison struct {
 
 // GNComparisonReport holds the summary of all variant comparisons.
 type GNComparisonReport struct {
-	TotalVariants    int                       `json:"total_variants"`
-	FullMatches      int                       `json:"full_matches"`
-	PartialMatches   int                       `json:"partial_matches"`
-	Errors           int                       `json:"errors"`
-	FieldStats       map[string]*GNFieldStats  `json:"field_stats"`
-	CategoryCounts   map[Category]int          `json:"category_counts"`
-	Comparisons      []GNVariantComparison     `json:"comparisons,omitempty"`
+	TotalVariants  int                      `json:"total_variants"`
+	FullMatches    int                      `json:"full_matches"`
+	PartialMatches int                      `json:"partial_matches"`
+	Errors         int                      `json:"errors"`
+	FieldStats     map[string]*GNFieldStats `json:"field_stats"`
+	CategoryCounts map[Category]int         `json:"category_counts"`
+	Comparisons    []GNVariantComparison    `json:"comparisons,omitempty"`
 }
 
 // GNFieldStats tracks match/mismatch counts per field.
 type GNFieldStats struct {
-	Total      int            `json:"total"`
-	Matches    int            `json:"matches"`
-	Mismatches int            `json:"mismatches"`
-	BothEmpty  int            `json:"both_empty"`
+	Total      int              `json:"total"`
+	Matches    int              `json:"matches"`
+	Mismatches int              `json:"mismatches"`
+	BothEmpty  int              `json:"both_empty"`
 	Categories map[Category]int `json:"categories"`
 }
 

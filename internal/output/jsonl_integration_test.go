@@ -9,6 +9,7 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/datasource/refseq"
 	"github.com/inodb/vibe-vep/internal/input"
 	"github.com/inodb/vibe-vep/internal/output"
 	"github.com/inodb/vibe-vep/internal/vcf"
@@ -23,12 +24,17 @@ func TestStreamAnnotation(t *testing.T) {
 		t.Skip("skipping stream integration test in short mode")
 	}
 
-	gtfPath, fastaPath, canonicalPath := findGENCODEFiles(t, "GRCh38")
+	gtfPath, fastaPath, canonicalPath, refseqPath := findGENCODEFiles(t, "GRCh38")
 	c := cache.New()
 	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
 	if canonicalPath != "" {
 		mskOverrides, ensOverrides, _, _ := cache.LoadBiomartCanonicals(canonicalPath)
 		loader.SetCanonicalOverrides(mskOverrides, ensOverrides)
+	}
+	if refseqPath != "" {
+		if store, err := refseq.Load(refseqPath); err == nil {
+			loader.SetRefSeqIDs(store.Map())
+		}
 	}
 	if err := loader.Load(c); err != nil {
 		t.Fatalf("load GENCODE: %v", err)
@@ -170,12 +176,17 @@ func TestStreamMultiFormatInput(t *testing.T) {
 		t.Skip("skipping stream multi-format test in short mode")
 	}
 
-	gtfPath, fastaPath, canonicalPath := findGENCODEFiles(t, "GRCh38")
+	gtfPath, fastaPath, canonicalPath, refseqPath := findGENCODEFiles(t, "GRCh38")
 	c := cache.New()
 	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
 	if canonicalPath != "" {
 		mskOverrides, ensOverrides, _, _ := cache.LoadBiomartCanonicals(canonicalPath)
 		loader.SetCanonicalOverrides(mskOverrides, ensOverrides)
+	}
+	if refseqPath != "" {
+		if store, err := refseq.Load(refseqPath); err == nil {
+			loader.SetRefSeqIDs(store.Map())
+		}
 	}
 	if err := loader.Load(c); err != nil {
 		t.Fatalf("load GENCODE: %v", err)

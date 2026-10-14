@@ -21,6 +21,9 @@ type VEPTranscriptConsequence struct {
 	ConsequenceTerms []string `json:"consequence_terms"`
 	Impact           string   `json:"impact"`
 	VariantAllele    string   `json:"variant_allele"`
+	// RefSeq mRNA accessions for this transcript, as VEP reports them with
+	// xref_refseq=1. genome-nexus takes the first entry for the MAF RefSeq column.
+	RefSeqTranscriptIDs []string `json:"refseq_transcript_ids,omitempty"`
 
 	// Protein fields
 	AminoAcids   string `json:"amino_acids,omitempty"`
@@ -37,6 +40,9 @@ type VEPTranscriptConsequence struct {
 	// HGVS
 	HGVSc string `json:"hgvsc,omitempty"`
 	HGVSp string `json:"hgvsp,omitempty"`
+	// HGVSOffset is the 3' shift distance. VEP omits it when zero, and
+	// genome-nexus reads it from here for the MAF HGVS_Offset column.
+	HGVSOffset int `json:"hgvs_offset,omitempty"`
 
 	// Exon/Intron
 	Exon   string `json:"exon,omitempty"`
@@ -86,21 +92,22 @@ type VibeVepTranscriptConsequence struct {
 	CanonicalMSKCC        bool              `json:"canonical_mskcc,omitempty"`
 	CanonicalEnsembl      bool              `json:"canonical_ensembl,omitempty"`
 	CanonicalMANE         bool              `json:"canonical_mane,omitempty"`
+	RefSeqTranscriptIDs   []string          `json:"refseq_transcript_ids,omitempty"`
 	Extra                 map[string]string `json:"extra,omitempty"`
 }
 
 // VibeVepVariantAnnotation is the top-level vibe-vep native JSON output.
 type VibeVepVariantAnnotation struct {
-	Input                  string                          `json:"input"`
-	Chromosome             string                          `json:"chromosome"`
-	Start                  int64                           `json:"start"`
-	End                    int64                           `json:"end"`
-	ReferenceAllele        string                          `json:"reference_allele"`
-	VariantAllele          string                          `json:"variant_allele"`
-	Assembly               string                          `json:"assembly"`
-	MostSevereConsequence  string                          `json:"most_severe_consequence"`
-	TranscriptConsequences []VibeVepTranscriptConsequence  `json:"transcript_consequences"`
-	Warnings               []string                        `json:"warnings,omitempty"`
+	Input                  string                         `json:"input"`
+	Chromosome             string                         `json:"chromosome"`
+	Start                  int64                          `json:"start"`
+	End                    int64                          `json:"end"`
+	ReferenceAllele        string                         `json:"reference_allele"`
+	VariantAllele          string                         `json:"variant_allele"`
+	Assembly               string                         `json:"assembly"`
+	MostSevereConsequence  string                         `json:"most_severe_consequence"`
+	TranscriptConsequences []VibeVepTranscriptConsequence `json:"transcript_consequences"`
+	Warnings               []string                       `json:"warnings,omitempty"`
 }
 
 // JSONLWriter writes annotations in JSONL format (one JSON line per variant).
@@ -194,58 +201,74 @@ func (j *JSONLWriter) flushVariant() error {
 	return nil
 }
 
+// vepCoordinates returns the start and end Ensembl VEP reports for a variant.
+//
+// For an insertion between bases N and N+1, VEP reports start=N+1 and end=N —
+// deliberately inverted, which is how consumers recognise a zero-length
+// reference. genome-nexus relies on it: GenomicLocationResolver takes
+// min(start,end) and max(start,end) to recover the MAF convention (N, N+1).
+// Emitting (N, N) instead leaves nothing to swap and yields a MAF End_Position
+// one base short on every insertion.
+func vepCoordinates(v *vcf.Variant) (start, end int64) {
+	if len(v.Ref) == 0 {
+		return v.Pos + 1, v.Pos
+	}
+	return v.Pos, v.Pos + int64(len(v.Ref)) - 1
+}
+
+// mafCoordinates returns the start and end in MAF convention, where an
+// insertion between N and N+1 is reported as (N, N+1).
+func mafCoordinates(v *vcf.Variant) (start, end int64) {
+	if len(v.Ref) == 0 {
+		return v.Pos, v.Pos + 1
+	}
+	return v.Pos, v.Pos + int64(len(v.Ref)) - 1
+}
+
 func (j *JSONLWriter) marshalVEP() ([]byte, error) {
 	v := j.curVariant
 	ref, alt := alleleStrings(v)
 
-	end := v.Pos + int64(len(v.Ref)) - 1
-	if end < v.Pos {
-		end = v.Pos // insertions
-	}
+	start, end := vepCoordinates(v)
 
 	result := VEPVariantAnnotation{
 		Input:         j.input,
 		ID:            annotate.FormatVariantID(v.Chrom, v.Pos, v.Ref, v.Alt),
 		SeqRegionName: v.Chrom,
-		Start:         v.Pos,
+		Start:         start,
 		End:           end,
 		AlleleString:  ref + "/" + alt,
 		Strand:        1,
 		AssemblyName:  j.assembly,
 	}
 
-	// Find most severe consequence.
-	bestImpact := -1
-	for _, ann := range j.curAnns {
-		impact := annotate.ImpactRank(ann.Impact)
-		if impact > bestImpact {
-			bestImpact = impact
-			result.MostSevereConsequence = firstConsequence(ann.Consequence)
-		}
-	}
+	result.MostSevereConsequence = mostSevereConsequence(j.curAnns)
 
 	for _, ann := range j.curAnns {
+		pStart, pEnd := proteinRange(ann)
 		tc := VEPTranscriptConsequence{
-			TranscriptID:     stripVersion(ann.TranscriptID),
-			GeneID:           ann.GeneID,
-			GeneSymbol:       ann.GeneName,
-			GeneSymbolSource: "HGNC",
-			Biotype:          ann.Biotype,
-			ConsequenceTerms: splitConsequence(ann.Consequence),
-			Impact:           ann.Impact,
-			VariantAllele:    ann.Allele,
-			AminoAcids:       formatAminoAcidsVEP(ann.AminoAcidChange),
-			Codons:           ann.CodonChange,
-			ProteinStart:     ann.ProteinPosition,
-			ProteinEnd:       ann.ProteinPosition,
-			CDSStart:         ann.CDSPosition,
-			CDSEnd:           ann.CDSPosition,
-			CDNAStart:        ann.CDNAPosition,
-			CDNAEnd:          ann.CDNAPosition,
-			HGVSc:            ann.HGVSc,
-			HGVSp:            ann.HGVSp,
-			Exon:             ann.ExonNumber,
-			Intron:           ann.IntronNumber,
+			TranscriptID:        stripVersion(ann.TranscriptID),
+			GeneID:              ann.GeneID,
+			GeneSymbol:          ann.GeneName,
+			GeneSymbolSource:    "HGNC",
+			Biotype:             ann.Biotype,
+			ConsequenceTerms:    splitConsequence(ann.Consequence),
+			Impact:              ann.Impact,
+			VariantAllele:       ann.Allele,
+			AminoAcids:          aminoAcidsField(ann),
+			Codons:              ann.CodonChange,
+			ProteinStart:        pStart,
+			ProteinEnd:          pEnd,
+			CDSStart:            ann.CDSPosition,
+			CDSEnd:              ann.CDSPosition,
+			CDNAStart:           ann.CDNAPosition,
+			CDNAEnd:             ann.CDNAPosition,
+			HGVSc:               prependTranscriptID(ann.TranscriptID, ann.HGVSc),
+			HGVSp:               ann.HGVSp,
+			Exon:                ann.ExonNumber,
+			Intron:              ann.IntronNumber,
+			RefSeqTranscriptIDs: ann.RefSeqIDs,
+			HGVSOffset:          ann.HGVSOffset,
 		}
 
 		// SIFT/PolyPhen from annotation source extras.
@@ -265,6 +288,7 @@ func (j *JSONLWriter) marshalVEP() ([]byte, error) {
 		result.TranscriptConsequences = append(result.TranscriptConsequences, tc)
 	}
 
+	sortVEPTranscripts(result.TranscriptConsequences)
 	result.Warnings = j.warnings
 
 	return json.Marshal(result)
@@ -274,29 +298,19 @@ func (j *JSONLWriter) marshalVibeVep() ([]byte, error) {
 	v := j.curVariant
 	ref, alt := alleleStrings(v)
 
-	end := v.Pos + int64(len(v.Ref)) - 1
-	if end < v.Pos {
-		end = v.Pos
-	}
+	start, end := mafCoordinates(v)
 
 	result := VibeVepVariantAnnotation{
 		Input:           j.input,
 		Chromosome:      v.Chrom,
-		Start:           v.Pos,
+		Start:           start,
 		End:             end,
 		ReferenceAllele: ref,
 		VariantAllele:   alt,
 		Assembly:        j.assembly,
 	}
 
-	bestImpact := -1
-	for _, ann := range j.curAnns {
-		impact := annotate.ImpactRank(ann.Impact)
-		if impact > bestImpact {
-			bestImpact = impact
-			result.MostSevereConsequence = firstConsequence(ann.Consequence)
-		}
-	}
+	result.MostSevereConsequence = mostSevereConsequence(j.curAnns)
 
 	for _, ann := range j.curAnns {
 		tc := VibeVepTranscriptConsequence{
@@ -306,21 +320,22 @@ func (j *JSONLWriter) marshalVibeVep() ([]byte, error) {
 			Consequence:           ann.Consequence,
 			Impact:                ann.Impact,
 			VariantClassification: SOToMAFClassification(ann.Consequence, v),
-			HGVSc:                ann.HGVSc,
-			HGVSp:                ann.HGVSp,
-			HGVSpShort:           HGVSpToShort(ann.HGVSp),
-			ProteinPosition:      ann.ProteinPosition,
-			CDSPosition:          ann.CDSPosition,
-			CDNAPosition:         ann.CDNAPosition,
-			AminoAcidChange:      ann.AminoAcidChange,
-			Codons:               ann.CodonChange,
-			Exon:                 ann.ExonNumber,
-			Intron:               ann.IntronNumber,
-			Biotype:              ann.Biotype,
-			CanonicalMSKCC:       ann.IsCanonicalMSK,
-			CanonicalEnsembl:     ann.IsCanonicalEnsembl,
-			CanonicalMANE:        ann.IsMANESelect,
-			Extra:                ann.Extra,
+			HGVSc:                 ann.HGVSc,
+			HGVSp:                 ann.HGVSp,
+			HGVSpShort:            HGVSpToShort(ann.HGVSp),
+			ProteinPosition:       ann.ProteinPosition,
+			CDSPosition:           ann.CDSPosition,
+			CDNAPosition:          ann.CDNAPosition,
+			AminoAcidChange:       ann.AminoAcidChange,
+			Codons:                ann.CodonChange,
+			Exon:                  ann.ExonNumber,
+			Intron:                ann.IntronNumber,
+			Biotype:               ann.Biotype,
+			CanonicalMSKCC:        ann.IsCanonicalMSK,
+			CanonicalEnsembl:      ann.IsCanonicalEnsembl,
+			CanonicalMANE:         ann.IsMANESelect,
+			RefSeqTranscriptIDs:   ann.RefSeqIDs,
+			Extra:                 ann.Extra,
 		}
 		result.TranscriptConsequences = append(result.TranscriptConsequences, tc)
 	}
@@ -378,6 +393,16 @@ func stripVersion(id string) string {
 	return id
 }
 
+// prependTranscriptID prepends the transcript ID (with version) to a bare HGVSc
+// notation, producing e.g. "ENST00000288602.6:c.1799T>A". Returns empty string
+// when hgvsc is empty (non-coding or unannotated variants).
+func prependTranscriptID(transcriptID, hgvsc string) string {
+	if hgvsc == "" {
+		return ""
+	}
+	return transcriptID + ":" + hgvsc
+}
+
 // formatAminoAcidsVEP converts "G12C" to "G/C" (VEP format).
 func formatAminoAcidsVEP(change string) string {
 	if len(change) < 2 {
@@ -386,3 +411,12 @@ func formatAminoAcidsVEP(change string) string {
 	return change[:1] + "/" + change[len(change)-1:]
 }
 
+// aminoAcidsField returns the VEP amino_acids value: the raw override when the
+// annotation carries one, otherwise the ref/alt pair derived from the amino
+// acid change.
+func aminoAcidsField(ann *annotate.Annotation) string {
+	if ann.AminoAcidsVEP != "" {
+		return ann.AminoAcidsVEP
+	}
+	return formatAminoAcidsVEP(ann.AminoAcidChange)
+}

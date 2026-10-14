@@ -247,13 +247,23 @@ func TestHGVS_Insertion_Plain(t *testing.T) {
 // HGVS: tandem duplications must use dup, not ins
 
 func TestHGVS_Dup_SingleBase(t *testing.T) {
-	// Insert G that matches preceding base → dup
+	// Insert G that matches the preceding base, with nothing to 3'-shift.
+	//
+	// HGVS defines the two terms as mutually exclusive -- an insertion is a
+	// change "where the insertion is not a copy of a sequence immediately 5'"
+	// -- so a tandem copy must be written dup even when no shift was needed.
+	//
+	// Ensembl VEP disagrees: it only writes dup when the 3' shift moved the
+	// variant, so it renders this case c.3_4insG. vibe-vep deliberately does
+	// not follow VEP here; see the note in hgvsc.go for the counts and the
+	// concordance cost.
 	transcript := createDupTestTranscript()
 	v := &vcf.Variant{Chrom: "1", Pos: 1002, Ref: "G", Alt: "GG"}
 	result := PredictConsequence(v, transcript)
 	hgvsc := FormatHGVSc(v, transcript, result)
 
 	assert.Equal(t, "c.3dup", hgvsc)
+	assert.Equal(t, 0, result.HGVSOffset, "dup must not depend on a shift having occurred")
 }
 
 func TestHGVS_Dup_MultiBase(t *testing.T) {
@@ -463,7 +473,9 @@ func TestHGVS_StartLost(t *testing.T) {
 }
 
 func TestHGVSp_StopLost_WithExtension(t *testing.T) {
-	// p.Ter110Glnext*17 (stop codon to Gln, new stop at +17)
+	// p.Ter110GlnextTer17 (stop codon to Gln, new stop at +17). The
+	// three-letter form spells the extension terminator out; ext*17 is the
+	// one-letter form, which genome-nexus renders into HGVSp_Short.
 	result := &ConsequenceResult{
 		Consequence:     ConsequenceStopLost,
 		ProteinPosition: 110,
@@ -471,18 +483,18 @@ func TestHGVSp_StopLost_WithExtension(t *testing.T) {
 		AltAA:           'Q',
 		StopLostExtDist: 17,
 	}
-	assert.Equal(t, "p.Ter110Glnext*17", FormatHGVSp(result))
+	assert.Equal(t, "p.Ter110GlnextTer17", FormatHGVSp(result))
 }
 
 func TestHGVSp_StopLost_UnknownExtension(t *testing.T) {
-	// p.Ter327Argext*? (no new stop found)
+	// p.Ter327ArgextTer? (no new stop found)
 	result := &ConsequenceResult{
 		Consequence:     ConsequenceStopLost,
 		ProteinPosition: 327,
 		RefAA:           '*',
 		AltAA:           'R',
 	}
-	assert.Equal(t, "p.Ter327Argext*?", FormatHGVSp(result))
+	assert.Equal(t, "p.Ter327ArgextTer?", FormatHGVSp(result))
 }
 
 func TestHGVSp_StopRetained(t *testing.T) {

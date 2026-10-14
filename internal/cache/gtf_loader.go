@@ -12,6 +12,10 @@ import (
 	"strings"
 )
 
+// utr3ScanBases is how much 3'UTR to retain per transcript for stop-codon
+// scanning after a frameshift. See the measurement note at its use site.
+const utr3ScanBases = 1500
+
 // GTFLoader loads transcript data from GENCODE GTF files.
 type GTFLoader struct {
 	path string
@@ -89,7 +93,7 @@ func (l *GTFLoader) parseGTF(reader io.Reader, filterChrom string) (map[string]*
 
 	transcripts := make(map[string]*Transcript)
 	exonsByTranscript := make(map[string][]Exon)
-	cdsByTranscript := make(map[string][][2]int64) // start, end pairs
+	cdsByTranscript := make(map[string][][3]int64) // start, end, phase triples
 
 	lineNum := 0
 	for scanner.Scan() {
@@ -153,7 +157,11 @@ func (l *GTFLoader) parseGTF(reader io.Reader, filterChrom string) (map[string]*
 
 		case "CDS":
 			// Track CDS regions for this transcript
-			cdsByTranscript[transcriptID] = append(cdsByTranscript[transcriptID], [2]int64{feat.start, feat.end})
+			phase := int64(-1)
+			if p, err := strconv.Atoi(feat.phase); err == nil && p >= 0 && p <= 2 {
+				phase = int64(p)
+			}
+			cdsByTranscript[transcriptID] = append(cdsByTranscript[transcriptID], [3]int64{feat.start, feat.end, phase})
 
 		case "start_codon":
 			if t, ok := transcripts[transcriptID]; ok {
@@ -220,6 +228,24 @@ func (l *GTFLoader) parseGTF(reader io.Reader, filterChrom string) (map[string]*
 			}
 			if t.CDSEnd == 0 {
 				t.CDSEnd = maxEnd
+			}
+
+			// A 5'-incomplete CDS (cds_start_NF) begins part-way through a codon.
+			// The GTF phase of the first CDS feature in transcript order is how
+			// many bases to skip to reach the next whole codon, so (3-phase)%3
+			// bases of that first codon are missing. VEP numbers c.1 from the
+			// first base of the notional complete codon, which shifts every CDS
+			// position by that amount. 7,006 GENCODE v19 transcripts need it.
+			firstPhase := int64(-1)
+			var firstStart int64
+			for i, region := range cdsRegions {
+				if i == 0 || (t.Strand == 1 && region[0] < firstStart) ||
+					(t.Strand == -1 && region[0] > firstStart) {
+					firstStart, firstPhase = region[0], region[2]
+				}
+			}
+			if firstPhase > 0 {
+				t.CDSStartOffset = int((3 - firstPhase) % 3)
 			}
 		}
 
@@ -364,6 +390,16 @@ type GENCODELoader struct {
 	mskCanonicalOverrides  CanonicalOverrides
 	ensCanonicalOverrides  CanonicalOverrides
 	entrezGeneIDs          GeneEntrezMap
+	refSeqIDs              map[string][]string
+	genomePath             string
+}
+
+// SetGenomePath supplies a genomic FASTA used only to copy short intron windows
+// around each coding exon into the cache (see IntronFlankBases). The genome
+// itself is never retained or shipped; without it those flanks stay empty and
+// deletions simply do not shift across a splice boundary.
+func (l *GENCODELoader) SetGenomePath(path string) {
+	l.genomePath = path
 }
 
 // NewGENCODELoader creates a loader for GENCODE GTF + FASTA files.
@@ -385,6 +421,13 @@ func (l *GENCODELoader) SetCanonicalOverrides(mskcc, ensembl CanonicalOverrides)
 // SetEntrezGeneIDs sets the gene symbol -> Entrez gene ID mapping.
 func (l *GENCODELoader) SetEntrezGeneIDs(entrez GeneEntrezMap) {
 	l.entrezGeneIDs = entrez
+}
+
+// SetRefSeqIDs sets the version-stripped transcript ID -> RefSeq mRNA
+// accessions mapping. Accession order is load-bearing: genome-nexus reports
+// only the first entry, so the GENCODE file order is preserved as-is.
+func (l *GENCODELoader) SetRefSeqIDs(refSeq map[string][]string) {
+	l.refSeqIDs = refSeq
 }
 
 // Load loads all transcripts and sequences into the cache.
@@ -410,6 +453,19 @@ func (l *GENCODELoader) Load(c *Cache) error {
 		}
 	}
 
+	// Apply RefSeq accessions if loaded. Transcript.ID keeps its version
+	// suffix, so join on the version-stripped ID to stay robust to a GENCODE
+	// release skew between the GTF and the RefSeq metadata file.
+	if len(l.refSeqIDs) > 0 {
+		for _, chrom := range c.Chromosomes() {
+			for _, t := range c.FindTranscriptsByChrom(chrom) {
+				if ids, ok := l.refSeqIDs[stripVersion(t.ID)]; ok {
+					t.RefSeqIDs = ids
+				}
+			}
+		}
+	}
+
 	// Load FASTA sequences if provided
 	if l.fastaPath != "" {
 		l.fasta = NewFASTALoader(l.fastaPath)
@@ -420,7 +476,15 @@ func (l *GENCODELoader) Load(c *Cache) error {
 		// Attach sequences to transcripts
 		for _, chrom := range c.Chromosomes() {
 			for _, t := range c.FindTranscriptsByChrom(chrom) {
+				rawCDSLen := 0
 				if seq := l.fasta.GetSequence(t.ID); seq != "" {
+					rawCDSLen = len(seq)
+					// Pad the bases missing from a 5'-incomplete first codon so
+					// that CDS position and CDSSequence index stay aligned once
+					// GenomicToCDS applies the same shift.
+					if t.CDSStartOffset > 0 {
+						seq = strings.Repeat("N", t.CDSStartOffset) + seq
+					}
 					t.CDSSequence = seq
 					// Compute protein length from CDS (number of complete codons, minus stop).
 					t.ProteinLength = len(seq) / 3
@@ -428,12 +492,33 @@ func (l *GENCODELoader) Load(c *Cache) error {
 						t.ProteinLength-- // subtract stop codon
 					}
 				}
-				// Load CDS + up to 300bp of 3'UTR for stop-codon scanning
-				// (frameshifts and stop-lost need to scan past the CDS end)
-				if extended := l.fasta.GetCDSPlusDownstream(t.ID, 300); extended != "" && len(extended) > len(t.CDSSequence) {
-					t.UTR3Sequence = extended[len(t.CDSSequence):]
+				// Keep a tail of 5'UTR so a deletion reaching upstream of the
+				// start codon can still be 3'-shifted (see UTR5TailBases).
+				if u := l.fasta.GetUTR5Tail(t.ID, UTR5TailBases); u != "" {
+					packed, n := PackDNA2Bit(strings.ToUpper(u))
+					t.UTR5Packed, t.UTR5Len = packed, uint16(n)
+				}
+				// Load CDS + 3'UTR for stop-codon scanning (frameshifts and
+				// stop-lost need to scan past the CDS end). The cap is measured:
+				// against VEP111 the furthest new stop sits 375 codons (1125bp)
+				// downstream, and 300bp resolved none of those 168 variants.
+				// Offsets here are relative to the unpadded CDS.
+				if extended := l.fasta.GetCDSPlusDownstream(t.ID, utr3ScanBases); extended != "" && len(extended) > rawCDSLen {
+					t.UTR3Sequence = extended[rawCDSLen:]
 				}
 			}
+		}
+	}
+
+	// Copy the intron flanks of coding exons out of the genomic FASTA. Done
+	// last: it needs the exon CDS portions computed above.
+	if l.genomePath != "" {
+		byChrom := make(map[string][]*Transcript)
+		for _, chrom := range c.Chromosomes() {
+			byChrom[chrom] = c.FindTranscriptsByChrom(chrom)
+		}
+		if err := NewGenomeFlankLoader(l.genomePath).Attach(byChrom); err != nil {
+			return fmt.Errorf("load intron flanks: %w", err)
 		}
 	}
 

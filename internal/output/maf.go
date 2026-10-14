@@ -14,12 +14,12 @@ import (
 // When replace=false (default), all vibe-vep output is appended as namespaced vibe.* columns.
 // When replace=true, core columns are overwritten in-place.
 type MAFWriter struct {
-	w          *bufio.Writer
-	headerLine string
-	columns    maf.ColumnIndices
-	sources    []annotate.AnnotationSource
-	sourceKeys []string // pre-built Extra map keys for source columns
-	replace    bool
+	w           *bufio.Writer
+	headerLine  string
+	columns     maf.ColumnIndices
+	sources     []annotate.AnnotationSource
+	sourceKeys  []string // pre-built Extra map keys for source columns
+	replace     bool
 	excludeCols map[string]bool // columns to exclude from output
 }
 
@@ -212,16 +212,16 @@ func (m *MAFWriter) coreValues(ann *annotate.Annotation, v *vcf.Variant) [10]str
 		canonMANE = "YES"
 	}
 	return [10]string{
-		ann.GeneName,                              // hugo_symbol
-		ann.Consequence,                           // consequence
+		ann.GeneName,    // hugo_symbol
+		ann.Consequence, // consequence
 		SOToMAFClassification(ann.Consequence, v), // variant_classification
-		ann.TranscriptID,                          // transcript_id
-		ann.HGVSc,                                 // hgvsc
-		ann.HGVSp,                                 // hgvsp
-		HGVSpToShort(ann.HGVSp),                   // hgvsp_short
-		canonMSK,                                   // canonical_mskcc
-		canonEns,                                   // canonical_ensembl
-		canonMANE,                                  // canonical_mane
+		ann.TranscriptID,        // transcript_id
+		ann.HGVSc,               // hgvsc
+		ann.HGVSp,               // hgvsp
+		HGVSpToShort(ann.HGVSp), // hgvsp_short
+		canonMSK,                // canonical_mskcc
+		canonEns,                // canonical_ensembl
+		canonMANE,               // canonical_mane
 	}
 }
 

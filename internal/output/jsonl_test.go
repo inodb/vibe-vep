@@ -94,8 +94,9 @@ func TestJSONLWriterVEP(t *testing.T) {
 	if tc.CDSStart != 1799 {
 		t.Errorf("cds_start=%d, want %d", tc.CDSStart, 1799)
 	}
-	if tc.HGVSc != "c.1799T>A" {
-		t.Errorf("hgvsc=%q, want %q", tc.HGVSc, "c.1799T>A")
+	// HGVSc carries the versioned transcript ID prefix, matching real VEP.
+	if tc.HGVSc != "ENST00000288602.11:c.1799T>A" {
+		t.Errorf("hgvsc=%q, want %q", tc.HGVSc, "ENST00000288602.11:c.1799T>A")
 	}
 }
 

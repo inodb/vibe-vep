@@ -753,10 +753,10 @@ func TestMAFWriter_ExcludeMultipleColumns(t *testing.T) {
 	}
 
 	ann := &annotate.Annotation{
-		GeneName:    "KRAS",
-		Consequence: "missense_variant",
-		HGVSp:       "p.Gly12Cys",
-		HGVSc:       "c.34G>T",
+		GeneName:     "KRAS",
+		Consequence:  "missense_variant",
+		HGVSp:        "p.Gly12Cys",
+		HGVSc:        "c.34G>T",
 		TranscriptID: "ENST00000311936",
 	}
 	if err := w.WriteRow([]string{"KRAS"}, ann, []*annotate.Annotation{ann}, &vcf.Variant{Ref: "C", Alt: "T"}); err != nil {

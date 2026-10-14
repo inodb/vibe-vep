@@ -14,6 +14,7 @@ import (
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
+	"github.com/inodb/vibe-vep/internal/datasource/refseq"
 	"github.com/inodb/vibe-vep/internal/duckdb"
 	"github.com/inodb/vibe-vep/internal/maf"
 	"github.com/inodb/vibe-vep/internal/output"
@@ -331,10 +332,10 @@ func TestMismatchCollection(t *testing.T) {
 	}
 
 	report := struct {
-		Dataset    string                        `json:"dataset"`
-		Total      int                           `json:"total_mismatches"`
-		Mismatches []mismatchRecord              `json:"mismatches"`
-		Groups     map[string]*consequenceGroup  `json:"consequence_groups"`
+		Dataset    string                       `json:"dataset"`
+		Total      int                          `json:"total_mismatches"`
+		Mismatches []mismatchRecord             `json:"mismatches"`
+		Groups     map[string]*consequenceGroup `json:"consequence_groups"`
 	}{
 		Dataset:    datasetName,
 		Total:      len(mismatches),
@@ -526,7 +527,7 @@ func findBestDataset(t *testing.T) (dir, name string) {
 func loadGENCODECache(t *testing.T, assembly string) (c *cache.Cache, duration time.Duration, source string) {
 	t.Helper()
 
-	gtfPath, fastaPath, canonicalPath := findGENCODEFiles(t, assembly)
+	gtfPath, fastaPath, canonicalPath, refseqPath := findGENCODEFiles(t, assembly)
 	cacheDir := filepath.Dir(gtfPath)
 	c = cache.New()
 
@@ -539,8 +540,12 @@ func loadGENCODECache(t *testing.T, assembly string) (c *cache.Cache, duration t
 	if canonicalPath != "" {
 		canonicalFP, _ = duckdb.StatFile(canonicalPath)
 	}
+	refseqFP := duckdb.FileFingerprint{}
+	if refseqPath != "" {
+		refseqFP, _ = duckdb.StatFile(refseqPath)
+	}
 
-	if err1 == nil && err2 == nil && tc.Valid(gtfFP, fastaFP, canonicalFP) {
+	if err1 == nil && err2 == nil && tc.Valid(gtfFP, fastaFP, canonicalFP, refseqFP) {
 		if err := tc.Load(c); err != nil {
 			t.Fatalf("load transcript cache: %v", err)
 		}
@@ -553,6 +558,14 @@ func loadGENCODECache(t *testing.T, assembly string) (c *cache.Cache, duration t
 				t.Logf("warning: could not load biomart canonicals: %v", err)
 			} else {
 				loader.SetCanonicalOverrides(mskOverrides, ensOverrides)
+			}
+		}
+		if refseqPath != "" {
+			store, err := refseq.Load(refseqPath)
+			if err != nil {
+				t.Logf("warning: could not load RefSeq metadata: %v", err)
+			} else {
+				loader.SetRefSeqIDs(store.Map())
 			}
 		}
 		if err := loader.Load(c); err != nil {
@@ -1057,18 +1070,18 @@ type reportTable struct {
 
 // reportJSON is the top-level JSON structure for validation reports.
 type reportJSON struct {
-	Assembly           string                  `json:"assembly"`
-	Generated          string                  `json:"generated"`
-	Transcripts        int                     `json:"transcripts"`
-	LoadSource         string                  `json:"load_source"`
-	LoadDuration       string                  `json:"load_duration"`
-	Workers            int                     `json:"workers"`
-	Studies            int                     `json:"studies"`
-	System             *systemInfo             `json:"system,omitempty"`
-	MatchRates         reportTable             `json:"match_rates"`
-	CategoryBreakdowns map[string]reportTable   `json:"category_breakdowns"`
-	CancerGenes        *reportCancerGenes      `json:"cancer_genes,omitempty"`
-	Performance        reportTable             `json:"performance"`
+	Assembly           string                 `json:"assembly"`
+	Generated          string                 `json:"generated"`
+	Transcripts        int                    `json:"transcripts"`
+	LoadSource         string                 `json:"load_source"`
+	LoadDuration       string                 `json:"load_duration"`
+	Workers            int                    `json:"workers"`
+	Studies            int                    `json:"studies"`
+	System             *systemInfo            `json:"system,omitempty"`
+	MatchRates         reportTable            `json:"match_rates"`
+	CategoryBreakdowns map[string]reportTable `json:"category_breakdowns"`
+	CancerGenes        *reportCancerGenes     `json:"cancer_genes,omitempty"`
+	Performance        reportTable            `json:"performance"`
 }
 
 type reportCancerGenes struct {
@@ -1337,7 +1350,7 @@ func findStudyDir(t *testing.T, subdir string) string {
 
 // findGENCODEFiles locates GENCODE cache files for the given assembly.
 // Finds GENCODE files in the default cache directory for the given assembly.
-func findGENCODEFiles(t *testing.T, assembly string) (gtfPath, fastaPath, canonicalPath string) {
+func findGENCODEFiles(t *testing.T, assembly string) (gtfPath, fastaPath, canonicalPath, refseqPath string) {
 	t.Helper()
 
 	home, err := os.UserHomeDir()
@@ -1364,6 +1377,15 @@ func findGENCODEFiles(t *testing.T, assembly string) (gtfPath, fastaPath, canoni
 	cPath := filepath.Join(dir, cache.CanonicalFileName())
 	if _, err := os.Stat(cPath); err == nil {
 		canonicalPath = cPath
+	}
+
+	// RefSeq metadata is only written to raw/, so check both layouts.
+	for _, d := range []string{filepath.Join(dir, "raw"), dir} {
+		matches, err := filepath.Glob(filepath.Join(d, "gencode.v*.metadata.RefSeq.gz"))
+		if err == nil && len(matches) > 0 {
+			refseqPath = matches[0]
+			break
+		}
 	}
 
 	return

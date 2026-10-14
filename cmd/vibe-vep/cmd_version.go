@@ -30,7 +30,7 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 			if assembly == "" {
 				assembly = "GRCh38"
 			}
-			if _, _, _, found := FindGENCODEFiles(assembly); found {
+			if _, _, _, _, found := FindGENCODEFiles(assembly); found {
 				fmt.Printf("%-15s%s (%s)\n", "GENCODE", GencodeVersionForAssembly(assembly), assembly)
 			}
 

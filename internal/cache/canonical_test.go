@@ -203,3 +203,30 @@ func TestParseMSKCCOverrides(t *testing.T) {
 	assert.Equal(t, "ENST00000257430", overrides["APC"])
 	assert.Equal(t, "ENST00000269305", overrides["TP53"])
 }
+
+// TestParseBiomartCanonicals_EntrezColumn pins the Entrez column index against
+// the real 66-column genome-nexus biomart file. The previous index (27) pointed
+// at date_approved_reserved, so KRAS parsed as EntrezGeneID "6/2/88". The other
+// tests in this file use narrow fixtures that never reach that far, which is why
+// the bug went unnoticed.
+func TestParseBiomartCanonicals_EntrezColumn(t *testing.T) {
+	cols := make([]string, 32)
+	hdr := make([]string, 32)
+	for i := range cols {
+		cols[i] = "filler"
+		hdr[i] = "col" + string(rune('a'+i%26))
+	}
+	hdr[0], hdr[2], hdr[11], hdr[27], hdr[31] = "hgnc_symbol", "canon_tx", "mskcc_tx", "date_approved_reserved", "entrez_gene_id"
+
+	cols[0], cols[2], cols[11] = "KRAS", "ENST00000256078", "ENST00000311936"
+	cols[27] = "6/2/88" // date_approved_reserved — must NOT be read as Entrez
+	cols[31] = "3845"   // entrez_gene_id
+
+	input := strings.Join(hdr, "\t") + "\n" + strings.Join(cols, "\t") + "\n"
+
+	_, _, entrez, err := parseBiomartCanonicals(strings.NewReader(input))
+	require.NoError(t, err)
+
+	assert.Equal(t, "3845", entrez["KRAS"], "Entrez gene ID must come from col 31")
+	assert.NotEqual(t, "6/2/88", entrez["KRAS"], "col 27 is a date, not an Entrez ID")
+}

@@ -52,7 +52,7 @@ func TestAnnotationSourcesBenchmark(t *testing.T) {
 	t.Logf("found %d MAF files in %s", len(mafFiles), studyDir)
 
 	// Load GENCODE cache.
-	gtfPath, fastaPath, canonicalPath := findGENCODEFiles(t, "GRCh38")
+	gtfPath, fastaPath, canonicalPath, _ := findGENCODEFiles(t, "GRCh38")
 	c := cache.New()
 	loader := cache.NewGENCODELoader(gtfPath, fastaPath)
 	if canonicalPath != "" {
@@ -135,24 +135,24 @@ func benchmarkStudy(t *testing.T, mafFile string, c *cache.Cache, ctx *sourcesCt
 	ann := annotate.NewAnnotator(c)
 
 	var (
-		totalVariants int
-		missenseCount int
-		baseTime      time.Duration
-		giLookupTime  time.Duration
-		amHits        int
-		classCounts   = make(map[string]int)
-		hsHits        int
-		hsChecked     int
-		hsTypeCounts  = make(map[string]int)
-		cvHits        int
-		cvSigCounts   = make(map[string]int)
-		sigHits       int
-		gnomadHits    int
-		siftHits      int
+		totalVariants  int
+		missenseCount  int
+		baseTime       time.Duration
+		giLookupTime   time.Duration
+		amHits         int
+		classCounts    = make(map[string]int)
+		hsHits         int
+		hsChecked      int
+		hsTypeCounts   = make(map[string]int)
+		cvHits         int
+		cvSigCounts    = make(map[string]int)
+		sigHits        int
+		gnomadHits     int
+		siftHits       int
 		siftPredCounts = make(map[string]int)
-		pp2Hits       int
-		pp2PredCounts = make(map[string]int)
-		dbsnpHits     int
+		pp2Hits        int
+		pp2PredCounts  = make(map[string]int)
+		dbsnpHits      int
 	)
 	seenMissense := make(map[lookupKey]bool)
 

@@ -53,7 +53,7 @@ func TestFormatHGVSp(t *testing.T) {
 				RefAA:           '*',
 				AltAA:           'K',
 			},
-			want: "p.Ter130Lysext*?",
+			want: "p.Ter130LysextTer?",
 		},
 		{
 			name: "start_lost",
@@ -94,6 +94,8 @@ func TestFormatHGVSp(t *testing.T) {
 			want: "p.Gly12AlafsTer6",
 		},
 		{
+			// VEP writes fsTer? when no downstream stop is found, which
+			// shortens to p.G12Afs*?, rather than a bare fs.
 			name: "frameshift_no_stop",
 			result: &ConsequenceResult{
 				Consequence:     ConsequenceFrameshiftVariant,
@@ -101,7 +103,7 @@ func TestFormatHGVSp(t *testing.T) {
 				RefAA:           'G',
 				AltAA:           'A',
 			},
-			want: "p.Gly12Alafs",
+			want: "p.Gly12AlafsTer?",
 		},
 		{
 			name: "frameshift_no_altaa",

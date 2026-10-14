@@ -14,11 +14,11 @@ import (
 
 func TestVCFToMAFAlleles(t *testing.T) {
 	tests := []struct {
-		name                     string
-		vcfPos                   int64
-		vcfRef, vcfAlt           string
-		wantRef, wantAlt         string
-		wantStart, wantEnd       int64
+		name               string
+		vcfPos             int64
+		vcfRef, vcfAlt     string
+		wantRef, wantAlt   string
+		wantStart, wantEnd int64
 	}{
 		{
 			name:   "SNV",
@@ -104,21 +104,21 @@ func TestVCF2MAFWriter_FullRow(t *testing.T) {
 	}
 
 	ann := &annotate.Annotation{
-		GeneName:        "KRAS",
-		Consequence:     "missense_variant",
-		Impact:          "MODERATE",
-		TranscriptID:    "ENST00000311936",
-		Biotype:         "protein_coding",
+		GeneName:           "KRAS",
+		Consequence:        "missense_variant",
+		Impact:             "MODERATE",
+		TranscriptID:       "ENST00000311936",
+		Biotype:            "protein_coding",
 		IsCanonicalMSK:     true,
 		IsCanonicalEnsembl: true,
 		IsMANESelect:       true,
-		ExonNumber:      "2/5",
-		HGVSc:           "c.34G>T",
-		HGVSp:           "p.Gly12Cys",
-		ProteinPosition: 12,
-		AminoAcidChange: "G/C",
-		CodonChange:     "Ggt/Tgt",
-		Allele:          "A",
+		ExonNumber:         "2/5",
+		HGVSc:              "c.34G>T",
+		HGVSp:              "p.Gly12Cys",
+		ProteinPosition:    12,
+		AminoAcidChange:    "G/C",
+		CodonChange:        "Ggt/Tgt",
+		Allele:             "A",
 	}
 
 	require.NoError(t, w.WriteRow(v, ann, []*annotate.Annotation{ann}))
@@ -133,7 +133,7 @@ func TestVCF2MAFWriter_FullRow(t *testing.T) {
 
 	// Parse data row
 	fields := strings.Split(lines[1], "\t")
-	assert.Equal(t, "KRAS", fields[0])             // Hugo_Symbol
+	assert.Equal(t, "KRAS", fields[0])              // Hugo_Symbol
 	assert.Equal(t, "GRCh38", fields[3])            // NCBI_Build
 	assert.Equal(t, "12", fields[4])                // Chromosome
 	assert.Equal(t, "25245351", fields[5])          // Start_Position
@@ -152,12 +152,12 @@ func TestVCF2MAFWriter_FullRow(t *testing.T) {
 	assert.Equal(t, "ENST00000311936", fields[20])  // Transcript_ID
 	assert.Equal(t, "2/5", fields[21])              // Exon_Number
 	assert.Equal(t, "missense_variant", fields[22]) // Consequence
-	assert.Equal(t, "MODERATE", fields[23])          // IMPACT
-	assert.Equal(t, "protein_coding", fields[24])    // BIOTYPE
-	assert.Equal(t, "YES", fields[25])               // CANONICAL_MSK
-	assert.Equal(t, "YES", fields[26])               // CANONICAL_ENSEMBL
-	assert.Equal(t, "YES", fields[27])               // CANONICAL_MANE
-	assert.Equal(t, "12", fields[28])                // Protein_position
+	assert.Equal(t, "MODERATE", fields[23])         // IMPACT
+	assert.Equal(t, "protein_coding", fields[24])   // BIOTYPE
+	assert.Equal(t, "YES", fields[25])              // CANONICAL_MSK
+	assert.Equal(t, "YES", fields[26])              // CANONICAL_ENSEMBL
+	assert.Equal(t, "YES", fields[27])              // CANONICAL_MANE
+	assert.Equal(t, "12", fields[28])               // Protein_position
 }
 
 func TestVCF2MAFWriter_Deletion(t *testing.T) {
@@ -180,11 +180,11 @@ func TestVCF2MAFWriter_Deletion(t *testing.T) {
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	fields := strings.Split(lines[1], "\t")
-	assert.Equal(t, "101", fields[5])           // Start
-	assert.Equal(t, "102", fields[6])           // End
-	assert.Equal(t, "DEL", fields[9])           // Variant_Type
-	assert.Equal(t, "CG", fields[10])           // Reference_Allele
-	assert.Equal(t, "-", fields[12])            // Tumor_Seq_Allele2
+	assert.Equal(t, "101", fields[5])             // Start
+	assert.Equal(t, "102", fields[6])             // End
+	assert.Equal(t, "DEL", fields[9])             // Variant_Type
+	assert.Equal(t, "CG", fields[10])             // Reference_Allele
+	assert.Equal(t, "-", fields[12])              // Tumor_Seq_Allele2
 	assert.Equal(t, "Frame_Shift_Del", fields[8]) // Variant_Classification
 }
 
@@ -208,11 +208,11 @@ func TestVCF2MAFWriter_Insertion(t *testing.T) {
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	fields := strings.Split(lines[1], "\t")
-	assert.Equal(t, "100", fields[5])           // Start
-	assert.Equal(t, "101", fields[6])           // End
-	assert.Equal(t, "INS", fields[9])           // Variant_Type
-	assert.Equal(t, "-", fields[10])            // Reference_Allele
-	assert.Equal(t, "TG", fields[12])           // Tumor_Seq_Allele2
+	assert.Equal(t, "100", fields[5])             // Start
+	assert.Equal(t, "101", fields[6])             // End
+	assert.Equal(t, "INS", fields[9])             // Variant_Type
+	assert.Equal(t, "-", fields[10])              // Reference_Allele
+	assert.Equal(t, "TG", fields[12])             // Tumor_Seq_Allele2
 	assert.Equal(t, "Frame_Shift_Ins", fields[8]) // Variant_Classification
 }
 

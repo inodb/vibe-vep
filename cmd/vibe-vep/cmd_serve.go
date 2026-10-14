@@ -64,11 +64,12 @@ Endpoints:
       colocatedVariants   dbSNP RS identifiers
       hgnc_id             HGNC gene identifier (per transcript)
       protein_id          Ensembl protein ID (per transcript)
+      refseq_transcript_ids  RefSeq mRNA accessions (per transcript)
       sift/polyphen       SIFT and PolyPhen-2 scores (per transcript)
 
     Not yet implemented (genome-nexus fields):
       mutation_assessor, my_variant_info, oncokb, ptms, nucleotide_context
-      entrezGeneId, refseq_transcript_ids (per transcript)
+      entrezGeneId (per transcript)
 
   Health/info:
     GET  /health

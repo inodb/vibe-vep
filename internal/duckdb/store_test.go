@@ -208,7 +208,7 @@ func TestTranscriptCacheWriteAndLoad(t *testing.T) {
 
 	now := time.Now()
 	fp := FileFingerprint{Size: 1000, ModTime: now}
-	require.NoError(t, tc.Write(c, fp, fp, fp))
+	require.NoError(t, tc.Write(c, fp, fp, fp, fp))
 
 	// Load back
 	c2 := cache.New()
@@ -240,29 +240,39 @@ func TestTranscriptCacheValidation(t *testing.T) {
 	gtf := FileFingerprint{Size: 1000, ModTime: now}
 	fasta := FileFingerprint{Size: 2000, ModTime: now}
 	canonical := FileFingerprint{Size: 500, ModTime: now}
+	refseqFP := FileFingerprint{Size: 300, ModTime: now}
 
 	// No cache yet → invalid
-	assert.False(t, tc.Valid(gtf, fasta, canonical))
+	assert.False(t, tc.Valid(gtf, fasta, canonical, refseqFP))
 
 	// Write cache
 	c := cache.New()
 	c.AddTranscript(&cache.Transcript{
 		ID: "ENST00000001.1", Chrom: "1", Start: 100, End: 200, Strand: 1,
 	})
-	require.NoError(t, tc.Write(c, gtf, fasta, canonical))
+	require.NoError(t, tc.Write(c, gtf, fasta, canonical, refseqFP))
 
 	// Same fingerprints → valid
-	assert.True(t, tc.Valid(gtf, fasta, canonical))
+	assert.True(t, tc.Valid(gtf, fasta, canonical, refseqFP))
 
 	// Different size → stale
 	gtfChanged := gtf
 	gtfChanged.Size = 9999
-	assert.False(t, tc.Valid(gtfChanged, fasta, canonical))
+	assert.False(t, tc.Valid(gtfChanged, fasta, canonical, refseqFP))
 
 	// Different modtime → stale
 	fastaChanged := fasta
 	fastaChanged.ModTime = now.Add(time.Hour)
-	assert.False(t, tc.Valid(gtf, fastaChanged, canonical))
+	assert.False(t, tc.Valid(gtf, fastaChanged, canonical, refseqFP))
+
+	// RefSeq metadata appearing or changing must also invalidate, otherwise a
+	// gob built before `vibe-vep download` fetched it would keep empty RefSeq
+	// IDs forever: the GTF/FASTA/canonical fingerprints never change, because
+	// downloadFile skips files that already exist.
+	assert.False(t, tc.Valid(gtf, fasta, canonical, FileFingerprint{}))
+	refseqChanged := refseqFP
+	refseqChanged.Size = 4242
+	assert.False(t, tc.Valid(gtf, fasta, canonical, refseqChanged))
 }
 
 func TestTranscriptCacheClear(t *testing.T) {
@@ -276,9 +286,9 @@ func TestTranscriptCacheClear(t *testing.T) {
 	c.AddTranscript(&cache.Transcript{
 		ID: "ENST00000001.1", Chrom: "1", Start: 100, End: 200, Strand: 1,
 	})
-	require.NoError(t, tc.Write(c, fp, fp, fp))
-	assert.True(t, tc.Valid(fp, fp, fp))
+	require.NoError(t, tc.Write(c, fp, fp, fp, fp))
+	assert.True(t, tc.Valid(fp, fp, fp, fp))
 
 	tc.Clear()
-	assert.False(t, tc.Valid(fp, fp, fp))
+	assert.False(t, tc.Valid(fp, fp, fp, fp))
 }

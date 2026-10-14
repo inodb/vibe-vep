@@ -62,16 +62,25 @@ func GencodeVersionForAssembly(assembly string) string {
 	return GencodeVersionGRCh38
 }
 
-// getGENCODEURLs returns the GTF and FASTA URLs for the given assembly.
-// GRCh37 uses native GENCODE v19 (not liftover), GRCh38 uses GENCODE v45.
-func getGENCODEURLs(assembly string) (gtfURL, fastaURL string) {
+// getGENCODEURLs returns the GTF, FASTA and RefSeq-metadata URLs for the
+// given assembly. GRCh37 uses native GENCODE v19 (not liftover), GRCh38 uses
+// GENCODE v45.
+func getGENCODEURLs(assembly string) (gtfURL, fastaURL, refseqURL string) {
 	ver := GencodeVersionForAssembly(assembly)
 	release := strings.TrimPrefix(ver, "v")
 	base := fmt.Sprintf("%s/release_%s", gencodeBase, release)
 
 	gtfURL = fmt.Sprintf("%s/gencode.%s.annotation.gtf.gz", base, ver)
 	fastaURL = fmt.Sprintf("%s/gencode.%s.pc_transcripts.fa.gz", base, ver)
+	refseqURL = fmt.Sprintf("%s/%s", base, GencodeRefSeqFileName(assembly))
 	return
+}
+
+// GencodeRefSeqFileName returns the GENCODE metadata.RefSeq filename for the
+// given assembly. The file maps versioned Ensembl transcript IDs to versioned
+// RefSeq accessions and is what populates VEP's refseq_transcript_ids.
+func GencodeRefSeqFileName(assembly string) string {
+	return fmt.Sprintf("gencode.%s.metadata.RefSeq.gz", GencodeVersionForAssembly(assembly))
 }
 
 func newDownloadCmd(verbose *bool) *cobra.Command {
@@ -87,7 +96,8 @@ func newDownloadCmd(verbose *bool) *cobra.Command {
 		Long: `Download GENCODE annotation files and optional annotation source data.
 
 Core files (always downloaded):
-  GENCODE GTF + FASTA transcripts, canonical transcript overrides
+  GENCODE GTF + FASTA transcripts, canonical transcript overrides,
+  GENCODE transcript -> RefSeq accession metadata
 
 Optional annotation sources (enabled via config):
   annotations.alphamissense  AlphaMissense pathogenicity scores (~643 MB)
@@ -148,7 +158,7 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 		return fmt.Errorf("cannot create directory %s: %w", rawDir, err)
 	}
 
-	gtfURL, fastaURL := getGENCODEURLs(assembly)
+	gtfURL, fastaURL, refseqURL := getGENCODEURLs(assembly)
 
 	fmt.Printf("Downloading GENCODE %s annotations for %s...\n", GencodeVersionForAssembly(assembly), assembly)
 	fmt.Printf("Destination: %s\n\n", rawDir)
@@ -186,6 +196,16 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 		logger.Warn("could not download canonical transcript overrides", zap.Error(err))
 	} else {
 		addChecksum(canonicalFile, sum)
+	}
+
+	// Download GENCODE transcript -> RefSeq accession mapping. Small (<1 MB)
+	// and from the same GENCODE release as the GTF, so the transcript
+	// versions join exactly. Missing data only means an empty RefSeq column.
+	refseqFile := filepath.Join(rawDir, GencodeRefSeqFileName(assembly))
+	if sum, err := downloadFile(refseqURL, refseqFile); err != nil {
+		logger.Warn("could not download GENCODE RefSeq metadata", zap.Error(err))
+	} else {
+		addChecksum(refseqFile, sum)
 	}
 
 	// Download AlphaMissense data if enabled in config
@@ -589,11 +609,12 @@ func getPfamURLs(assembly string) (pfamAURL, biomartURL string) {
 
 // FindGENCODEFiles looks for GENCODE files in the default location.
 // Checks raw/ subdirectory first, falls back to flat layout for backward compatibility.
-// Returns gtfPath, fastaPath, canonicalPath, and whether files were found.
-func FindGENCODEFiles(assembly string) (gtfPath, fastaPath, canonicalPath string, found bool) {
+// Returns gtfPath, fastaPath, canonicalPath, refseqPath, and whether files were found.
+// refseqPath is empty for installations that predate the RefSeq metadata download.
+func FindGENCODEFiles(assembly string) (gtfPath, fastaPath, canonicalPath, refseqPath string, found bool) {
 	dir := DefaultGENCODEPath(assembly)
 	if dir == "" {
-		return "", "", "", false
+		return "", "", "", "", false
 	}
 
 	// Try raw/ subdirectory first, fall back to flat layout.
@@ -616,8 +637,13 @@ func FindGENCODEFiles(assembly string) (gtfPath, fastaPath, canonicalPath string
 			canonicalPath = cPath
 		}
 
-		return gtfPath, fastaPath, canonicalPath, true
+		rPath := filepath.Join(d, GencodeRefSeqFileName(assembly))
+		if _, err := os.Stat(rPath); err == nil {
+			refseqPath = rPath
+		}
+
+		return gtfPath, fastaPath, canonicalPath, refseqPath, true
 	}
 
-	return "", "", "", false
+	return "", "", "", "", false
 }

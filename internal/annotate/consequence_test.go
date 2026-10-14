@@ -417,7 +417,11 @@ func TestPredictConsequence_DeletionSpanningSpliceDonor(t *testing.T) {
 	transcript := createKRASTranscript()
 	result := PredictConsequence(v, transcript)
 
-	assert.Equal(t, ConsequenceSpliceDonor, result.Consequence)
+	// The span reaches the 5th intronic base, so VEP also reports
+	// splice_donor_5th_base_variant and intron_variant. It does not additionally
+	// report splice_donor_region_variant: the 5th-base term is the more specific
+	// one where the two overlap.
+	assert.Equal(t, "splice_donor_variant,splice_donor_5th_base_variant,intron_variant", result.Consequence)
 	assert.Equal(t, ImpactHigh, result.Impact)
 }
 
@@ -474,8 +478,10 @@ func TestIsSpliceRegion(t *testing.T) {
 }
 
 func TestPredictConsequence_SpliceRegionIntronic(t *testing.T) {
-	// Variant 5bp into intron after exon 2 End (25245395)
-	// Position 25245400 = 5bp after exon boundary -> splice_region_variant,intron_variant
+	// KRAS is reverse strand, so 5bp past exon 2 End (25245395) is 5 bases
+	// BEFORE the exon in transcript orientation: acceptor offset -5, inside the
+	// polypyrimidine tract. VEP reports the tract term here — verified on 118
+	// single-base substitutions at acceptor -3..-8 in a VEP111 MSK-IMPACT MAF.
 	v := &vcf.Variant{
 		Chrom: "12",
 		Pos:   25245400,
@@ -486,7 +492,7 @@ func TestPredictConsequence_SpliceRegionIntronic(t *testing.T) {
 	transcript := createKRASTranscript()
 	result := PredictConsequence(v, transcript)
 
-	expected := "splice_region_variant,intron_variant"
+	expected := "splice_region_variant,splice_polypyrimidine_tract_variant,intron_variant"
 	assert.Equal(t, expected, result.Consequence)
 	assert.Equal(t, "LOW", result.Impact)
 }
@@ -656,7 +662,7 @@ func TestPredictConsequence_StopLostWithExtension(t *testing.T) {
 	assert.Equal(t, ConsequenceStopLost, result.Consequence)
 	assert.Equal(t, int64(4), result.ProteinPosition) // Stop is at protein pos 4
 	assert.Equal(t, 2, result.StopLostExtDist, "expected ext*2")
-	assert.Equal(t, "p.Ter4Glnext*2", result.HGVSp)
+	assert.Equal(t, "p.Ter4GlnextTer2", result.HGVSp)
 }
 
 func BenchmarkPredictConsequence(b *testing.B) {
@@ -1076,4 +1082,28 @@ func TestPredictConsequence_MNVStartLost(t *testing.T) {
 
 	assert.Equal(t, ConsequenceStartLost, result.Consequence)
 	assert.Equal(t, ImpactHigh, result.Impact)
+}
+
+// TestFormatCodonChange pins VEP's convention: the changed base is uppercased
+// in BOTH codons. Previously the reference codon was fully lowercased, which
+// made vibe-vep's Codons column disagree with VEP on ~80% of coding SNVs
+// (e.g. "gat/gTt" instead of "gAt/gTt") purely on letter case.
+func TestFormatCodonChange(t *testing.T) {
+	tests := []struct {
+		ref, alt string
+		pos      int
+		want     string
+	}{
+		{"GGT", "TGT", 0, "Ggt/Tgt"}, // KRAS G12C
+		{"GGT", "GAT", 1, "gGt/gAt"}, // KRAS G12D
+		{"GGT", "GGA", 2, "ggT/ggA"},
+		{"GAT", "GTT", 1, "gAt/gTt"}, // FAT1 D114V
+		{"GTG", "GAG", 1, "gTg/gAg"}, // BRAF V600E
+		{"ggt", "gat", 1, "gGt/gAt"}, // lowercase input normalizes the same
+	}
+	for _, tc := range tests {
+		if got := formatCodonChange(tc.ref, tc.alt, tc.pos); got != tc.want {
+			t.Errorf("formatCodonChange(%q,%q,%d)=%q, want %q", tc.ref, tc.alt, tc.pos, got, tc.want)
+		}
+	}
 }

@@ -150,10 +150,10 @@ func TestGenomicToHGVScPos_FivePrimeUTR(t *testing.T) {
 }
 
 func TestFormatHGVSc_DupPrecedingBase(t *testing.T) {
-	// Test: insertion that duplicates the preceding (anchor) base.
-	// Forward strand transcript, CDS = "ATGATCGATCG..."
-	// Insert at pos 1002 (CDS pos 3 = 'G'), ref=G, alt=GG
-	// Inserted 'G' matches CDS pos 3 → c.3dup
+	// Test: insertion that duplicates the preceding (anchor) base, where no
+	// 3' shift is possible. HGVS requires dup regardless of whether a shift
+	// occurred, because the inserted base is a copy of the sequence immediately
+	// 5'. VEP writes c.3_4insG here; vibe-vep intentionally does not follow it.
 	transcript := createDupTestTranscript()
 
 	v := &vcf.Variant{Chrom: "1", Pos: 1002, Ref: "G", Alt: "GG"}
@@ -456,18 +456,18 @@ func createForwardTranscript() *cache.Transcript {
 	//
 	// CDS: 1000-1020 (21bp from exon 1) + 1100-1180 (81bp from exon 2) = 102bp = 34 codons
 	return &cache.Transcript{
-		ID:          "ENST00000000001",
-		GeneID:      "ENSG00000000001",
-		GeneName:    "TEST",
-		Chrom:       "1",
-		Start:       990,
-		End:         1200,
-		Strand:      1,
-		Biotype:     "protein_coding",
+		ID:                 "ENST00000000001",
+		GeneID:             "ENSG00000000001",
+		GeneName:           "TEST",
+		Chrom:              "1",
+		Start:              990,
+		End:                1200,
+		Strand:             1,
+		Biotype:            "protein_coding",
 		IsCanonicalMSK:     true,
 		IsCanonicalEnsembl: true,
-		CDSStart:    1000,
-		CDSEnd:      1180,
+		CDSStart:           1000,
+		CDSEnd:             1180,
 		Exons: []cache.Exon{
 			{Number: 1, Start: 990, End: 1020, CDSStart: 1000, CDSEnd: 1020, Frame: 0},
 			{Number: 2, Start: 1100, End: 1200, CDSStart: 1100, CDSEnd: 1180, Frame: 0},
@@ -521,14 +521,18 @@ func TestAllocRegression_FormatHGVSc(t *testing.T) {
 			maxAllocs: 1, // single final string alloc
 		},
 		{
-			name:      "Deletion",
-			v:         &vcf.Variant{Chrom: "12", Pos: 25245350, Ref: "GG", Alt: "G"},
-			maxAllocs: 1, // single final string alloc
+			name: "Deletion",
+			v:    &vcf.Variant{Chrom: "12", Pos: 25245350, Ref: "GG", Alt: "G"},
+			// Two final string allocs: the HGVSc, plus the Codons string, which
+			// is built here because it must use the same 3'-shifted CDS
+			// coordinates as the HGVS. Both are written through stack buffers,
+			// so these are the two unavoidable result strings and nothing more.
+			maxAllocs: 2,
 		},
 		{
 			name:      "Insertion",
 			v:         &vcf.Variant{Chrom: "12", Pos: 25245350, Ref: "C", Alt: "CCC"},
-			maxAllocs: 1, // single final string alloc
+			maxAllocs: 2, // HGVSc + Codons, as above
 		},
 	}
 

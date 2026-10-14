@@ -144,3 +144,32 @@ chr1	HAVANA	exon	100000	100100	.	+	.	gene_id "ENSG00000000001"; transcript_id "E
 
 	assert.Contains(t, transcripts, "ENST00000311936")
 }
+
+func TestGENCODELoader_ApplyRefSeqIDs(t *testing.T) {
+	loader := NewGENCODELoader("../../testdata/sample.gtf", "")
+	// Keyed by version-stripped ID, as refseq.Store.Map() returns.
+	loader.SetRefSeqIDs(map[string][]string{
+		"ENST00000311936": {"NM_004985.3", "NM_033360.4"},
+		"ENST99999999":    {"NM_999999.1"},
+	})
+
+	c := New()
+	require.NoError(t, loader.Load(c))
+
+	tr := c.GetTranscript("ENST00000311936")
+	require.NotNil(t, tr)
+	// Order must survive: genome-nexus reports element 0 only.
+	assert.Equal(t, []string{"NM_004985.3", "NM_033360.4"}, tr.RefSeqIDs)
+}
+
+func TestGENCODELoader_RefSeqIDsNilWhenUnmapped(t *testing.T) {
+	loader := NewGENCODELoader("../../testdata/sample.gtf", "")
+	loader.SetRefSeqIDs(map[string][]string{"ENSTSOMETHINGELSE": {"NM_1.1"}})
+
+	c := New()
+	require.NoError(t, loader.Load(c))
+
+	tr := c.GetTranscript("ENST00000311936")
+	require.NotNil(t, tr)
+	assert.Nil(t, tr.RefSeqIDs, "unmapped transcript must stay nil so the JSON field is omitted")
+}

@@ -27,13 +27,18 @@ func TestCorner_InsertionAtCodonBoundary(t *testing.T) {
 	}
 
 	// Insert T after CDS pos 6 (between codon 2 and 3): ref=T, alt=TT at genomic 1005
-	// Mutant: ATG GCT TAA A... → stop at codon 3, so VEP reclassifies as stop_gained
-	// when the first new codon is a stop. This is correct VEP behavior.
+	// Mutant: ATG GCT TAA A... → the first new codon is a stop.
+	//
+	// It stays a frameshift_variant. This previously asserted stop_gained on the
+	// belief that VEP reclassifies when the frameshift hits a stop immediately,
+	// but VEP does not: across 62,967 frameshift-length indels in a VEP111
+	// MSK-IMPACT MAF it reports frameshift_variant (58,253), frameshift_variant
+	// with a splice term, or "stop_gained,frameshift_variant" (517) — and
+	// stop_gained on its own zero times.
 	v := &vcf.Variant{Chrom: "1", Pos: 1005, Ref: "T", Alt: "TT"}
 	result := PredictConsequence(v, tr)
 
-	// Frameshift that immediately creates stop is reclassified as stop_gained
-	assert.Equal(t, ConsequenceStopGained, result.Consequence)
+	assert.Equal(t, ConsequenceFrameshiftVariant, result.Consequence)
 	assert.Equal(t, ImpactHigh, result.Impact)
 }
 
@@ -55,8 +60,13 @@ func TestCorner_InframeInsertionCreatesStop(t *testing.T) {
 	v := &vcf.Variant{Chrom: "1", Pos: 1008, Ref: "A", Alt: "ATAA"}
 	result := PredictConsequence(v, tr)
 
-	assert.Equal(t, ConsequenceStopGained, result.Consequence,
-		"in-frame insertion creating stop should be stop_gained")
+	// Whole codons inserted at a codon boundary, so nothing is replaced and
+	// VEP names the insertion alongside the stop - as it does for the three
+	// -/TAACAA-shaped rows in a VEP111 MSK-IMPACT MAF. It writes stop_gained
+	// on its own only where the inserted bases take over a reference codon,
+	// which is what dropsLengthTerm tests.
+	assert.Equal(t, ConsequenceStopGainedInframeIns, result.Consequence,
+		"an insertion of whole codons keeps the insertion term beside stop_gained")
 }
 
 // --- Pattern: Deletion removing stop codon ---
@@ -119,8 +129,13 @@ func TestCorner_DeletionAtTranscriptStart(t *testing.T) {
 	v := &vcf.Variant{Chrom: "1", Pos: 1000, Ref: "ATGG", Alt: "A"}
 	result := PredictConsequence(v, tr)
 
-	assert.Equal(t, ConsequenceStartLost, result.Consequence,
-		"deletion of start codon should be start_lost")
+	// Three bases go, so the start is lost and the rest stays in frame. VEP
+	// names both: of the 103 deletions carrying start_lost in a VEP111
+	// MSK-IMPACT MAF, none carries it alone - 11 are start_lost,
+	// inframe_deletion, 25 pair it with frameshift_variant and the other 67
+	// with 5_prime_UTR_variant or a splice term.
+	assert.Equal(t, ConsequenceStartLost+","+ConsequenceInframeDeletion, result.Consequence,
+		"a deletion taking the start codon should name the length change too")
 }
 
 // --- Pattern: Reverse strand insertion ---

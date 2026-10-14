@@ -223,7 +223,9 @@ func TestEdge_DeletionFrom5UTRIntoStartCodon(t *testing.T) {
 	v := &vcf.Variant{Chrom: "1", Pos: 998, Ref: "GGATG", Alt: "G"}
 	result := PredictConsequence(v, tr)
 
-	assert.Equal(t, ConsequenceStartLost, result.Consequence,
+	// Begins upstream of the CDS, so VEP pairs the term with
+	// 5_prime_UTR_variant; see TestDatahub_LargeDeletion5UTRSpanningStartCodon.
+	assert.Equal(t, ConsequenceStartLost5PrimeUTR, result.Consequence,
 		"deletion spanning from 5'UTR into start codon should be start_lost")
 }
 
@@ -365,7 +367,9 @@ func TestEdge_DeletionSpanningEntireCDS(t *testing.T) {
 	result := PredictConsequence(v, tr)
 
 	// Should detect start_lost (deletion spans start codon)
-	assert.Equal(t, ConsequenceStartLost, result.Consequence)
+	// The deletion starts upstream of the CDS, so VEP pairs the term with
+	// 5_prime_UTR_variant; see TestDatahub_LargeDeletion5UTRSpanningStartCodon.
+	assert.Equal(t, ConsequenceStartLost5PrimeUTR, result.Consequence)
 }
 
 // --- Test 10: Adjacent exon boundaries (very short intron) ---

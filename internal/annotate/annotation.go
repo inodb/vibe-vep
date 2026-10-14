@@ -38,7 +38,9 @@ const (
 	// Compound consequences (pre-built to avoid runtime concatenation).
 	ConsequenceSpliceRegionIntron   = "splice_region_variant,intron_variant"
 	ConsequenceStopLost3PrimeUTR    = "stop_lost,3_prime_UTR_variant"
+	ConsequenceStartLost5PrimeUTR   = "start_lost,5_prime_UTR_variant"
 	ConsequenceStopGainedInframeDel = "stop_gained,inframe_deletion"
+	ConsequenceStopGainedInframeIns = "stop_gained,inframe_insertion"
 	ConsequenceFrameshiftStopLost   = "frameshift_variant,stop_lost"
 
 	// MODIFIER impact
@@ -54,31 +56,36 @@ const (
 
 // Annotation represents the predicted effect of a variant on a transcript.
 type Annotation struct {
-	VariantID       string            // Source variant identifier (chrom_pos_ref/alt)
-	TranscriptID    string            // Affected transcript
-	GeneName        string            // Gene symbol
-	GeneID          string            // Gene identifier
-	ProteinID       string            // Ensembl protein ID (e.g., ENSP00000493376)
-	HGNCId          string            // HGNC identifier (e.g., HGNC:14825)
-	EntrezGeneID    string            // NCBI Entrez gene ID (e.g., "673")
-	Consequence     string            // SO consequence term
-	Impact          string            // HIGH, MODERATE, LOW, MODIFIER
-	CDSPosition     int64             // Position in CDS, 0 if not in CDS
-	ProteinPosition int64             // Amino acid position, 0 if not in CDS
-	AminoAcidChange string            // e.g., "G12C", empty if not missense
-	CodonChange     string            // e.g., "GGT/TGT", empty if not coding
-	IsCanonicalMSK     bool // Annotation on MSK canonical transcript
-	IsCanonicalEnsembl bool // Annotation on Ensembl canonical transcript
-	IsMANESelect       bool // Annotation on MANE Select transcript
-	Allele          string            // The alternate allele
-	Biotype         string            // Transcript biotype
-	ExonNumber      string            // Exon number (e.g., "2/5")
-	IntronNumber    string            // Intron number (e.g., "1/4")
-	CDNAPosition    int64             // Position in cDNA
-	HGVSp           string            // HGVS protein notation (e.g., "p.Gly12Cys")
-	HGVSc           string            // HGVS coding DNA notation (e.g., "c.34G>T")
-	PeptideMD5      string            // MD5 hex of transcript protein sequence (for Ensembl predictions lookup)
-	Extra           map[string]string // Annotation source data, e.g. "alphamissense.score" → "0.9876"
+	VariantID          string            // Source variant identifier (chrom_pos_ref/alt)
+	TranscriptID       string            // Affected transcript
+	GeneName           string            // Gene symbol
+	GeneID             string            // Gene identifier
+	ProteinID          string            // Ensembl protein ID (e.g., ENSP00000493376)
+	HGNCId             string            // HGNC identifier (e.g., HGNC:14825)
+	EntrezGeneID       string            // NCBI Entrez gene ID (e.g., "673")
+	RefSeqIDs          []string          // RefSeq mRNA accessions (versioned), in GENCODE metadata order
+	HGVSOffset         int               // 3' shift distance applied to reach the HGVS representation
+	ProteinStart       int64             // VEP protein_start: unshifted position of the change
+	ProteinEnd         int64             // VEP protein_end
+	Consequence        string            // SO consequence term
+	Impact             string            // HIGH, MODERATE, LOW, MODIFIER
+	CDSPosition        int64             // Position in CDS, 0 if not in CDS
+	ProteinPosition    int64             // Amino acid position, 0 if not in CDS
+	AminoAcidChange    string            // e.g., "G12C", empty if not missense
+	AminoAcidsVEP      string            // raw VEP amino_acids when it is not a ref/alt pair
+	CodonChange        string            // e.g., "GGT/TGT", empty if not coding
+	IsCanonicalMSK     bool              // Annotation on MSK canonical transcript
+	IsCanonicalEnsembl bool              // Annotation on Ensembl canonical transcript
+	IsMANESelect       bool              // Annotation on MANE Select transcript
+	Allele             string            // The alternate allele
+	Biotype            string            // Transcript biotype
+	ExonNumber         string            // Exon number (e.g., "2/5")
+	IntronNumber       string            // Intron number (e.g., "1/4")
+	CDNAPosition       int64             // Position in cDNA
+	HGVSp              string            // HGVS protein notation (e.g., "p.Gly12Cys")
+	HGVSc              string            // HGVS coding DNA notation (e.g., "c.34G>T")
+	PeptideMD5         string            // MD5 hex of transcript protein sequence (for Ensembl predictions lookup)
+	Extra              map[string]string // Annotation source data, e.g. "alphamissense.score" → "0.9876"
 }
 
 // GetImpact returns the impact level for a given consequence type.
@@ -100,11 +107,12 @@ func GetImpact(consequence string) string {
 			ConsequenceSpliceAcceptor, ConsequenceSpliceDonor:
 			impact = ImpactHigh
 		case ConsequenceMissenseVariant, ConsequenceInframeInsertion,
-			ConsequenceInframeDeletion, "inframe_variant":
+			ConsequenceInframeDeletion, ConsequenceProteinAltering, "inframe_variant":
 			impact = ImpactModerate
 		case ConsequenceSynonymousVariant, ConsequenceSpliceRegion,
 			ConsequenceStopRetained, ConsequenceStartRetained,
-			ConsequenceCodingSequenceVariant:
+			ConsequenceCodingSequenceVariant, ConsequenceSpliceDonor5thBase,
+			ConsequenceSpliceDonorRegion, ConsequencePolypyrimidineTract:
 			impact = ImpactLow
 		default:
 			impact = ImpactModifier

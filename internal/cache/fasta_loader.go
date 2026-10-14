@@ -204,6 +204,34 @@ func (l *FASTALoader) GetCDSPlusDownstream(transcriptID string, maxExtra int) st
 	return ""
 }
 
+// GetUTR5Tail returns up to maxBases of 5'UTR immediately preceding the CDS,
+// in transcript order. Empty when the transcript has no 5'UTR.
+func (l *FASTALoader) GetUTR5Tail(transcriptID string, maxBases int) string {
+	id, seq, ok := l.lookupSequence(transcriptID)
+	if !ok {
+		return ""
+	}
+	cdsRange, hasCDS := l.cdsRanges[id]
+	if !hasCDS {
+		return ""
+	}
+	end := cdsRange[0] - 1 // 0-based, exclusive: the base before the CDS
+	if end <= 0 {
+		return ""
+	}
+	start := end - maxBases
+	if start < 0 {
+		start = 0
+	}
+	if end > len(seq) {
+		end = len(seq)
+	}
+	if start >= end {
+		return ""
+	}
+	return seq[start:end]
+}
+
 // HasSequence checks if a sequence exists for the given transcript ID.
 func (l *FASTALoader) HasSequence(transcriptID string) bool {
 	_, _, ok := l.lookupSequence(transcriptID)

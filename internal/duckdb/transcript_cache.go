@@ -51,7 +51,7 @@ func (tc *TranscriptCache) metaPath() string {
 }
 
 // Valid checks whether the cached transcripts match the current source files.
-func (tc *TranscriptCache) Valid(gtf, fasta, canonical FileFingerprint) bool {
+func (tc *TranscriptCache) Valid(gtf, fasta, canonical, refseq FileFingerprint) bool {
 	meta, err := tc.readMeta()
 	if err != nil {
 		return false
@@ -64,6 +64,8 @@ func (tc *TranscriptCache) Valid(gtf, fasta, canonical FileFingerprint) bool {
 		{"fasta_modtime", fasta.ModTime.UTC().Format(time.RFC3339Nano)},
 		{"canonical_size", strconv.FormatInt(canonical.Size, 10)},
 		{"canonical_modtime", canonical.ModTime.UTC().Format(time.RFC3339Nano)},
+		{"refseq_size", strconv.FormatInt(refseq.Size, 10)},
+		{"refseq_modtime", refseq.ModTime.UTC().Format(time.RFC3339Nano)},
 		{"schema_hash", transcriptSchemaHash()},
 	}
 
@@ -102,7 +104,7 @@ func (tc *TranscriptCache) Load(c *cache.Cache) error {
 }
 
 // Write serializes all transcripts from the cache to disk.
-func (tc *TranscriptCache) Write(c *cache.Cache, gtf, fasta, canonical FileFingerprint) error {
+func (tc *TranscriptCache) Write(c *cache.Cache, gtf, fasta, canonical, refseq FileFingerprint) error {
 	// Serialize transcripts
 	data := make(map[string][]*cache.Transcript)
 	for _, chrom := range c.Chromosomes() {
@@ -124,7 +126,7 @@ func (tc *TranscriptCache) Write(c *cache.Cache, gtf, fasta, canonical FileFinge
 	}
 
 	// Write metadata
-	return tc.writeMeta(gtf, fasta, canonical)
+	return tc.writeMeta(gtf, fasta, canonical, refseq)
 }
 
 // Clear removes the cached transcript files.
@@ -133,7 +135,7 @@ func (tc *TranscriptCache) Clear() {
 	os.Remove(tc.metaPath())
 }
 
-func (tc *TranscriptCache) writeMeta(gtf, fasta, canonical FileFingerprint) error {
+func (tc *TranscriptCache) writeMeta(gtf, fasta, canonical, refseq FileFingerprint) error {
 	lines := []string{
 		"gtf_size=" + strconv.FormatInt(gtf.Size, 10),
 		"gtf_modtime=" + gtf.ModTime.UTC().Format(time.RFC3339Nano),
@@ -141,6 +143,8 @@ func (tc *TranscriptCache) writeMeta(gtf, fasta, canonical FileFingerprint) erro
 		"fasta_modtime=" + fasta.ModTime.UTC().Format(time.RFC3339Nano),
 		"canonical_size=" + strconv.FormatInt(canonical.Size, 10),
 		"canonical_modtime=" + canonical.ModTime.UTC().Format(time.RFC3339Nano),
+		"refseq_size=" + strconv.FormatInt(refseq.Size, 10),
+		"refseq_modtime=" + refseq.ModTime.UTC().Format(time.RFC3339Nano),
 		"schema_hash=" + transcriptSchemaHash(),
 		"created_at=" + time.Now().UTC().Format(time.RFC3339),
 		"",

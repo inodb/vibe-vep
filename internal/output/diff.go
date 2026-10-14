@@ -454,10 +454,10 @@ func ParseColumnMap(mapStr string) (map[string]string, error) {
 
 // MAF variant key columns — excluded from column comparison by default.
 var mafKeyColumns = map[string]bool{
-	"Chromosome":       true,
-	"Start_Position":   true,
-	"End_Position":     true,
-	"Reference_Allele": true,
+	"Chromosome":        true,
+	"Start_Position":    true,
+	"End_Position":      true,
+	"Reference_Allele":  true,
 	"Tumor_Seq_Allele2": true,
 }
 

@@ -94,6 +94,22 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 
 		result := PredictConsequence(v, t)
 		result.HGVSc = FormatHGVSc(v, t, result)
+		// FormatHGVSc can discover that the variant shifts out of the exon,
+		// which is only knowable once the shift is done; the protein call is
+		// withdrawn here rather than re-derived.
+		if ProteinUndescribableHGVSc(result.HGVSc) {
+			result.SuppressHGVSp = true
+		}
+		if result.SuppressHGVSp {
+			result.HGVSp = ""
+		}
+		// Need the Codons string, which FormatHGVSc fills in.
+		addStopGainedFromCodons(result)
+		relabelInsertionSplittingACodon(result)
+		clearCodonsForSpliceSite(result)
+		relabelStopLostWhenItShiftsClear(v, t, result)
+		addStartRetainedWhenTheStartReforms(v, t, result)
+		nameStartLostSpan(t, result)
 
 		// Append biotype-specific modifier terms per VEP convention
 		consequence := result.Consequence
@@ -102,30 +118,35 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 		}
 
 		ann := &Annotation{
-			VariantID:       FormatVariantID(v.Chrom, v.Pos, v.Ref, v.Alt),
-			TranscriptID:    t.ID,
-			GeneName:        t.GeneName,
-			GeneID:          t.GeneID,
-			ProteinID:       t.ProteinID,
-			HGNCId:          t.HGNCId,
-			EntrezGeneID:    t.EntrezGeneID,
-			Consequence:     consequence,
-			Impact:          result.Impact,
-			CDSPosition:     result.CDSPosition,
-			ProteinPosition: result.ProteinPosition,
-			AminoAcidChange: result.AminoAcidChange,
-			CodonChange:     result.CodonChange,
+			VariantID:          FormatVariantID(v.Chrom, v.Pos, v.Ref, v.Alt),
+			TranscriptID:       t.ID,
+			GeneName:           t.GeneName,
+			GeneID:             t.GeneID,
+			ProteinID:          t.ProteinID,
+			HGNCId:             t.HGNCId,
+			EntrezGeneID:       t.EntrezGeneID,
+			RefSeqIDs:          t.RefSeqIDs,
+			Consequence:        consequence,
+			Impact:             result.Impact,
+			CDSPosition:        result.CDSPosition,
+			ProteinPosition:    result.ProteinPosition,
+			AminoAcidChange:    result.AminoAcidChange,
+			AminoAcidsVEP:      result.AminoAcidsVEP,
+			CodonChange:        result.CodonChange,
 			IsCanonicalMSK:     t.IsCanonicalMSK,
 			IsCanonicalEnsembl: t.IsCanonicalEnsembl,
 			IsMANESelect:       t.IsMANESelect,
-			Allele:          v.Alt,
-			Biotype:         t.Biotype,
-			ExonNumber:      result.ExonNumber,
-			IntronNumber:    result.IntronNumber,
-			CDNAPosition:    result.CDNAPosition,
-			HGVSp:           result.HGVSp,
-			HGVSc:           result.HGVSc,
-			PeptideMD5:      peptideMD5(t.CDSSequence),
+			Allele:             v.Alt,
+			Biotype:            t.Biotype,
+			ExonNumber:         result.ExonNumber,
+			IntronNumber:       result.IntronNumber,
+			CDNAPosition:       result.CDNAPosition,
+			HGVSp:              result.HGVSp,
+			HGVSc:              result.HGVSc,
+			HGVSOffset:         signedHGVSOffset(result.HGVSOffset, t),
+			ProteinStart:       result.ProteinStart,
+			ProteinEnd:         result.ProteinEnd,
+			PeptideMD5:         peptideMD5(t.CDSSequence),
 		}
 
 		annotations = append(annotations, ann)
