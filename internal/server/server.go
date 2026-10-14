@@ -14,6 +14,7 @@ import (
 	"github.com/inodb/vibe-vep/internal/datasource/myvariantinfo"
 	"github.com/inodb/vibe-vep/internal/datasource/pfam"
 	"github.com/inodb/vibe-vep/internal/datasource/ptm"
+	"github.com/inodb/vibe-vep/internal/datasource/revue"
 	"github.com/inodb/vibe-vep/internal/datasource/uniprot"
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
@@ -51,6 +52,10 @@ type Server struct {
 	// officialGeneSymbols maps a retired gene symbol to the approved one, so
 	// a gene the GENCODE release still calls WHSC1 is reported as NSD2.
 	officialGeneSymbols map[string]string
+
+	// revue holds the published protein effects that replace the predicted
+	// one for variants whose real effect the sequence does not show.
+	revue *revue.Store
 }
 
 // New creates a new Server.
@@ -114,6 +119,20 @@ func (s *Server) OfficialGeneSymbols() map[string]string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.officialGeneSymbols
+}
+
+// SetRevue records the reVUE catalogue of revised protein effects.
+func (s *Server) SetRevue(store *revue.Store) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.revue = store
+}
+
+// Revue returns the reVUE catalogue, or nil when none is loaded.
+func (s *Server) Revue() *revue.Store {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.revue
 }
 
 // AddAssembly registers an assembly with its annotator and sources.

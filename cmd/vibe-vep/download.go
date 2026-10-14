@@ -304,6 +304,18 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 		}
 	}
 
+	// Download the reVUE catalogue (same file for both assemblies: it is
+	// keyed by genomic location and transcript, and carries both builds).
+	{
+		fmt.Printf("\nDownloading reVUE catalogue...\n")
+		revueFile := filepath.Join(rawDir, RevueFileName)
+		if sum, err := downloadFile(getRevueURL(), revueFile); err != nil {
+			logger.Warn("could not download reVUE catalogue", zap.Error(err))
+		} else {
+			addChecksum(revueFile, sum)
+		}
+	}
+
 	// Download UniProt transcript mapping.
 	{
 		uniprotURL := getUniprotMappingURL(assembly)
@@ -480,6 +492,7 @@ const (
 	PtmFileName               = "ptm.json.gz"
 	UniprotMappingFileName    = "enst_to_uniprot_mapping_id.txt"
 	CancerGeneListFileName    = "cancerGeneList.tsv"
+	RevueFileName             = "VUEs.json"
 )
 
 // GnomadFileName returns the expected filename for the given assembly.
@@ -590,6 +603,11 @@ func getUniprotMappingURL(assembly string) string {
 	default:
 		return base + "/grch38_ensembl95_enst_to_uniprot_mapping_id.txt"
 	}
+}
+
+// getRevueURL returns the download URL for the reVUE catalogue.
+func getRevueURL() string {
+	return "https://raw.githubusercontent.com/knowledgesystems/reVUE-data/main/generated/VUEs.json"
 }
 
 // getPfamURLs returns the download URLs for pfamA.txt and ensembl_biomart_pfam.txt.

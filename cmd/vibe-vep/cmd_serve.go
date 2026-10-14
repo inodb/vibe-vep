@@ -19,6 +19,7 @@ import (
 	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
 	"github.com/inodb/vibe-vep/internal/datasource/pfam"
 	"github.com/inodb/vibe-vep/internal/datasource/ptm"
+	"github.com/inodb/vibe-vep/internal/datasource/revue"
 	"github.com/inodb/vibe-vep/internal/datasource/uniprot"
 	"github.com/inodb/vibe-vep/internal/server"
 	"github.com/spf13/cobra"
@@ -187,6 +188,9 @@ func runServe(logger *zap.Logger, cfg runServeConfig) error {
 		srv.SetCancerGenes(cancer, curated)
 	}
 	loadOverrideTranscripts(logger, srv, assemblyNames)
+	if store := loadRevue(logger, assemblyNames); store != nil {
+		srv.SetRevue(store)
+	}
 
 	// Ensure cleanup on shutdown.
 	defer func() {
@@ -418,4 +422,37 @@ func transcriptSet(overrides cache.CanonicalOverrides, extra ...string) map[stri
 		set[txID] = true
 	}
 	return set
+}
+
+// loadRevue loads the reVUE catalogue of published protein effects, which
+// replaces a prediction wherever experiment contradicts it.
+func loadRevue(logger *zap.Logger, assemblies []string) *revue.Store {
+	var candidates []string
+	if p := viper.GetString("revue.path"); p != "" {
+		candidates = append(candidates, p)
+	}
+	for _, name := range assemblies {
+		normalized, err := normalizeAssembly(strings.TrimSpace(name))
+		if err != nil {
+			continue
+		}
+		if rawDir := RawDir(normalized); rawDir != "" {
+			candidates = append(candidates, filepath.Join(rawDir, RevueFileName))
+		}
+	}
+	candidates = append(candidates, RevueFileName)
+
+	for _, path := range candidates {
+		store, err := revue.Load(path)
+		if err != nil {
+			continue
+		}
+		logger.Info("loaded reVUE catalogue",
+			zap.String("path", path),
+			zap.Int("effects", store.Count()))
+		return store
+	}
+
+	logger.Debug("no reVUE catalogue found; predicted protein effects stand")
+	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
+	"github.com/inodb/vibe-vep/internal/datasource/revue"
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
 
@@ -39,6 +40,14 @@ type GNMarshalOptions struct {
 	// The MAF names the gene by its approved symbol even where the GENCODE
 	// release the annotation came from still uses the old one.
 	OfficialGeneSymbols map[string]string
+
+	// Revue is the catalogue of variants whose published protein effect is
+	// not the one the sequence predicts. Nil leaves every prediction alone.
+	Revue *revue.Store
+
+	// RevueConfirmedOnly restricts those replacements to the entries
+	// published evidence supports, leaving the ones still under review out.
+	RevueConfirmedOnly bool
 
 	// MyVariantInfoData holds pre-fetched myvariant.info data to include in the response.
 	// The handler populates this before calling MarshalGNAnnotation.
@@ -140,7 +149,7 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 	}
 
 	if opt.IncludeAnnotationSummary {
-		result.AnnotationSummary = buildAnnotationSummary(&result, anns, canonicalAnn, assembly, opt.OfficialGeneSymbols)
+		result.AnnotationSummary = buildAnnotationSummary(&result, anns, canonicalAnn, assembly, opt)
 	}
 
 	// Sort transcript consequences: canonical first (genome-nexus convention).
@@ -241,7 +250,7 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 }
 
 // buildAnnotationSummary constructs the annotation_summary enrichment.
-func buildAnnotationSummary(result *GNAnnotation, anns []*annotate.Annotation, canonical *annotate.Annotation, assembly string, officialGeneSymbols map[string]string) *GNAnnotationSummary {
+func buildAnnotationSummary(result *GNAnnotation, anns []*annotate.Annotation, canonical *annotate.Annotation, assembly string, opt GNMarshalOptions) *GNAnnotationSummary {
 	ref, alt := splitAlleleString(result.AlleleString)
 	variantType := gnVariantType(ref, alt)
 	inframe := gnIsInframe(ref, alt)
@@ -276,7 +285,8 @@ func buildAnnotationSummary(result *GNAnnotation, anns []*annotate.Annotation, c
 		if i < len(anns) {
 			ann = anns[i]
 		}
-		tcs := buildTranscriptConsequenceSummary(tc, ann, variantType, inframe, officialGeneSymbols)
+		tcs := buildTranscriptConsequenceSummary(tc, ann, variantType, inframe, opt)
+		applyRevisedEffect(&tcs, genomicLocationKey(summary.GenomicLocation), opt)
 		summaries = append(summaries, tcs)
 		if canonical != nil && ann != nil && ann.TranscriptID == canonical.TranscriptID && canonicalSummary == nil {
 			cp := tcs
@@ -308,7 +318,7 @@ func splitAlleleString(alleleString string) (ref, alt string) {
 	return parts[0], parts[1]
 }
 
-func buildTranscriptConsequenceSummary(tc *GNTranscriptConsequence, ann *annotate.Annotation, variantType string, inframe bool, officialGeneSymbols map[string]string) GNTranscriptConsequenceSummary {
+func buildTranscriptConsequenceSummary(tc *GNTranscriptConsequence, ann *annotate.Annotation, variantType string, inframe bool, opt GNMarshalOptions) GNTranscriptConsequenceSummary {
 	aaRef, aaAlt := splitAminoAcids(tc.AminoAcids)
 
 	// A splice site past the stop codon is named for the last residue of the
@@ -325,7 +335,7 @@ func buildTranscriptConsequenceSummary(tc *GNTranscriptConsequence, ann *annotat
 		AminoAcids:     tc.AminoAcids,
 		AminoAcidRef:   aaRef,
 		AminoAcidAlt:   aaAlt,
-		HugoGeneSymbol: officialGeneSymbol(tc.GeneSymbol, officialGeneSymbols),
+		HugoGeneSymbol: officialGeneSymbol(tc.GeneSymbol, opt.OfficialGeneSymbols),
 		HGVSpShort:     hgvspShort,
 		HGVSp:          gnResolveHgvsp(tc),
 		HGVSc:          tc.HGVSc,
@@ -499,4 +509,30 @@ func sortedByTranscriptID(anns []*annotate.Annotation) []*annotate.Annotation {
 		return sorted[i].TranscriptID < sorted[j].TranscriptID
 	})
 	return sorted
+}
+
+// genomicLocationKey spells a variant the way the reVUE catalogue spells it.
+func genomicLocationKey(loc GNGenomicLocation) string {
+	return strings.Join([]string{
+		loc.Chromosome,
+		strconv.FormatInt(loc.Start, 10),
+		strconv.FormatInt(loc.End, 10),
+		loc.ReferenceAllele,
+		loc.VariantAllele,
+	}, ",")
+}
+
+// applyRevisedEffect replaces a predicted protein change with the published
+// one where reVUE has an entry for this variant on this transcript. The
+// position is read back out of the revised name, since that is now the only
+// place it is recorded.
+func applyRevisedEffect(tcs *GNTranscriptConsequenceSummary, genomicLocation string, opt GNMarshalOptions) {
+	entry, ok := opt.Revue.Lookup(tcs.TranscriptID, genomicLocation)
+	if !ok || (opt.RevueConfirmedOnly && !entry.Confirmed) {
+		return
+	}
+	tcs.VariantClassification = entry.VariantClassification
+	tcs.HGVSpShort = entry.ProteinEffect
+	tcs.ProteinPosition = extractProteinPos(entry.ProteinEffect)
+	tcs.IsVue = true
 }

@@ -351,6 +351,10 @@ func (s *Server) parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions 
 		CancerGenes:              cancer,
 		CuratedGenes:             curated,
 		OfficialGeneSymbols:      s.OfficialGeneSymbols(),
+		Revue:                    s.Revue(),
+		// genome-nexus is deployed with overwrite_by_confirmed_revue_only on,
+		// so an entry still under review does not displace a prediction.
+		RevueConfirmedOnly: true,
 	}
 }
 

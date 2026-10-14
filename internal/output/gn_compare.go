@@ -175,6 +175,10 @@ type GNTranscriptConsequenceSummary struct {
 	PolyphenPrediction    string          `json:"polyphenPrediction,omitempty"`
 	SIFTScore             *float64        `json:"siftScore,omitempty"`
 	SIFTPrediction        string          `json:"siftPrediction,omitempty"`
+
+	// IsVue marks a protein change that came from reVUE's published evidence
+	// rather than from the sequence.
+	IsVue bool `json:"isVue,omitempty"`
 }
 
 // GNIntegerRange represents a start/end integer range.
