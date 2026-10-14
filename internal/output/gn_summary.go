@@ -129,8 +129,10 @@ func gnVariantClassification(term, variantType string, inframe bool) string {
 	}
 	term = strings.ToLower(term)
 
-	switch term {
-	case "frameshift_variant", "protein_altering_variant", "coding_sequence_variant":
+	// Three terms name no classification on their own: the shape of the
+	// change says whether they deleted or inserted, and whether the reading
+	// frame survived.
+	if term == "frameshift_variant" || term == "protein_altering_variant" || term == "coding_sequence_variant" {
 		if !inframe {
 			switch variantType {
 			case "DEL":
@@ -138,16 +140,15 @@ func gnVariantClassification(term, variantType string, inframe bool) string {
 			case "INS":
 				return "Frame_Shift_Ins"
 			}
-			break
-		}
-		if term == "frameshift_variant" {
-			break
-		}
-		switch variantType {
-		case "DEL":
-			return "In_Frame_Del"
-		case "INS":
-			return "In_Frame_Ins"
+		} else if term != "frameshift_variant" {
+			// A frameshift that turns out to preserve the frame keeps its
+			// bare name rather than becoming an in-frame indel.
+			switch variantType {
+			case "DEL":
+				return "In_Frame_Del"
+			case "INS":
+				return "In_Frame_Ins"
+			}
 		}
 	}
 
