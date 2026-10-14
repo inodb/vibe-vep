@@ -344,6 +344,7 @@ func parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions {
 		IncludeHotspots:          strings.Contains(fields, "hotspots"),
 		IncludeSignal:            strings.Contains(fields, "signal"),
 		IncludeMyVariantInfo:     strings.Contains(fields, "my_variant_info"),
+		IsoformOverrideSource:    r.URL.Query().Get("isoformOverrideSource"),
 	}
 }
 

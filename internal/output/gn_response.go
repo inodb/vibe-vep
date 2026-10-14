@@ -19,6 +19,11 @@ type GNMarshalOptions struct {
 	IncludeSignal            bool
 	IncludeMyVariantInfo     bool
 
+	// IsoformOverrideSource names the isoform override table that decides
+	// which transcript is canonical ("mskcc"; anything else falls back to
+	// Ensembl's own flag). It is the API's isoformOverrideSource parameter.
+	IsoformOverrideSource string
+
 	// MyVariantInfoData holds pre-fetched myvariant.info data to include in the response.
 	// The handler populates this before calling MarshalGNAnnotation.
 	MyVariantInfoData *GNMyVariantInfoAnnotation
@@ -48,23 +53,20 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 		SuccessfullyAnnotated: true,
 	}
 
-	// Find most severe consequence and best canonical transcript.
-	// When multiple genes overlap (e.g. EGFR + EGFR-AS1), pick the canonical
-	// with highest impact (protein-coding missense > non-coding).
-	result.MostSevereConsequence = mostSevereConsequence(anns)
-	var canonicalAnn *annotate.Annotation
-	canonicalImpact := -1
-	for _, ann := range anns {
-		impact := annotate.ImpactRank(ann.Impact)
-		if ann.IsCanonicalEnsembl && impact > canonicalImpact {
-			canonicalAnn = ann
-			canonicalImpact = impact
-		}
+	var opt GNMarshalOptions
+	if len(opts) > 0 {
+		opt = opts[0]
 	}
+
+	// Every annotation column below is read off one transcript, chosen the way
+	// genome-nexus chooses it: the isoform override table names the candidates,
+	// and the variant's most severe consequence breaks a tie between them.
+	result.MostSevereConsequence = mostSevereConsequence(anns)
+	canonicalAnn, canonicalIDs := resolveCanonical(anns, opt.IsoformOverrideSource, result.MostSevereConsequence)
 
 	for _, ann := range anns {
 		canonical := ""
-		if ann.IsCanonicalEnsembl {
+		if canonicalIDs[ann.TranscriptID] {
 			canonical = "1"
 		}
 
@@ -116,11 +118,6 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 	// Sort transcript consequences: canonical first (genome-nexus convention).
 	sortCanonicalFirst(result.TranscriptConsequences)
 
-	// Build optional enrichments.
-	var opt GNMarshalOptions
-	if len(opts) > 0 {
-		opt = opts[0]
-	}
 	if opt.IncludeAnnotationSummary {
 		result.AnnotationSummary = buildAnnotationSummary(variant, v, anns, canonicalAnn, assembly)
 	}
