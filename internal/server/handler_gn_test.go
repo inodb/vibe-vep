@@ -328,3 +328,32 @@ func TestParseCommaGenomicLocationErrors(t *testing.T) {
 		})
 	}
 }
+
+// TestGNRoutesAtRoot checks that a server with a single assembly answers the
+// genome-nexus API at the root as well as under the assembly prefix, so a
+// genome-nexus client can be pointed at it without being reconfigured.
+func TestGNRoutesAtRoot(t *testing.T) {
+	srv := newTestServerWithKRAS(t)
+	handler := srv.Handler()
+
+	for _, path := range []string{
+		"/annotation/genomic/12,25245351,25245351,C,A",
+		"/genome-nexus/grch38/annotation/genomic/12,25245351,25245351,C,A",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d: %s", path, w.Code, w.Body.String())
+		}
+		var resp output.GNAnnotation
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("%s: decode: %v", path, err)
+		}
+		if resp.MostSevereConsequence != "missense_variant" {
+			t.Errorf("%s: most_severe_consequence: got %q, want missense_variant",
+				path, resp.MostSevereConsequence)
+		}
+	}
+}

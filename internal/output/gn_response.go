@@ -2,7 +2,6 @@ package output
 
 import (
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -69,13 +68,13 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 
 	start, end := mafCoordinates(v)
 
-	// Build HGVSg-style variant notation for the "variant" field.
-	variant := fmt.Sprintf("%s:g.%d%s>%s", v.Chrom, v.Pos, ref, alt)
+	variant := formatHGVSg(v.Chrom, start, end, ref, alt)
+	hgvsg := formatHGVSgWithReference(v.Chrom, start, end, ref, alt)
 
 	result := GNAnnotation{
 		Variant:               variant,
 		OriginalVariantQuery:  input,
-		HGVSg:                 variant,
+		HGVSg:                 hgvsg,
 		ID:                    annotate.FormatVariantID(v.Chrom, v.Pos, v.Ref, v.Alt),
 		AssemblyName:          assembly,
 		SeqRegionName:         v.Chrom,
@@ -535,4 +534,58 @@ func applyRevisedEffect(tcs *GNTranscriptConsequenceSummary, genomicLocation str
 	tcs.HGVSpShort = entry.ProteinEffect
 	tcs.ProteinPosition = extractProteinPos(entry.ProteinEffect)
 	tcs.IsVue = true
+}
+
+// formatHGVSg names a variant in genomic HGVS. This is the "variant" field,
+// which names the change without restating the bases it removes: a deletion
+// is g.100_102del rather than g.100_102delACG.
+func formatHGVSg(chrom string, start, end int64, ref, alt string) string {
+	prefix := chrom + ":g."
+	switch {
+	case start < 1:
+		// Ensembl counts from one, so there is nothing to name here.
+		return ""
+	case isEmptyAllele(ref):
+		return prefix + strconv.FormatInt(start, 10) + "_" + strconv.FormatInt(start+1, 10) + "ins" + alt
+	case isEmptyAllele(alt):
+		if len(ref) == 1 {
+			return prefix + strconv.FormatInt(start, 10) + "del"
+		}
+		return prefix + strconv.FormatInt(start, 10) + "_" + strconv.FormatInt(end, 10) + "del"
+	case len(ref) > 1:
+		return prefix + strconv.FormatInt(start, 10) + "_" + strconv.FormatInt(end, 10) + "delins" + alt
+	case len(alt) > 1:
+		return prefix + strconv.FormatInt(start, 10) + "delins" + alt
+	default:
+		return prefix + strconv.FormatInt(start, 10) + ref + ">" + alt
+	}
+}
+
+// formatHGVSgWithReference is the "hgvsg" field, which does restate the bases
+// a change removes, so that the notation carries the reference allele the
+// annotator worked from.
+func formatHGVSgWithReference(chrom string, start, end int64, ref, alt string) string {
+	hgvs := formatHGVSg(chrom, start, end, ref, alt)
+	switch {
+	case hgvs == "" || isEmptyAllele(ref):
+		// An insertion removes nothing, so nothing is left out.
+		return hgvs
+	case isEmptyAllele(alt):
+		return hgvs + ref
+	default:
+		if i := strings.Index(hgvs, "delins"); i >= 0 {
+			return hgvs[:i] + "del" + ref + hgvs[i+3:]
+		}
+		// A substitution already carries both alleles.
+		return hgvs
+	}
+}
+
+// isEmptyAllele reports whether a MAF allele stands for no sequence at all.
+func isEmptyAllele(allele string) bool {
+	switch allele {
+	case "", "-", "NA":
+		return true
+	}
+	return strings.Contains(allele, "--")
 }

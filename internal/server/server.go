@@ -175,6 +175,22 @@ func (s *Server) SetUniprotStore(assembly string, store *uniprot.Store) {
 }
 
 // getAssembly returns the assembly context for the given name (case-insensitive).
+// soleAssembly returns the only loaded assembly, or nil when more than one is
+// loaded. It is what lets the genome-nexus routes be served at the root: a
+// genome-nexus deployment serves one assembly and its clients send no
+// assembly in the path, so a single-assembly server can answer them.
+func (s *Server) soleAssembly() *assemblyContext {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(s.assemblies) != 1 {
+		return nil
+	}
+	for _, ctx := range s.assemblies {
+		return ctx
+	}
+	return nil
+}
+
 func (s *Server) getAssembly(name string) *assemblyContext {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -195,40 +211,49 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /ensembl/{assembly}/vep/human/hgvs/{notation...}", s.handleEnsemblHGVSGet)
 	mux.HandleFunc("POST /ensembl/{assembly}/vep/human/hgvs", s.handleEnsemblHGVSPost)
 
-	// Genome-nexus compatibility endpoints.
-	mux.HandleFunc("GET /genome-nexus/{assembly}/annotation/genomic/{genomicLocation}", s.handleGNGenomicGet)
-	mux.HandleFunc("POST /genome-nexus/{assembly}/annotation/genomic", s.handleGNGenomicPost)
-	mux.HandleFunc("GET /genome-nexus/{assembly}/annotation/{variant...}", s.handleGNHGVSGet)
-	mux.HandleFunc("POST /genome-nexus/{assembly}/annotation", s.handleGNHGVSPost)
+	// Genome-nexus compatibility endpoints, under an assembly-qualified
+	// prefix and, where there is only one assembly to serve, at the root as
+	// well. genome-nexus serves one assembly per deployment and its clients
+	// send no assembly in the path, so serving both shapes lets a client be
+	// pointed at this server without being reconfigured.
+	s.registerGenomeNexusRoutes(mux, "/genome-nexus/{assembly}")
+	if s.soleAssembly() != nil {
+		s.registerGenomeNexusRoutes(mux, "")
+	}
+
+	return corsMiddleware(mux)
+}
+
+// registerGenomeNexusRoutes registers the genome-nexus API under a path
+// prefix. An empty prefix serves it at the root.
+func (s *Server) registerGenomeNexusRoutes(mux *http.ServeMux, prefix string) {
+	mux.HandleFunc("GET "+prefix+"/annotation/genomic/{genomicLocation}", s.handleGNGenomicGet)
+	mux.HandleFunc("POST "+prefix+"/annotation/genomic", s.handleGNGenomicPost)
+	mux.HandleFunc("GET "+prefix+"/annotation/{variant...}", s.handleGNHGVSGet)
+	mux.HandleFunc("POST "+prefix+"/annotation", s.handleGNHGVSPost)
 
 	// Ensembl internal endpoints (transcript/PFAM lookups for frontend).
-	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/canonical-transcript/hgnc/{hugoSymbol}", s.handleEnsemblCanonicalByHugo)
-	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/transcript/{transcriptId}", s.handleEnsemblTranscriptByID)
-	mux.HandleFunc("POST /genome-nexus/{assembly}/pfam/domain", s.handlePfamDomainPost)
-	mux.HandleFunc("GET /genome-nexus/{assembly}/pfam/domain/{pfamAccession}", s.handlePfamDomainGet)
+	mux.HandleFunc("GET "+prefix+"/ensembl/canonical-transcript/hgnc/{hugoSymbol}", s.handleEnsemblCanonicalByHugo)
+	mux.HandleFunc("GET "+prefix+"/ensembl/transcript/{transcriptId}", s.handleEnsemblTranscriptByID)
+	mux.HandleFunc("POST "+prefix+"/ensembl/transcript", s.handleEnsemblTranscriptPost)
+	mux.HandleFunc("POST "+prefix+"/pfam/domain", s.handlePfamDomainPost)
+	mux.HandleFunc("GET "+prefix+"/pfam/domain/{pfamAccession}", s.handlePfamDomainGet)
+	mux.HandleFunc("GET "+prefix+"/ensembl/canonical-gene/hgnc/{hugoSymbol}", s.handleEnsemblCanonicalGeneByHugo)
+	mux.HandleFunc("GET "+prefix+"/ensembl/canonical-gene/entrez/{entrezGeneId}", s.handleEnsemblCanonicalGeneByEntrez)
+	mux.HandleFunc("GET "+prefix+"/cancer_hotspots/transcript/{transcriptId}", s.handleCancerHotspotsTranscript)
 
-	// POST ensembl/transcript filter (used by mutation mapper to fetch transcript details).
-	mux.HandleFunc("POST /genome-nexus/{assembly}/ensembl/transcript", s.handleEnsemblTranscriptPost)
+	// PTM endpoints.
+	mux.HandleFunc("GET "+prefix+"/ptm/experimental", s.handlePtmExperimentalGet)
+	mux.HandleFunc("POST "+prefix+"/ptm/experimental", s.handlePtmExperimentalPost)
 
-	// Stub endpoints — return empty responses so the frontend mutation mapper
-	// doesn't hang waiting for data we don't have yet.
+	// Stub endpoints — return empty responses so a client does not hang
+	// waiting for data this server does not have.
 	emptyArray := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte("[]\n"))
 	}
-	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/canonical-gene/hgnc/{hugoSymbol}", s.handleEnsemblCanonicalGeneByHugo)
-	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/canonical-gene/entrez/{entrezGeneId}", s.handleEnsemblCanonicalGeneByEntrez)
-	mux.HandleFunc("GET /genome-nexus/{assembly}/cancer_hotspots/transcript/{transcriptId}", s.handleCancerHotspotsTranscript)
-
-	// PTM endpoints.
-	mux.HandleFunc("GET /genome-nexus/{assembly}/ptm/experimental", s.handlePtmExperimentalGet)
-	mux.HandleFunc("POST /genome-nexus/{assembly}/ptm/experimental", s.handlePtmExperimentalPost)
-
-	// Stub endpoints — return empty responses for data we don't have yet.
-	mux.HandleFunc("POST /genome-nexus/{assembly}/cancer_hotspots/genomic", emptyArray)
-	mux.HandleFunc("GET /genome-nexus/{assembly}/ensembl/xrefs", emptyArray)
-
-	return corsMiddleware(mux)
+	mux.HandleFunc("POST "+prefix+"/cancer_hotspots/genomic", emptyArray)
+	mux.HandleFunc("GET "+prefix+"/ensembl/xrefs", emptyArray)
 }
 
 // corsMiddleware adds CORS headers to allow cross-origin requests.
@@ -321,6 +346,11 @@ func writeGNError(w http.ResponseWriter, variant, assembly, msg string) {
 // requireAssembly extracts and validates the assembly from the URL path.
 func (s *Server) requireAssembly(w http.ResponseWriter, r *http.Request) *assemblyContext {
 	name := r.PathValue("assembly")
+	if name == "" {
+		if ctx := s.soleAssembly(); ctx != nil {
+			return ctx
+		}
+	}
 	ctx := s.getAssembly(name)
 	if ctx == nil {
 		loaded := make([]string, 0)
