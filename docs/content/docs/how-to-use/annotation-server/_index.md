@@ -1,6 +1,6 @@
 ---
 title: Annotation Server
-weight: 4
+weight: 6
 aliases:
   - /docs/annotation-server/
 ---
