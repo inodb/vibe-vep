@@ -267,7 +267,14 @@ func (s *Server) registerGenomeNexusRoutes(mux *http.ServeMux, prefix string) {
 	mux.HandleFunc("GET "+prefix+"/ensembl/canonical-gene/entrez/{entrezGeneId}", s.handleEnsemblCanonicalGeneByEntrez)
 	mux.HandleFunc("POST "+prefix+"/ensembl/canonical-gene/hgnc", s.handleEnsemblCanonicalGeneByHugoPost)
 	mux.HandleFunc("POST "+prefix+"/ensembl/canonical-gene/entrez", s.handleEnsemblCanonicalGeneByEntrezPost)
-	mux.HandleFunc("GET "+prefix+"/cancer_hotspots/transcript/{transcriptId}", s.handleCancerHotspotsTranscript)
+	// Cancer hotspots: by transcript, by variant, by genomic location, and by
+	// residue span, each in single and batch form.
+	mux.HandleFunc("GET "+prefix+"/cancer_hotspots/transcript/{transcriptId}", s.handleHotspotsByTranscriptGet)
+	mux.HandleFunc("POST "+prefix+"/cancer_hotspots/transcript", s.handleHotspotsByTranscriptPost)
+	mux.HandleFunc("GET "+prefix+"/cancer_hotspots/hgvs/{variant...}", s.handleHotspotsByHgvsGet)
+	mux.HandleFunc("POST "+prefix+"/cancer_hotspots/hgvs", s.handleHotspotsByHgvsPost)
+	mux.HandleFunc("GET "+prefix+"/cancer_hotspots/genomic/{genomicLocation}", s.handleHotspotsByGenomicGet)
+	mux.HandleFunc("POST "+prefix+"/cancer_hotspots/proteinLocations", s.handleHotspotsByProteinLocationsPost)
 
 	// PTM endpoints.
 	mux.HandleFunc("GET "+prefix+"/ptm/experimental", s.handlePtmExperimentalGet)
@@ -279,7 +286,7 @@ func (s *Server) registerGenomeNexusRoutes(mux *http.ServeMux, prefix string) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte("[]\n"))
 	}
-	mux.HandleFunc("POST "+prefix+"/cancer_hotspots/genomic", emptyArray)
+	mux.HandleFunc("POST "+prefix+"/cancer_hotspots/genomic", s.handleHotspotsByGenomicPost)
 	mux.HandleFunc("GET "+prefix+"/ensembl/xrefs", emptyArray)
 }
 

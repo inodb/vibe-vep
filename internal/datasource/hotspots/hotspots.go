@@ -132,6 +132,25 @@ func Load(path string) (*Store, error) {
 	return &Store{data: data}, nil
 }
 
+// LookupAll returns every hotspot on a transcript, with or without a version
+// suffix on the id. The /cancer_hotspots endpoints report them all, where
+// annotation only ever asks about one position.
+func (s *Store) LookupAll(transcriptID string) []Hotspot {
+	if s == nil {
+		return nil
+	}
+	return s.data[unversioned(transcriptID)]
+}
+
+// unversioned drops the ".N" suffix an Ensembl id may carry. The table is
+// keyed on the bare id, so a caller supplying a version still matches.
+func unversioned(id string) string {
+	if i := strings.IndexByte(id, '.'); i >= 0 {
+		return id[:i]
+	}
+	return id
+}
+
 // Lookup checks if a transcript+position is a known hotspot.
 // The transcriptID should be unversioned (e.g. "ENST00000311936").
 func (s *Store) Lookup(transcriptID string, proteinPosition int64) (Hotspot, bool) {

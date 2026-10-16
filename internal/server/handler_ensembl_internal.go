@@ -507,20 +507,6 @@ func (s *Server) handleEnsemblCanonicalGeneByEntrez(w http.ResponseWriter, r *ht
 	})
 }
 
-// handleCancerHotspotsTranscript handles GET /genome-nexus/{assembly}/cancer_hotspots/transcript/{transcriptId}
-// Returns hotspot positions on the protein for the given transcript.
-func (s *Server) handleCancerHotspotsTranscript(w http.ResponseWriter, r *http.Request) {
-	ctx := s.requireAssembly(w, r)
-	if ctx == nil {
-		return
-	}
-
-	// TODO: look up hotspots from the hotspot store by transcript ID
-	// For now return empty array (matches GN behavior for most transcripts).
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte("[]\n"))
-}
-
 // handlePtmExperimentalGet handles GET /genome-nexus/{assembly}/ptm/experimental?ensemblTranscriptId={id}
 func (s *Server) handlePtmExperimentalGet(w http.ResponseWriter, r *http.Request) {
 	ctx := s.requireAssembly(w, r)

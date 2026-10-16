@@ -440,3 +440,28 @@ func extractProteinPos(proteinChange string) *GNIntegerRange {
 	}
 	return &GNIntegerRange{Start: start, End: end}
 }
+
+// GNVariantType names the shape of a change the way genome-nexus does:
+// SNP, DNP, TNP, ONP, INS or DEL.
+func GNVariantType(ref, alt string) string { return gnVariantType(ref, alt) }
+
+// GNIsInframe reports whether a change preserves the reading frame.
+func GNIsInframe(ref, alt string) bool { return gnIsInframe(ref, alt) }
+
+// GNVariantClassifications returns the MAF classification each consequence
+// term maps to, which is what a hotspot's type is matched against. Every term
+// is translated, not just the most severe one, because any of them matching is
+// enough for the hotspot to apply.
+func GNVariantClassifications(terms []string, variantType string, inframe bool) []string {
+	seen := make(map[string]bool, len(terms))
+	classes := make([]string, 0, len(terms))
+	for _, term := range terms {
+		c := gnVariantClassification(term, variantType, inframe)
+		if c == "" || seen[c] {
+			continue
+		}
+		seen[c] = true
+		classes = append(classes, c)
+	}
+	return classes
+}
