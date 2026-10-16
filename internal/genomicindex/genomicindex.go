@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/inodb/vibe-vep/internal/datasource/clinvar"
 	"github.com/inodb/vibe-vep/internal/datasource/dbsnp"
@@ -97,6 +98,13 @@ func Ready(dbPath string, sources BuildSources) bool {
 	if err := quickCheck(dbPath); err != nil {
 		return false
 	}
+
+	// An index that records no sources was built from nothing. Treat it as
+	// not ready so it is rebuilt rather than silently answering for no
+	// variant at all.
+	if loaded, err := LoadedSources(dbPath); err == nil && len(loaded) == 0 {
+		return false
+	}
 	return true
 }
 
@@ -170,6 +178,17 @@ func Build(dbPath string, sources BuildSources, logf func(string, ...any)) error
 		return fmt.Errorf("create table: %w", err)
 	}
 
+	// meta records which upstream datasets actually went into this index.
+	// Without it an index built from sources that were all missing looks
+	// exactly like a complete one, and silently answers nothing.
+	if _, err := db.Exec(`CREATE TABLE meta (
+		key TEXT NOT NULL PRIMARY KEY,
+		value TEXT NOT NULL
+	) WITHOUT ROWID`); err != nil {
+		return fmt.Errorf("create meta table: %w", err)
+	}
+	loaded := map[string]int64{}
+
 	// 1. AlphaMissense
 	if sources.AlphaMissenseTSV != "" {
 		if _, err := os.Stat(sources.AlphaMissenseTSV); err == nil {
@@ -179,6 +198,7 @@ func Build(dbPath string, sources BuildSources, logf func(string, ...any)) error
 				return fmt.Errorf("load AlphaMissense: %w", err)
 			}
 			logf("loaded %d AlphaMissense variants", n)
+			loaded["alphamissense"] = n
 		}
 	}
 
@@ -191,6 +211,7 @@ func Build(dbPath string, sources BuildSources, logf func(string, ...any)) error
 				return fmt.Errorf("load ClinVar: %w", err)
 			}
 			logf("loaded %d ClinVar variants", n)
+			loaded["clinvar"] = n
 		}
 	}
 
@@ -203,6 +224,7 @@ func Build(dbPath string, sources BuildSources, logf func(string, ...any)) error
 				return fmt.Errorf("load SIGNAL: %w", err)
 			}
 			logf("loaded %d SIGNAL variants", n)
+			loaded["signal"] = n
 		}
 	}
 
@@ -215,6 +237,7 @@ func Build(dbPath string, sources BuildSources, logf func(string, ...any)) error
 				return fmt.Errorf("load gnomAD: %w", err)
 			}
 			logf("loaded %d gnomAD variants", n)
+			loaded["gnomad"] = n
 		}
 	}
 
@@ -227,10 +250,70 @@ func Build(dbPath string, sources BuildSources, logf func(string, ...any)) error
 				return fmt.Errorf("load dbSNP: %w", err)
 			}
 			logf("loaded %d dbSNP variants", n)
+			loaded["dbsnp"] = n
 		}
 	}
 
+	// An index built from sources that were all missing is indistinguishable
+	// from a complete one once the build finishes, and answers nothing for
+	// every variant. Refuse to leave one behind.
+	if len(loaded) == 0 {
+		return fmt.Errorf("no source data found to build the genomic index from; " +
+			"run: vibe-vep download")
+	}
+
+	if err := writeMeta(db, loaded); err != nil {
+		return fmt.Errorf("record index contents: %w", err)
+	}
 	return nil
+}
+
+// writeMeta records which datasets went into the index, and how many rows
+// each contributed.
+func writeMeta(db *sql.DB, loaded map[string]int64) error {
+	stmt, err := db.Prepare(`INSERT INTO meta (key, value) VALUES (?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	if _, err := stmt.Exec("built_at", time.Now().UTC().Format(time.RFC3339)); err != nil {
+		return err
+	}
+	for name, rows := range loaded {
+		if _, err := stmt.Exec("source."+name, strconv.FormatInt(rows, 10)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// LoadedSources reports which datasets an index holds, and how many rows each
+// contributed. An index built before this was recorded reports nothing, which
+// is treated as unknown rather than empty.
+func LoadedSources(dbPath string) (map[string]int64, error) {
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.Query(`SELECT key, value FROM meta WHERE key LIKE 'source.%'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]int64{}
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, err
+		}
+		n, _ := strconv.ParseInt(value, 10, 64)
+		out[strings.TrimPrefix(key, "source.")] = n
+	}
+	return out, rows.Err()
 }
 
 // loadAlphaMissense parses a gzipped AlphaMissense TSV and inserts into the DB.
