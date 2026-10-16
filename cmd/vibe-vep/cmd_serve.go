@@ -17,6 +17,7 @@ import (
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/datasource/hotspots"
+	"github.com/inodb/vibe-vep/internal/datasource/mutationassessor"
 	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
 	"github.com/inodb/vibe-vep/internal/datasource/pfam"
 	"github.com/inodb/vibe-vep/internal/datasource/ptm"
@@ -176,6 +177,11 @@ func runServe(logger *zap.Logger, cfg runServeConfig) error {
 		// Load the cancer hotspots table if available.
 		if hotspotsStore := loadHotspotsStore(logger, normalized); hotspotsStore != nil {
 			srv.SetHotspotsStore(normalized, hotspotsStore)
+		}
+
+		// Load Mutation Assessor predictions if the index was built.
+		if maStore := loadMutationAssessorStore(logger, normalized); maStore != nil {
+			srv.SetMutationAssessorStore(normalized, maStore)
 		}
 
 		// Load UniProt mapping if available.
@@ -502,5 +508,27 @@ func loadHotspotsStore(logger *zap.Logger, assembly string) *hotspots.Store {
 		zap.String("path", path),
 		zap.Int("transcripts", store.TranscriptCount()),
 		zap.Int("hotspots", store.HotspotCount()))
+	return store
+}
+
+// loadMutationAssessorStore opens the Mutation Assessor index, if one was
+// built. The source is optional, so a missing index is not an error.
+func loadMutationAssessorStore(logger *zap.Logger, assembly string) *mutationassessor.Store {
+	cacheDir := DefaultGENCODEPath(assembly)
+	if cacheDir == "" {
+		return nil
+	}
+	dbPath := filepath.Join(cacheDir, MutationAssessorDBName)
+	if !mutationassessor.Ready(dbPath) {
+		logger.Debug("Mutation Assessor index not built, skipping", zap.String("path", dbPath))
+		return nil
+	}
+
+	store, err := mutationassessor.Open(dbPath)
+	if err != nil {
+		logger.Warn("could not open Mutation Assessor index", zap.Error(err))
+		return nil
+	}
+	logger.Info("loaded Mutation Assessor predictions", zap.String("path", dbPath))
 	return store
 }

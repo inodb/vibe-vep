@@ -12,6 +12,7 @@ import (
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/datasource/hotspots"
+	"github.com/inodb/vibe-vep/internal/datasource/mutationassessor"
 	"github.com/inodb/vibe-vep/internal/datasource/myvariantinfo"
 	"github.com/inodb/vibe-vep/internal/datasource/pfam"
 	"github.com/inodb/vibe-vep/internal/datasource/ptm"
@@ -29,6 +30,7 @@ type assemblyContext struct {
 	ptm       *ptm.Store
 	uniprot   *uniprot.Store
 	hotspots  *hotspots.Store
+	mutAssess *mutationassessor.Store
 	assembly  string // normalized: "GRCh38"
 }
 
@@ -78,6 +80,16 @@ func (s *Server) SetHotspotsStore(assembly string, store *hotspots.Store) {
 	defer s.mu.Unlock()
 	if ctx, ok := s.assemblies[strings.ToLower(assembly)]; ok {
 		ctx.hotspots = store
+	}
+}
+
+// SetMutationAssessorStore records the Mutation Assessor predictions for an
+// assembly.
+func (s *Server) SetMutationAssessorStore(assembly string, store *mutationassessor.Store) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ctx, ok := s.assemblies[strings.ToLower(assembly)]; ok {
+		ctx.mutAssess = store
 	}
 }
 
@@ -275,6 +287,10 @@ func (s *Server) registerGenomeNexusRoutes(mux *http.ServeMux, prefix string) {
 	mux.HandleFunc("POST "+prefix+"/cancer_hotspots/hgvs", s.handleHotspotsByHgvsPost)
 	mux.HandleFunc("GET "+prefix+"/cancer_hotspots/genomic/{genomicLocation}", s.handleHotspotsByGenomicGet)
 	mux.HandleFunc("POST "+prefix+"/cancer_hotspots/proteinLocations", s.handleHotspotsByProteinLocationsPost)
+
+	// Mutation Assessor.
+	mux.HandleFunc("GET "+prefix+"/mutation_assessor/{variant...}", s.handleMutationAssessorGet)
+	mux.HandleFunc("POST "+prefix+"/mutation_assessor", s.handleMutationAssessorPost)
 
 	// PTM endpoints.
 	mux.HandleFunc("GET "+prefix+"/ptm/experimental", s.handlePtmExperimentalGet)
