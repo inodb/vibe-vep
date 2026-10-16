@@ -66,7 +66,7 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 
 			// Genomic index (AlphaMissense + ClinVar + SIGNAL + gnomAD + dbSNP)
 			needGenomic := viper.GetBool("annotations.alphamissense") || viper.GetBool("annotations.clinvar") ||
-				(viper.GetBool("annotations.signal") && assembly == "grch37") ||
+				(viper.GetBool("annotations.signal") && isGRCh37(assembly)) ||
 				viper.GetBool("annotations.gnomad") || viper.GetBool("annotations.dbsnp")
 			if needGenomic {
 				dbPath := genomicIndexPath(cacheDir)

@@ -351,6 +351,14 @@ func loadCache(logger *zap.Logger, assembly string, noCache, clearCache bool) (*
 }
 
 // buildSources creates annotation sources from config.
+// isGRCh37 reports whether an assembly name is GRCh37, whatever case it is
+// written in. normalizeAssembly returns "GRCh37", so comparing against a
+// lowercase literal silently never matches -- which is how SIGNAL, the one
+// GRCh37-only source, came to be skipped on the assembly it exists for.
+func isGRCh37(assembly string) bool {
+	return strings.EqualFold(assembly, "GRCh37")
+}
+
 func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.AnnotationSource {
 	var sources []annotate.AnnotationSource
 
@@ -368,7 +376,7 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 
 	// Unified genomic index (AlphaMissense + ClinVar + SIGNAL + gnomAD + dbSNP)
 	needGenomic := viper.GetBool("annotations.alphamissense") || viper.GetBool("annotations.clinvar") ||
-		(viper.GetBool("annotations.signal") && assembly == "grch37") || viper.GetBool("annotations.gnomad") ||
+		(viper.GetBool("annotations.signal") && isGRCh37(assembly)) || viper.GetBool("annotations.gnomad") ||
 		viper.GetBool("annotations.dbsnp")
 	if needGenomic {
 		gs, err := loadGenomicIndex(logger, cacheDir, assembly)
