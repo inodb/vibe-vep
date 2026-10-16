@@ -18,6 +18,18 @@ type Hotspot struct {
 	TranscriptID string  // Ensembl transcript (unversioned, e.g. "ENST00000311936")
 	Type         string  // "single residue", "in-frame indel", "3d", "splice"
 	QValue       float64 // statistical significance (q-value)
+
+	// The rest are reported by the /cancer_hotspots endpoints, which answer
+	// from this table directly rather than through a variant annotation.
+	HugoSymbol          string
+	Residue             string // e.g. "Q61"
+	TranscriptIDVersion string
+	Version             string // the hotspots release this row came from
+	TumorCount          int
+	MissenseCount       int
+	TruncatingCount     int
+	InframeCount        int
+	SpliceCount         int
 }
 
 // Store holds hotspot data keyed by transcript ID.
@@ -44,7 +56,10 @@ func Load(path string) (*Store, error) {
 		return nil, fmt.Errorf("empty hotspots file")
 	}
 	header := strings.Split(scanner.Text(), "\t")
-	colIdx := indexColumns(header, "hugo_symbol", "amino_acid_position", "type", "q_value", "transcript_id")
+	colIdx := indexColumns(header,
+		"hugo_symbol", "amino_acid_position", "type", "q_value", "transcript_id",
+		"residue", "transcript_id_version", "version",
+		"tumor_count", "missense_count", "trunc_count", "inframe_count", "splice_count")
 	if colIdx["amino_acid_position"] < 0 || colIdx["transcript_id"] < 0 {
 		return nil, fmt.Errorf("missing required columns: amino_acid_position, transcript_id")
 	}
@@ -79,6 +94,26 @@ func Load(path string) (*Store, error) {
 				h.QValue = v
 			}
 		}
+
+		text := func(name string) string {
+			if idx := colIdx[name]; idx >= 0 && idx < len(fields) {
+				return fields[idx]
+			}
+			return ""
+		}
+		count := func(name string) int {
+			n, _ := strconv.Atoi(text(name))
+			return n
+		}
+		h.HugoSymbol = text("hugo_symbol")
+		h.Residue = text("residue")
+		h.TranscriptIDVersion = text("transcript_id_version")
+		h.Version = text("version")
+		h.TumorCount = count("tumor_count")
+		h.MissenseCount = count("missense_count")
+		h.TruncatingCount = count("trunc_count")
+		h.InframeCount = count("inframe_count")
+		h.SpliceCount = count("splice_count")
 
 		data[txID] = append(data[txID], h)
 	}
