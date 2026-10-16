@@ -8,6 +8,11 @@
 
 FROM --platform=$BUILDPLATFORM golang:1.24-bookworm AS builder
 ARG TARGETARCH
+# Version stamped into the binary and reported at /version. Pass real values
+# with --build-arg; the defaults make an unstamped image obvious.
+ARG VERSION=dev
+ARG COMMIT=none
+ARG DATE=unknown
 
 # Install cross-compiler + libc headers for CGO when building for a different arch.
 RUN if [ "$TARGETARCH" = "arm64" ] && [ "$(dpkg --print-architecture)" != "arm64" ]; then \
@@ -30,7 +35,7 @@ RUN CC=$(case "$TARGETARCH" in \
       *) echo gcc ;; \
     esac) && \
     CGO_ENABLED=1 GOARCH=$TARGETARCH CC=$CC \
-    go build -ldflags="-s -w" -o /vibe-vep ./cmd/vibe-vep
+    go build -ldflags="-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /vibe-vep ./cmd/vibe-vep
 
 FROM debian:bookworm-slim
 RUN apt-get update && \

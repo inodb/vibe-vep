@@ -3,8 +3,18 @@
 # Binary name
 BINARY=vibe-vep
 
+# Version stamped into the binary and reported at /version. A build from a
+# checkout describes itself by the nearest tag and commit; goreleaser passes
+# its own values for a release.
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
+DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+
 # Build flags
-LDFLAGS=-ldflags "-s -w"
+LDFLAGS=-ldflags "-s -w \
+  -X main.version=$(VERSION) \
+  -X main.commit=$(COMMIT) \
+  -X main.date=$(DATE)"
 
 build:
 	go build $(LDFLAGS) -o $(BINARY) ./cmd/vibe-vep
