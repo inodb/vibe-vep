@@ -11,6 +11,7 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/datasource/hotspots"
 	"github.com/inodb/vibe-vep/internal/datasource/myvariantinfo"
 	"github.com/inodb/vibe-vep/internal/datasource/pfam"
 	"github.com/inodb/vibe-vep/internal/datasource/ptm"
@@ -27,6 +28,7 @@ type assemblyContext struct {
 	pfam      *pfam.Store
 	ptm       *ptm.Store
 	uniprot   *uniprot.Store
+	hotspots  *hotspots.Store
 	assembly  string // normalized: "GRCh38"
 }
 
@@ -65,6 +67,17 @@ func New(logger *zap.Logger, version string) *Server {
 		logger:          logger,
 		version:         version,
 		myVariantClient: myvariantinfo.NewClient(),
+	}
+}
+
+// SetHotspotsStore records the cancer hotspots table for an assembly, which
+// the /cancer_hotspots endpoints answer from directly rather than through a
+// variant annotation.
+func (s *Server) SetHotspotsStore(assembly string, store *hotspots.Store) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ctx, ok := s.assemblies[strings.ToLower(assembly)]; ok {
+		ctx.hotspots = store
 	}
 }
 

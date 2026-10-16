@@ -304,6 +304,29 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 		}
 	}
 
+	// Download the cancer hotspots table. It is small, curated per assembly,
+	// and the same file the matching gn-mongo image imports.
+	{
+		fmt.Printf("\nDownloading cancer hotspots...\n")
+		hotspotsFile := filepath.Join(rawDir, HotspotsFileName)
+		if sum, err := downloadFile(getHotspotsURL(assembly), hotspotsFile); err != nil {
+			logger.Warn("could not download cancer hotspots", zap.Error(err))
+		} else {
+			addChecksum(hotspotsFile, sum)
+		}
+	}
+
+	// Download the per-source version table. It names the release of every
+	// curated source, and is what /version reports.
+	{
+		versionFile := filepath.Join(rawDir, "annotation_version.txt")
+		if sum, err := downloadFile(getAnnotationVersionURL(assembly), versionFile); err != nil {
+			logger.Warn("could not download annotation version table", zap.Error(err))
+		} else {
+			addChecksum(versionFile, sum)
+		}
+	}
+
 	// Download the reVUE catalogue (same file for both assemblies: it is
 	// keyed by genomic location and transcript, and carries both builds).
 	{
@@ -493,6 +516,7 @@ const (
 	UniprotMappingFileName    = "enst_to_uniprot_mapping_id.txt"
 	CancerGeneListFileName    = "cancerGeneList.tsv"
 	RevueFileName             = "VUEs.json"
+	HotspotsFileName          = "hotspots_v2_and_3d.txt"
 )
 
 // GnomadFileName returns the expected filename for the given assembly.
@@ -608,6 +632,34 @@ func getUniprotMappingURL(assembly string) string {
 // getRevueURL returns the download URL for the reVUE catalogue.
 func getRevueURL() string {
 	return "https://raw.githubusercontent.com/knowledgesystems/reVUE-data/main/generated/VUEs.json"
+}
+
+// importerBundle names the genome-nexus-importer data directory an assembly's
+// curated files live in. It is the same naming the gn-mongo images use, so a
+// file fetched here is the file that deployment imported.
+func importerBundle(assembly string) string {
+	if strings.EqualFold(assembly, "GRCh37") {
+		return "grch37_ensembl111"
+	}
+	return "grch38_ensembl95"
+}
+
+// importerExportURL returns the URL of a curated file in the importer's export
+// directory for an assembly.
+func importerExportURL(assembly, filename string) string {
+	const base = "https://raw.githubusercontent.com/genome-nexus/genome-nexus-importer/master/data"
+	return base + "/" + importerBundle(assembly) + "/export/" + filename
+}
+
+// getHotspotsURL returns the download URL for the cancer hotspots table.
+func getHotspotsURL(assembly string) string {
+	return importerExportURL(assembly, HotspotsFileName)
+}
+
+// getAnnotationVersionURL returns the URL of the per-source version table
+// genome-nexus serves at /version.
+func getAnnotationVersionURL(assembly string) string {
+	return importerExportURL(assembly, "annotation_version.txt")
 }
 
 // getPfamURLs returns the download URLs for pfamA.txt and ensembl_biomart_pfam.txt.

@@ -16,6 +16,7 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/datasource/hotspots"
 	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
 	"github.com/inodb/vibe-vep/internal/datasource/pfam"
 	"github.com/inodb/vibe-vep/internal/datasource/ptm"
@@ -170,6 +171,11 @@ func runServe(logger *zap.Logger, cfg runServeConfig) error {
 		// Load PTM data if available.
 		if ptmStore := loadPtmStore(logger, normalized); ptmStore != nil {
 			srv.SetPtmStore(normalized, ptmStore)
+		}
+
+		// Load the cancer hotspots table if available.
+		if hotspotsStore := loadHotspotsStore(logger, normalized); hotspotsStore != nil {
+			srv.SetHotspotsStore(normalized, hotspotsStore)
 		}
 
 		// Load UniProt mapping if available.
@@ -468,4 +474,33 @@ func loadRevue(logger *zap.Logger, assemblies []string) *revue.Store {
 
 	logger.Debug("no reVUE catalogue found; predicted protein effects stand")
 	return nil
+}
+
+// loadHotspotsStore loads the cancer hotspots table, which the
+// /cancer_hotspots endpoints answer from. The configured path wins; otherwise
+// it is looked for beside the other downloaded reference data.
+func loadHotspotsStore(logger *zap.Logger, assembly string) *hotspots.Store {
+	path := viper.GetString("annotations.hotspots")
+	if path == "" {
+		rawDir := RawDir(assembly)
+		if rawDir == "" {
+			return nil
+		}
+		path = filepath.Join(rawDir, HotspotsFileName)
+	}
+	if _, err := os.Stat(path); err != nil {
+		logger.Debug("cancer hotspots not found, skipping", zap.String("path", path))
+		return nil
+	}
+
+	store, err := hotspots.Load(path)
+	if err != nil {
+		logger.Warn("could not load cancer hotspots", zap.Error(err))
+		return nil
+	}
+	logger.Info("loaded cancer hotspots",
+		zap.String("path", path),
+		zap.Int("transcripts", store.TranscriptCount()),
+		zap.Int("hotspots", store.HotspotCount()))
+	return store
 }

@@ -355,6 +355,19 @@ func loadCache(logger *zap.Logger, assembly string, noCache, clearCache bool) (*
 // written in. normalizeAssembly returns "GRCh37", so comparing against a
 // lowercase literal silently never matches -- which is how SIGNAL, the one
 // GRCh37-only source, came to be skipped on the assembly it exists for.
+// resolveHotspotsPath finds the cancer hotspots table: the configured path if
+// there is one, otherwise the copy sitting with the other downloaded data.
+func resolveHotspotsPath(cacheDir string) string {
+	if p := viper.GetString("annotations.hotspots"); p != "" {
+		return p
+	}
+	p := filepath.Join(rawDirForCache(cacheDir), HotspotsFileName)
+	if _, err := os.Stat(p); err != nil {
+		return ""
+	}
+	return p
+}
+
 func isGRCh37(assembly string) bool {
 	return strings.EqualFold(assembly, "GRCh37")
 }
@@ -388,8 +401,9 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 		}
 	}
 
-	// Cancer Hotspots
-	if hotspotsPath := viper.GetString("annotations.hotspots"); hotspotsPath != "" {
+	// Cancer Hotspots. The configured path wins; otherwise the downloaded
+	// table is used, so the source needs no configuration to work.
+	if hotspotsPath := resolveHotspotsPath(cacheDir); hotspotsPath != "" {
 		store, err := hotspots.Load(hotspotsPath)
 		if err != nil {
 			logger.Warn("could not load hotspots data (check annotations.hotspots path in config)",
