@@ -275,6 +275,12 @@ var unorderedArrays = map[string]string{
 	"pfamDomains":                    "pfamDomainId",
 }
 
+// unorderedInnerArrays names fields holding an array of arrays whose outer
+// order is meaningful but whose inner elements are not ordered. An
+// annotation's "hotspots" and "ptms" are both one array per transcript
+// consequence, in that order, each holding records in no order at all.
+var unorderedInnerArrays = map[string]bool{"annotation": true}
+
 // sortUnorderedArrays walks a decoded response and puts those arrays in a
 // deterministic order, wherever they appear.
 func sortUnorderedArrays(v any) {
@@ -286,6 +292,17 @@ func sortUnorderedArrays(v any) {
 					sort.SliceStable(arr, func(i, j int) bool {
 						return fieldString(arr[i], field) < fieldString(arr[j], field)
 					})
+				}
+			}
+			if unorderedInnerArrays[key] {
+				if outer, isArr := child.([]any); isArr {
+					for _, inner := range outer {
+						if arr, isArr := inner.([]any); isArr {
+							sort.SliceStable(arr, func(i, j int) bool {
+								return sortValue(arr[i], sortAnyElement) < sortValue(arr[j], sortAnyElement)
+							})
+						}
+					}
 				}
 			}
 			sortUnorderedArrays(child)

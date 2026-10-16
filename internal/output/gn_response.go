@@ -48,6 +48,12 @@ type GNMarshalOptions struct {
 	IncludePtms bool
 	PtmLookup   func(transcriptID string) []GNPtmEntry
 
+	// HotspotLookup reports the hotspots one transcript's view of a variant
+	// could be. The hotspots table is the server's, and deciding which rows a
+	// variant matches needs its consequence terms, so the server supplies the
+	// whole answer rather than the table.
+	HotspotLookup func(ann *annotate.Annotation, variantType string, inframe bool) []GNHotspotEntry
+
 	// Revue is the catalogue of variants whose published protein effect is
 	// not the one the sequence predicts. Nil leaves every prediction alone.
 	Revue *revue.Store
@@ -169,7 +175,11 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 			}
 			sites = append(sites, found)
 		}
-		result.PtmAnnotation = &GNPtms{Annotation: sites}
+		result.Ptms = &GNPtms{
+			// dbPTM, the source genome-nexus-importer builds ptm.json.gz from.
+			License:    "https://www.ncbi.nlm.nih.gov/pubmed/26578568",
+			Annotation: sites,
+		}
 	}
 
 	// Sort transcript consequences: canonical first (genome-nexus convention).
@@ -211,20 +221,30 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 		}
 	}
 
-	// Hotspots — build per-transcript arrays matching genome-nexus format.
+	// Hotspots -- one array per transcript consequence, in the same order.
+	//
+	// A residue can be a hotspot more than once: BRAF V600 is both a single
+	// residue hotspot and a 3d one, and genome-nexus reports both. Asking the
+	// table directly is what gives all of them, with their counts; the
+	// annotation's own extras record only that the residue was a hotspot.
 	if opt.IncludeHotspots {
 		hotspotAnnotation := make([][]GNHotspotEntry, 0, len(anns))
 		for _, ann := range anns {
-			if ann.GetExtraKey("hotspots.hotspot") == "Y" {
-				hotspotAnnotation = append(hotspotAnnotation, []GNHotspotEntry{{
+			var found []GNHotspotEntry
+			if opt.HotspotLookup != nil {
+				found = opt.HotspotLookup(ann, GNVariantType(ref, alt), GNIsInframe(ref, alt))
+			} else if ann.GetExtraKey("hotspots.hotspot") == "Y" {
+				found = []GNHotspotEntry{{
 					HugoSymbol:   ann.GeneName,
 					TranscriptID: stripVersion(ann.TranscriptID),
 					Residue:      formatResidue(ann.AminoAcidChange, ann.ProteinPosition),
 					Type:         ann.GetExtraKey("hotspots.type"),
-				}})
-			} else {
-				hotspotAnnotation = append(hotspotAnnotation, []GNHotspotEntry{})
+				}}
 			}
+			if found == nil {
+				found = []GNHotspotEntry{}
+			}
+			hotspotAnnotation = append(hotspotAnnotation, found)
 		}
 		result.Hotspots = &GNHotspots{
 			License:    "https://opendatacommons.org/licenses/odbl/1.0/",

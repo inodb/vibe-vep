@@ -354,10 +354,11 @@ func (s *Server) parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions 
 			meta, _ := s.GeneMetadata(symbol)
 			return meta.HGNCID
 		},
-		Revue:       s.Revue(),
-		UniprotIDs:  s.uniprotLookup(r),
-		IncludePtms: strings.Contains(fields, "ptms"),
-		PtmLookup:   s.ptmLookup(r),
+		Revue:         s.Revue(),
+		UniprotIDs:    s.uniprotLookup(r),
+		IncludePtms:   strings.Contains(fields, "ptms"),
+		PtmLookup:     s.ptmLookup(r),
+		HotspotLookup: s.hotspotLookup(r),
 		// genome-nexus is deployed with overwrite_by_confirmed_revue_only on,
 		// so an entry still under review does not displace a prediction.
 		RevueConfirmedOnly: true,
@@ -404,6 +405,25 @@ func (s *Server) uniprotLookup(r *http.Request) func(string) string {
 
 // ptmLookup returns the post-translational modification lookup for the
 // assembly a request names, or nil where no PTM data is loaded.
+// hotspotLookup answers the "hotspots" field of an annotation from the
+// hotspots table, so that a residue which is a hotspot more than once -- BRAF
+// V600 is both a single residue hotspot and a 3d one -- reports every record
+// with its counts, as genome-nexus does.
+func (s *Server) hotspotLookup(r *http.Request) func(*annotate.Annotation, string, bool) []output.GNHotspotEntry {
+	ctx := s.getAssembly(r.PathValue("assembly"))
+	if ctx == nil {
+		ctx = s.soleAssembly()
+	}
+	if ctx == nil || ctx.hotspots == nil {
+		return nil
+	}
+	// An annotation names no hotspots release, and v3 accepts every row.
+	const version = "v3"
+	return func(ann *annotate.Annotation, variantType string, inframe bool) []output.GNHotspotEntry {
+		return hotspotsForAnnotation(ctx, ann, variantType, inframe, version)
+	}
+}
+
 func (s *Server) ptmLookup(r *http.Request) func(string) []output.GNPtmEntry {
 	ctx := s.getAssembly(r.PathValue("assembly"))
 	if ctx == nil {

@@ -30,7 +30,7 @@ type GNAnnotation struct {
 	Hotspots               *GNHotspots                `json:"hotspots,omitempty"`
 	SignalAnnotation       *GNSignalAnnotation        `json:"signalAnnotation,omitempty"`
 	MyVariantInfo          *GNMyVariantInfoAnnotation `json:"my_variant_info,omitempty"`
-	PtmAnnotation          *GNPtms                    `json:"ptmAnnotation,omitempty"`
+	Ptms                   *GNPtms                    `json:"ptms,omitempty"`
 }
 
 // GNMyVariantInfoAnnotation wraps the myvariant.info annotation in genome-nexus format.
@@ -123,13 +123,26 @@ type GNHotspots struct {
 	Annotation [][]GNHotspotEntry `json:"annotation"`
 }
 
-// GNHotspotEntry represents a single hotspot hit.
+// GNHotspotEntry is one hotspot, in genome-nexus's wire shape. It is what the
+// /cancer_hotspots endpoints report and what the "hotspots" field of an
+// annotation carries, which are the same records.
+//
+// Its `id` field is deliberately absent: the Jackson mixin there hides it.
 type GNHotspotEntry struct {
-	HugoSymbol   string `json:"hugoSymbol,omitempty"`
-	TranscriptID string `json:"transcriptId,omitempty"`
-	Residue      string `json:"residue,omitempty"`
-	Type         string `json:"type,omitempty"`
-	TumorCount   int    `json:"tumorCount,omitempty"`
+	HugoSymbol          string `json:"hugoSymbol,omitempty"`
+	TranscriptID        string `json:"transcriptId,omitempty"`
+	TranscriptIDVersion string `json:"transcriptIdVersion,omitempty"`
+	Residue             string `json:"residue,omitempty"`
+	Version             string `json:"version,omitempty"`
+	TumorCount          int    `json:"tumorCount"`
+	Type                string `json:"type,omitempty"`
+
+	// 3d hotspots carry no per-class breakdown; genome-nexus leaves these out
+	// of the response rather than reporting zeros.
+	MissenseCount   *int `json:"missenseCount,omitempty"`
+	TruncatingCount *int `json:"truncatingCount,omitempty"`
+	InframeCount    *int `json:"inframeCount,omitempty"`
+	SpliceCount     *int `json:"spliceCount,omitempty"`
 }
 
 // GNAnnotationSummary is the enriched annotation summary returned when

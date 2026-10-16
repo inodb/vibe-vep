@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/datasource/hotspots"
 	"github.com/inodb/vibe-vep/internal/input"
 	"github.com/inodb/vibe-vep/internal/output"
@@ -18,23 +19,9 @@ import (
 // variant they report only the hotspots that variant could actually be,
 // which means agreeing on both the residue and the kind of mutation.
 
-// gnHotspot is one hotspot, in genome-nexus's wire shape. Its `id` field is
-// deliberately absent: the Jackson mixin there hides it.
-type gnHotspot struct {
-	HugoSymbol          string `json:"hugoSymbol,omitempty"`
-	TranscriptID        string `json:"transcriptId,omitempty"`
-	TranscriptIDVersion string `json:"transcriptIdVersion,omitempty"`
-	Residue             string `json:"residue,omitempty"`
-	Version             string `json:"version,omitempty"`
-	TumorCount          int    `json:"tumorCount"`
-	Type                string `json:"type,omitempty"`
-	// 3d hotspots carry no per-class breakdown; genome-nexus leaves these out
-	// of the response rather than reporting zeros.
-	MissenseCount   *int `json:"missenseCount,omitempty"`
-	TruncatingCount *int `json:"truncatingCount,omitempty"`
-	InframeCount    *int `json:"inframeCount,omitempty"`
-	SpliceCount     *int `json:"spliceCount,omitempty"`
-}
+// gnHotspot is one hotspot in genome-nexus's wire shape. It is shared with
+// the "hotspots" field of an annotation, which reports the same records.
+type gnHotspot = output.GNHotspotEntry
 
 // proteinLocation is a span of residues on a transcript, with the kind of
 // mutation being asked about.
@@ -179,28 +166,7 @@ func (s *Server) hotspotsForVariant(ctx *assemblyContext, v *vcf.Variant, versio
 	seen := make(map[string]bool)
 	matched := make([]gnHotspot, 0)
 	for _, ann := range anns {
-		start, end := ann.ProteinStart, ann.ProteinEnd
-		if start == 0 {
-			start = ann.ProteinPosition
-		}
-		if end == 0 {
-			end = start
-		}
-		if start == 0 {
-			continue
-		}
-
-		classes := output.GNVariantClassifications(
-			strings.Split(ann.Consequence, ","), variantType, inframe)
-
-		for _, h := range renderHotspots(ctx.hotspots.LookupAll(ann.TranscriptID), version) {
-			hStart, hEnd, ok := residueRange(h.Residue)
-			if !ok || !overlaps(hStart, hEnd, int(start), int(end)) {
-				continue
-			}
-			if !hotspotTypeMatches(h.Type, classes) {
-				continue
-			}
+		for _, h := range hotspotsForAnnotation(ctx, ann, variantType, inframe, version) {
 			key := h.TranscriptID + "|" + h.Residue + "|" + h.Type
 			if seen[key] {
 				continue
@@ -208,6 +174,41 @@ func (s *Server) hotspotsForVariant(ctx *assemblyContext, v *vcf.Variant, versio
 			seen[key] = true
 			matched = append(matched, h)
 		}
+	}
+	return matched
+}
+
+// hotspotsForAnnotation reports the hotspots one transcript's view of a
+// variant could be: covering the residues it changes, and of a kind its
+// consequence terms allow.
+func hotspotsForAnnotation(ctx *assemblyContext, ann *annotate.Annotation, variantType string, inframe bool, version string) []gnHotspot {
+	if ctx.hotspots == nil {
+		return nil
+	}
+	start, end := ann.ProteinStart, ann.ProteinEnd
+	if start == 0 {
+		start = ann.ProteinPosition
+	}
+	if end == 0 {
+		end = start
+	}
+	if start == 0 {
+		return nil
+	}
+
+	classes := output.GNVariantClassifications(
+		strings.Split(ann.Consequence, ","), variantType, inframe)
+
+	var matched []gnHotspot
+	for _, h := range renderHotspots(ctx.hotspots.LookupAll(ann.TranscriptID), version) {
+		hStart, hEnd, ok := residueRange(h.Residue)
+		if !ok || !overlaps(hStart, hEnd, int(start), int(end)) {
+			continue
+		}
+		if !hotspotTypeMatches(h.Type, classes) {
+			continue
+		}
+		matched = append(matched, h)
 	}
 	return matched
 }
