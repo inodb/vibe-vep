@@ -45,11 +45,30 @@ GENOMENEXUS_BASE=http://localhost:38080 \
     --isoform-override mskcc --mode extended
 ```
 
+## Prerequisites
+
+| | |
+|---|---|
+| **Go** | 1.24+, CGO enabled (SQLite and DuckDB) |
+| **Disk** | ~1.3 GB for the transcript cache alone; ~13 GB with every annotation source built. See the table below. |
+| **Memory** | ~1 GB resident for GRCh37 with the transcript cache loaded. Annotation indexes are memory-mapped, so extra sources cost page cache rather than heap. |
+| **Network** | Only `vibe-vep download`. The server itself makes outbound calls only for the `my_variant_info` and `oncokb` fields. |
+
+```bash
+vibe-vep download --assembly GRCh37    # fetch reference data
+vibe-vep prepare  --assembly GRCh37    # build the transcript cache and indexes
+vibe-vep serve    --assembly GRCh37 --port 38080
+```
+
 ## Reference data
 
-`vibe-vep download` fetches everything the server needs. Three of those files
-are what make its answers match a Genome Nexus deployment's rather than merely
-resemble them, and the server logs at startup which of them it found:
+`vibe-vep download` fetches everything below into
+`~/.vibe-vep/<assembly>/raw/` (override the root with `$VIBE_VEP_DATA_DIR`).
+`vibe-vep prepare` turns it into the cache and indexes the server reads.
+
+Three of these decide whether the server's answers match a Genome Nexus
+deployment's rather than merely resembling them, and the server logs at
+startup which of them it found:
 
 | File | What it decides |
 |---|---|
@@ -60,9 +79,34 @@ resemble them, and the server logs at startup which of them it found:
 Without the canonical transcript table the server falls back to Ensembl's own
 canonical flags, which for a cancer panel is usually the wrong transcript.
 
+### Where each file comes from
+
+Sizes are for GRCh37 and were measured, not estimated.
+
+| id | file | origin | size |
+|---|---|---|---|
+| gencode | `gencode.v19.annotation.gtf.gz`, `.pc_transcripts.fa.gz` | [GENCODE](https://www.gencodegenes.org/) via EBI FTP | 38 + 28 MB |
+| gencode | `GRCh37.p13.genome.fa.gz` | GENCODE via EBI FTP | 805 MB |
+| hgnc | `ensembl_biomart_canonical_transcripts_per_hgnc.txt` | [genome-nexus-importer](https://github.com/genome-nexus/genome-nexus-importer) `data/<bundle>/export/` | 23 MB |
+| — | `annotation_version.txt` | genome-nexus-importer `data/<bundle>/export/` | 3 KB |
+| pfam | `pfamA.txt`, `ensembl_biomart_pfam.txt` | genome-nexus-importer | 0.8 + 13 MB |
+| ptm | `ptm.json.gz` | genome-nexus-importer `data/ptm/export/` | 18 MB |
+| cancer_hotspots | `hotspots_v2_and_3d.txt` | genome-nexus-importer `data/<bundle>/export/` | 1.4 MB |
+| signal | `mutations.json.gz` | genome-nexus-importer `data/signal/export/` | 33.6 MB |
+| oncokb | `cancerGeneList.tsv` | [OncoKB](https://www.oncokb.org/cancerGenes); a copy ships in this repo | 0.2 MB |
+| revue | `VUEs.json` | [reVUE-data](https://github.com/knowledgesystems/reVUE-data) | 0.4 MB |
+| uniprot | `enst_to_uniprot_mapping_id.txt` | genome-nexus-importer | 4 MB |
+| refseq | `ensembl_refseq_mrna.GRCh37.tsv.gz` | Ensembl | 0.2 MB |
+| clinvar | `clinvar.vcf.gz` | [ClinVar](https://www.ncbi.nlm.nih.gov/clinvar/) NCBI FTP | 192 MB |
+| alphamissense | `AlphaMissense_hg19.tsv.gz` | [AlphaMissense](https://github.com/google-deepmind/alphamissense), CC BY 4.0 | 594 MB |
+| sift, polyphen | `translation_md5.txt.gz`, `protein_function_predictions.txt.gz` | Ensembl variation FTP, release matched to the GENCODE release | 4.1 GB |
+
 `VUEs.json` is the one that moves: reVUE publishes new findings, and a Genome
 Nexus deployment re-reads the catalogue every time it starts. This server
 reads the downloaded copy instead, which keeps a run reproducible but means a
 stale copy quietly reports the predicted effect for a variant the catalogue
 has since revised. It logs the number of effects it loaded at startup, and
 `vibe-vep download` refreshes it.
+
+See [Annotation Sources](../annotation-sources/) for what each source
+contributes to an annotation and how it is matched.
