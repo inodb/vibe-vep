@@ -199,7 +199,8 @@ func (s *Server) getAssembly(name string) *assemblyContext {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	// Health and info endpoints.
+	// Health and info endpoints. These describe the server rather than an
+	// assembly, so they live at the root whatever is loaded.
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /info", s.handleInfo)
 	mux.HandleFunc("GET /version", s.handleVersion)
@@ -226,6 +227,16 @@ func (s *Server) Handler() http.Handler {
 // registerGenomeNexusRoutes registers the genome-nexus API under a path
 // prefix. An empty prefix serves it at the root.
 func (s *Server) registerGenomeNexusRoutes(mux *http.ServeMux, prefix string) {
+	// Server-level endpoints. They are already registered at the root by
+	// Handler, so only the prefixed mount adds them -- but a genome-nexus
+	// client pointed at .../genome-nexus/grch37 asks for .../version there,
+	// and used to get a 404.
+	if prefix != "" {
+		mux.HandleFunc("GET "+prefix+"/health", s.handleHealth)
+		mux.HandleFunc("GET "+prefix+"/info", s.handleInfo)
+		mux.HandleFunc("GET "+prefix+"/version", s.handleVersion)
+	}
+
 	mux.HandleFunc("GET "+prefix+"/annotation/genomic/{genomicLocation}", s.handleGNGenomicGet)
 	mux.HandleFunc("POST "+prefix+"/annotation/genomic", s.handleGNGenomicPost)
 	mux.HandleFunc("GET "+prefix+"/annotation/{variant...}", s.handleGNHGVSGet)

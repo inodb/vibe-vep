@@ -357,3 +357,27 @@ func TestGNRoutesAtRoot(t *testing.T) {
 		}
 	}
 }
+
+// TestServerEndpointsUnderBothMounts checks that the endpoints describing the
+// server, not a variant, answer under the assembly prefix as well as at the
+// root. A genome-nexus client configured with a base URL ending in
+// /genome-nexus/grch37 asks for .../version there.
+func TestServerEndpointsUnderBothMounts(t *testing.T) {
+	srv := newTestServerWithKRAS(t)
+	handler := srv.Handler()
+
+	for _, path := range []string{"/health", "/info", "/version"} {
+		for _, prefix := range []string{"", "/genome-nexus/grch38"} {
+			req := httptest.NewRequest(http.MethodGet, prefix+path, nil)
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Errorf("%s%s: expected 200, got %d", prefix, path, w.Code)
+			}
+			var body map[string]any
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+				t.Errorf("%s%s: decode: %v", prefix, path, err)
+			}
+		}
+	}
+}
