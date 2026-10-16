@@ -1,0 +1,4 @@
+status=404
+{
+  "message": "Ensembl transcript not found: NOT_A_GENE"
+}

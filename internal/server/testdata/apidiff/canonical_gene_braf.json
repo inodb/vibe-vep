@@ -1,0 +1,10 @@
+status=200
+{
+  "entrezGeneId": "673",
+  "geneId": "ENSG00000157764",
+  "hugoSymbol": "BRAF",
+  "synonyms": [
+    "BRAF1",
+    "BRAF-1"
+  ]
+}

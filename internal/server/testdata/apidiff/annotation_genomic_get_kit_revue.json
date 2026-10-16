@@ -1,0 +1,184 @@
+status=200
+{
+  "allele_string": "CCACAGAAACCCATGTATGAAGTACAGTGGA/-",
+  "annotation_summary": {
+    "assemblyName": "GRCh37",
+    "canonicalTranscriptId": "ENST00000288135",
+    "genomicLocation": {
+      "chromosome": "4",
+      "end": 55593606,
+      "referenceAllele": "CCACAGAAACCCATGTATGAAGTACAGTGGA",
+      "start": 55593576,
+      "variantAllele": "-"
+    },
+    "strandSign": "+",
+    "transcriptConsequenceSummaries": [
+      {
+        "consequenceTerms": "splice_acceptor_variant,coding_sequence_variant,intron_variant",
+        "entrezGeneId": "3815",
+        "exon": "11/21",
+        "hgvsc": "ENST00000288135.5:c.1648-6_1672del",
+        "hgvspShort": "p.K550_K558del",
+        "hugoGeneSymbol": "KIT",
+        "isVue": true,
+        "proteinPosition": {
+          "end": 558,
+          "start": 550
+        },
+        "refSeq": "NM_001093772.1",
+        "transcriptId": "ENST00000288135",
+        "uniprotId": "P10721",
+        "variantClassification": "In_Frame_Del"
+      },
+      {
+        "consequenceTerms": "splice_acceptor_variant,coding_sequence_variant,intron_variant",
+        "entrezGeneId": "3815",
+        "exon": "11/21",
+        "hgvsc": "ENST00000412167.2:c.1636-6_1660del",
+        "hgvspShort": "p.X546_splice",
+        "hugoGeneSymbol": "KIT",
+        "proteinPosition": {
+          "end": 546,
+          "start": 546
+        },
+        "transcriptId": "ENST00000412167",
+        "uniprotId": "P10721-2",
+        "variantClassification": "Splice_Site"
+      },
+      {
+        "consequenceTerms": "upstream_gene_variant",
+        "entrezGeneId": "3815",
+        "hugoGeneSymbol": "KIT",
+        "transcriptId": "ENST00000512959",
+        "variantClassification": "5'Flank"
+      }
+    ],
+    "transcriptConsequenceSummary": {
+      "consequenceTerms": "splice_acceptor_variant,coding_sequence_variant,intron_variant",
+      "entrezGeneId": "3815",
+      "exon": "11/21",
+      "hgvsc": "ENST00000288135.5:c.1648-6_1672del",
+      "hgvspShort": "p.K550_K558del",
+      "hugoGeneSymbol": "KIT",
+      "isVue": true,
+      "proteinPosition": {
+        "end": 558,
+        "start": 550
+      },
+      "refSeq": "NM_001093772.1",
+      "transcriptId": "ENST00000288135",
+      "uniprotId": "P10721",
+      "variantClassification": "In_Frame_Del"
+    },
+    "transcriptConsequences": [
+      {
+        "consequenceTerms": "splice_acceptor_variant,coding_sequence_variant,intron_variant",
+        "entrezGeneId": "3815",
+        "exon": "11/21",
+        "hgvsc": "ENST00000288135.5:c.1648-6_1672del",
+        "hgvspShort": "p.K550_K558del",
+        "hugoGeneSymbol": "KIT",
+        "isVue": true,
+        "proteinPosition": {
+          "end": 558,
+          "start": 550
+        },
+        "refSeq": "NM_001093772.1",
+        "transcriptId": "ENST00000288135",
+        "uniprotId": "P10721",
+        "variantClassification": "In_Frame_Del"
+      }
+    ],
+    "variant": "4:g.55593576_55593606del",
+    "variantType": "DEL",
+    "vues": {
+      "comment": "Changes splice donor site, cause inframe deletion in exon 11",
+      "confirmed": true,
+      "context": "Actionable in GIST",
+      "defaultEffect": "splice",
+      "genomicLocation": "4,55593576,55593606,CCACAGAAACCCATGTATGAAGTACAGTGGA,-",
+      "genomicLocationDescription": "Deletions flanking intron 10 - exon 11 boundary (e.g. 4:55593576_55593606del)",
+      "hugoGeneSymbol": "KIT",
+      "mutationOrigin": null,
+      "references": [
+        {
+          "pubmedId": 15507676,
+          "referenceText": "Corless et al., 2004"
+        }
+      ],
+      "revisedProteinEffect": "p.K550_K558del",
+      "revisedVariantClassification": "Splice_Exon_Shortening_In_Frame",
+      "revisedVariantClassificationStandard": "In_Frame_Del",
+      "transcriptId": "ENST00000288135",
+      "variant": "4:g.55593576_55593606del",
+      "vepPredictedProteinEffect": "p.X550_splice",
+      "vepPredictedVariantClassification": "Splice_Site"
+    }
+  },
+  "assembly_name": "GRCh37",
+  "end": 55593606,
+  "hgvsg": "4:g.55593576_55593606del",
+  "id": "4:g.55593576_55593606del",
+  "most_severe_consequence": "splice_acceptor_variant",
+  "originalVariantQuery": "4,55593576,55593606,CCACAGAAACCCATGTATGAAGTACAGTGGA,-",
+  "seq_region_name": "4",
+  "start": 55593576,
+  "strand": 1,
+  "successfully_annotated": true,
+  "transcript_consequences": [
+    {
+      "biotype": "protein_coding",
+      "canonical": "1",
+      "consequence_terms": [
+        "splice_acceptor_variant",
+        "coding_sequence_variant",
+        "intron_variant"
+      ],
+      "exon": "11/21",
+      "gene_id": "ENSG00000157404",
+      "gene_symbol": "KIT",
+      "hgnc_id": "6342",
+      "hgvsc": "ENST00000288135.5:c.1648-6_1672del",
+      "hgvsg": "4:g.55593576_55593606del",
+      "protein_end": 558,
+      "protein_id": "ENSP00000288135",
+      "refseq_transcript_ids": [
+        "NM_001093772.1",
+        "NM_000222.2"
+      ],
+      "transcript_id": "ENST00000288135",
+      "variant_allele": "-"
+    },
+    {
+      "biotype": "protein_coding",
+      "consequence_terms": [
+        "splice_acceptor_variant",
+        "coding_sequence_variant",
+        "intron_variant"
+      ],
+      "exon": "11/21",
+      "gene_id": "ENSG00000157404",
+      "gene_symbol": "KIT",
+      "hgnc_id": "6342",
+      "hgvsc": "ENST00000412167.2:c.1636-6_1660del",
+      "hgvsg": "4:g.55593576_55593606del",
+      "protein_end": 554,
+      "protein_id": "ENSP00000390987",
+      "transcript_id": "ENST00000412167",
+      "variant_allele": "-"
+    },
+    {
+      "biotype": "retained_intron",
+      "consequence_terms": [
+        "upstream_gene_variant"
+      ],
+      "gene_id": "ENSG00000157404",
+      "gene_symbol": "KIT",
+      "hgnc_id": "6342",
+      "hgvsg": "4:g.55593576_55593606del",
+      "transcript_id": "ENST00000512959",
+      "variant_allele": "-"
+    }
+  ],
+  "variant": "4:g.55593576_55593606del"
+}

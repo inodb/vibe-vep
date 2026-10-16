@@ -1,0 +1,13 @@
+status=200
+[
+  {
+    "description": "Protein kinase domain",
+    "name": "Pkinase",
+    "pfamAccession": "PF00069"
+  },
+  {
+    "description": "Protein tyrosine kinase",
+    "name": "Pkinase_Tyr",
+    "pfamAccession": "PF07714"
+  }
+]

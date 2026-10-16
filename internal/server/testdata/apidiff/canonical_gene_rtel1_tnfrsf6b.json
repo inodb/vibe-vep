@@ -1,0 +1,6 @@
+status=200
+{
+  "entrezGeneId": "100533107",
+  "geneId": "ENSG00000026036",
+  "hugoSymbol": "RTEL1-TNFRSF6B"
+}

@@ -1,0 +1,321 @@
+status=200
+[
+  {
+    "hugoSymbol": "BRAF",
+    "inframeCount": 7,
+    "missenseCount": 0,
+    "residue": "486-494",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "truncatingCount": 0,
+    "tumorCount": 7,
+    "type": "in-frame indel",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "inframeCount": 8,
+    "missenseCount": 0,
+    "residue": "592-604",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "truncatingCount": 0,
+    "tumorCount": 8,
+    "type": "in-frame indel",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "inframeCount": 0,
+    "missenseCount": 51,
+    "residue": "D594",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "truncatingCount": 0,
+    "tumorCount": 51,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "D594",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 12,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "F595",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 1,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "G464",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 2,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "inframeCount": 0,
+    "missenseCount": 34,
+    "residue": "G466",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "truncatingCount": 0,
+    "tumorCount": 34,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "G466",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 17,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "inframeCount": 0,
+    "missenseCount": 60,
+    "residue": "G469",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "truncatingCount": 1,
+    "tumorCount": 61,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "G469",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 21,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "inframeCount": 0,
+    "missenseCount": 8,
+    "residue": "G596",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "truncatingCount": 0,
+    "tumorCount": 8,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "G596",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 5,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "H574",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 2,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "inframeCount": 0,
+    "missenseCount": 38,
+    "residue": "K601",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "truncatingCount": 0,
+    "tumorCount": 38,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "K601",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 15,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "inframeCount": 0,
+    "missenseCount": 5,
+    "residue": "L485",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "truncatingCount": 1,
+    "tumorCount": 6,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "L485",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 2,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "L505",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 2,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "L514",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 1,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "inframeCount": 0,
+    "missenseCount": 10,
+    "residue": "L597",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "truncatingCount": 0,
+    "tumorCount": 10,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "L597",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 4,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "inframeCount": 0,
+    "missenseCount": 21,
+    "residue": "N581",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "truncatingCount": 0,
+    "tumorCount": 21,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "N581",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 11,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "Q609",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 2,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "S467",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 2,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "V471",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 1,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "inframeCount": 0,
+    "missenseCount": 897,
+    "residue": "V600",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "truncatingCount": 0,
+    "tumorCount": 897,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "V600",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 545,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "W604",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 1,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "inframeCount": 0,
+    "missenseCount": 0,
+    "residue": "X327",
+    "spliceCount": 3,
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "truncatingCount": 0,
+    "tumorCount": 3,
+    "type": "splice site",
+    "version": "v2"
+  }
+]

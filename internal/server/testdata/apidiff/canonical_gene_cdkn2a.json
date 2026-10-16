@@ -1,0 +1,26 @@
+status=200
+{
+  "entrezGeneId": "1029",
+  "geneId": "ENSG00000147889",
+  "hugoSymbol": "CDKN2A",
+  "previousSymbols": [
+    "CDKN2",
+    "MLM"
+  ],
+  "synonyms": [
+    "CDK4I",
+    "p16",
+    "INK4a",
+    "MTS1",
+    "CMM2",
+    "ARF",
+    "p19",
+    "p14",
+    "INK4",
+    "p16INK4a",
+    "p19Arf",
+    "p14ARF",
+    "P16-INK4A",
+    "CAI2"
+  ]
+}

@@ -1,0 +1,13 @@
+status=200
+{
+  "entrezGeneId": "7468",
+  "geneId": "ENSG00000109685",
+  "hugoSymbol": "NSD2",
+  "previousSymbols": [
+    "WHSC1"
+  ],
+  "synonyms": [
+    "MMSET",
+    "KMT3G"
+  ]
+}

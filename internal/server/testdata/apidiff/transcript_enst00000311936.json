@@ -1,0 +1,83 @@
+status=200
+{
+  "ccdsId": "CCDS8702",
+  "exons": [
+    {
+      "exonEnd": 25362845,
+      "exonId": "ENSE00002456976",
+      "exonStart": 25357723,
+      "rank": 5,
+      "strand": -1,
+      "version": 1
+    },
+    {
+      "exonEnd": 25378707,
+      "exonId": "ENSE00001644818",
+      "exonStart": 25378548,
+      "rank": 4,
+      "strand": -1,
+      "version": 1
+    },
+    {
+      "exonEnd": 25380346,
+      "exonId": "ENSE00001719809",
+      "exonStart": 25380168,
+      "rank": 3,
+      "strand": -1,
+      "version": 1
+    },
+    {
+      "exonEnd": 25398329,
+      "exonId": "ENSE00000936617",
+      "exonStart": 25398208,
+      "rank": 2,
+      "strand": -1,
+      "version": 1
+    },
+    {
+      "exonEnd": 25403865,
+      "exonId": "ENSE00001189804",
+      "exonStart": 25403685,
+      "rank": 1,
+      "strand": -1,
+      "version": 4
+    }
+  ],
+  "geneId": "ENSG00000133703",
+  "hugoSymbols": [
+    "KRAS"
+  ],
+  "pfamDomains": [
+    {
+      "pfamDomainEnd": 164,
+      "pfamDomainId": "PF00071",
+      "pfamDomainStart": 5
+    }
+  ],
+  "proteinId": "ENSP00000308495",
+  "proteinLength": 188,
+  "refseqMrnaId": "NM_004985",
+  "transcriptId": "ENST00000311936",
+  "transcriptIdVersion": "3",
+  "uniprotId": "P01116-2",
+  "utrs": [
+    {
+      "end": 25362728,
+      "start": 25357723,
+      "strand": -1,
+      "type": "three_prime_UTR"
+    },
+    {
+      "end": 25398329,
+      "start": 25398319,
+      "strand": -1,
+      "type": "five_prime_UTR"
+    },
+    {
+      "end": 25403865,
+      "start": 25403685,
+      "strand": -1,
+      "type": "five_prime_UTR"
+    }
+  ]
+}
