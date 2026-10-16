@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/inodb/vibe-vep/internal/cache"
 )
@@ -165,4 +166,106 @@ func cdsAnchorToGenomic(c cdsCoord, t *cache.Transcript) (int64, error) {
 		}
 		return pos, nil
 	}
+}
+
+// cdsChangeRe splits an HGVS c. change into its coordinates and the edit
+// applied there: one or two positions, then "A>G", "del", "ins…", "delins…"
+// or "dup".
+var cdsChangeRe = regexp.MustCompile(`^([*\-]?\d+(?:[+-]\d+)?)(?:_([*\-]?\d+(?:[+-]\d+)?))?(.*)$`)
+
+// cdsChangeToGenomic rewrites a transcript-relative change as the genomic
+// change it describes, which the genomic resolver then reads as usual. A
+// variant does the same thing whichever way it is written; only the
+// coordinates and, on the reverse strand, the strand of the sequence differ.
+func cdsChangeToGenomic(cdsChange string, t *cache.Transcript) (string, error) {
+	m := cdsChangeRe.FindStringSubmatch(cdsChange)
+	if m == nil {
+		return "", fmt.Errorf("cannot read HGVS c. change %q", cdsChange)
+	}
+
+	startCoord, ok := parseCDSCoord(m[1])
+	if !ok {
+		return "", fmt.Errorf("cannot read coordinate %q in %q", m[1], cdsChange)
+	}
+	start, err := cdsCoordToGenomic(startCoord, t)
+	if err != nil {
+		return "", err
+	}
+
+	end := start
+	if m[2] != "" {
+		endCoord, ok := parseCDSCoord(m[2])
+		if !ok {
+			return "", fmt.Errorf("cannot read coordinate %q in %q", m[2], cdsChange)
+		}
+		if end, err = cdsCoordToGenomic(endCoord, t); err != nil {
+			return "", err
+		}
+	}
+
+	// Transcript order runs backwards along the genome on the reverse strand,
+	// so the pair has to be put back into genomic order.
+	if start > end {
+		start, end = end, start
+	}
+
+	edit, err := genomicEdit(m[3], t.IsReverseStrand())
+	if err != nil {
+		return "", fmt.Errorf("%w in %q", err, cdsChange)
+	}
+
+	if start == end && !strings.HasPrefix(edit, "ins") {
+		return strconv.FormatInt(start, 10) + edit, nil
+	}
+	return strconv.FormatInt(start, 10) + "_" + strconv.FormatInt(end, 10) + edit, nil
+}
+
+// genomicEdit rewrites the edit half of a c. change for the genome, turning
+// any sequence it carries round when the transcript is on the reverse strand.
+func genomicEdit(edit string, reverse bool) (string, error) {
+	switch {
+	case reSubstitutionEdit.MatchString(edit):
+		m := reSubstitutionEdit.FindStringSubmatch(edit)
+		ref, alt := m[1], m[2]
+		if reverse {
+			ref, alt = reverseComplement(ref), reverseComplement(alt)
+		}
+		return ref + ">" + alt, nil
+
+	case strings.HasPrefix(edit, "delins"):
+		return "delins" + orientSequence(edit[len("delins"):], reverse), nil
+
+	case strings.HasPrefix(edit, "del"):
+		return "del" + orientSequence(edit[len("del"):], reverse), nil
+
+	case strings.HasPrefix(edit, "ins"):
+		return "ins" + orientSequence(edit[len("ins"):], reverse), nil
+
+	case strings.HasPrefix(edit, "dup"):
+		return "dup" + orientSequence(edit[len("dup"):], reverse), nil
+
+	default:
+		return "", fmt.Errorf("unsupported edit %q", edit)
+	}
+}
+
+// reSubstitutionEdit matches the "A>G" half of a substitution.
+var reSubstitutionEdit = regexp.MustCompile(`^([ACGTN]+)>([ACGTN]+)$`)
+
+// orientSequence turns a sequence round for the opposite strand, leaving an
+// absent one absent.
+func orientSequence(seq string, reverse bool) string {
+	if seq == "" || !reverse {
+		return seq
+	}
+	return reverseComplement(seq)
+}
+
+// reverseComplement returns the other strand's reading of a sequence.
+func reverseComplement(seq string) string {
+	out := make([]byte, 0, len(seq))
+	for i := len(seq) - 1; i >= 0; i-- {
+		out = append(out, Complement(seq[i]))
+	}
+	return string(out)
 }

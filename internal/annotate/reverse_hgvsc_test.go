@@ -190,3 +190,50 @@ func TestForwardWritesPositionsForTheTestTranscript(t *testing.T) {
 		assert.Equal(t, 40, written, "strand %d: every exonic base should get a position", strand)
 	}
 }
+
+func TestCDSChangeToGenomic(t *testing.T) {
+	fwd := twoExonTranscript(1)
+	rev := twoExonTranscript(-1)
+
+	cases := []struct {
+		name string
+		tx   *cache.Transcript
+		in   string
+		want string
+	}{
+		{"substitution", fwd, "1A>G", "110A>G"},
+		{"intronic substitution from the exon before", fwd, "10+1G>T", "120G>T"},
+		{"intronic substitution from the exon after", fwd, "11-1A>C", "199A>C"},
+		{"5'UTR substitution", fwd, "-1C>T", "109C>T"},
+		{"3'UTR substitution", fwd, "*1G>A", "210G>A"},
+		{"single base deletion", fwd, "1del", "110del"},
+		{"range deletion", fwd, "1_3del", "110_112del"},
+		{"insertion between two bases", fwd, "1_2insAT", "110_111insAT"},
+		{"delins", fwd, "1_2delinsGG", "110_111delinsGG"},
+		{"duplication", fwd, "1dup", "110dup"},
+
+		// On the reverse strand the coordinates mirror and any sequence is
+		// read off the other strand.
+		{"reverse substitution", rev, "1A>G", "209T>C"},
+		{"reverse range deletion", rev, "1_3del", "207_209del"},
+		{"reverse insertion", rev, "1_2insAT", "208_209insAT"},
+		{"reverse delins", rev, "1_2delinsGG", "208_209delinsCC"},
+		{"reverse intronic", rev, "10+1G>T", "199C>A"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := cdsChangeToGenomic(c.in, c.tx)
+			require.NoError(t, err)
+			assert.Equal(t, c.want, got)
+		})
+	}
+}
+
+func TestCDSChangeToGenomicRejectsWhatItCannotRead(t *testing.T) {
+	fwd := twoExonTranscript(1)
+	for _, in := range []string{"1weird", "999A>G", "", "1_"} {
+		if _, err := cdsChangeToGenomic(in, fwd); err == nil {
+			t.Errorf("expected %q to be rejected", in)
+		}
+	}
+}

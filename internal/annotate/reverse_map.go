@@ -128,19 +128,29 @@ func ReverseMapHGVScWithWarning(c *cache.Cache, geneOrTranscript string, cdsChan
 	result := FindHGVScTranscriptWithWarning(c, geneOrTranscript)
 	warning := result.Warning
 
-	// Try substitution first
+	// Plain coding substitutions and deletions are resolved directly, which
+	// also verifies the reference base against the transcript sequence.
 	if m := reCDSChange.FindStringSubmatch(cdsChange); m != nil {
 		variants, err := reverseMapHGVScSubstitution(c, geneOrTranscript, m)
 		return variants, warning, err
 	}
-
-	// Try deletion
 	if m := reCDSDeletion.FindStringSubmatch(cdsChange); m != nil {
 		variants, err := reverseMapHGVScDeletion(c, geneOrTranscript, m)
 		return variants, warning, err
 	}
 
-	return nil, warning, fmt.Errorf("unsupported CDS change notation %q (supported: substitutions like 35G>T, deletions like 923del or 100_102del)", cdsChange)
+	// Everything else -- intronic offsets, UTR coordinates, insertions,
+	// delins and duplications -- is resolved by rewriting the change as the
+	// genomic change it describes and reading that.
+	if result.Transcript == nil {
+		return nil, warning, fmt.Errorf("transcript %q not found", geneOrTranscript)
+	}
+	genomicChange, err := cdsChangeToGenomic(cdsChange, result.Transcript)
+	if err != nil {
+		return nil, warning, err
+	}
+	variants, err := ResolveHGVSg(c, result.Transcript.Chrom, genomicChange)
+	return variants, warning, err
 }
 
 // findHGVScTranscript resolves a gene name or transcript ID to a transcript.
