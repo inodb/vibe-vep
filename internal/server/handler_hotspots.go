@@ -28,10 +28,12 @@ type gnHotspot struct {
 	Version             string `json:"version,omitempty"`
 	TumorCount          int    `json:"tumorCount"`
 	Type                string `json:"type,omitempty"`
-	MissenseCount       int    `json:"missenseCount"`
-	TruncatingCount     int    `json:"truncatingCount"`
-	InframeCount        int    `json:"inframeCount"`
-	SpliceCount         int    `json:"spliceCount"`
+	// 3d hotspots carry no per-class breakdown; genome-nexus leaves these out
+	// of the response rather than reporting zeros.
+	MissenseCount   *int `json:"missenseCount,omitempty"`
+	TruncatingCount *int `json:"truncatingCount,omitempty"`
+	InframeCount    *int `json:"inframeCount,omitempty"`
+	SpliceCount     *int `json:"spliceCount,omitempty"`
 }
 
 // proteinLocation is a span of residues on a transcript, with the kind of
