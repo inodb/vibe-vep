@@ -101,6 +101,13 @@ Sizes are for GRCh37 and were measured, not estimated.
 | alphamissense | `AlphaMissense_hg19.tsv.gz` | [AlphaMissense](https://github.com/google-deepmind/alphamissense), CC BY 4.0 | 594 MB |
 | sift, polyphen | `translation_md5.txt.gz`, `protein_function_predictions.txt.gz` | Ensembl variation FTP, release matched to the GENCODE release | 4.1 GB |
 
+**Keep the downloaded files.** `vibe-vep prepare` builds its indexes from them,
+and it rebuilds whenever an index looks out of date. Deleting a raw file after
+its index exists means the next rebuild has nothing to read: it will now fail
+loudly rather than leave an empty index behind, but you will still be waiting
+on a re-download. Roughly 2.6 GB of raw files buys you a rebuild that takes
+minutes instead of an hour.
+
 `VUEs.json` is the one that moves: reVUE publishes new findings, and a Genome
 Nexus deployment re-reads the catalogue every time it starts. This server
 reads the downloaded copy instead, which keeps a run reproducible but means a
