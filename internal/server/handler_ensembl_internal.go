@@ -75,7 +75,7 @@ func (s *Server) handleEnsemblCanonicalByHugo(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	tx := pickCanonical(transcripts, isoformSource)
+	tx := pickCanonical(transcripts, isoformSource, s.OverrideTranscripts(isoformSource))
 	if tx == nil {
 		writeError(w, http.StatusNotFound, "no canonical transcript found for gene "+hugoSymbol)
 		return
@@ -178,11 +178,23 @@ func (s *Server) handlePfamDomainGet(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// pickCanonical selects the canonical transcript based on isoform override source.
-func pickCanonical(transcripts []*cache.Transcript, isoformSource string) *cache.Transcript {
-	useMSK := strings.EqualFold(isoformSource, "mskcc")
+// pickCanonical selects the canonical transcript for an isoform override
+// source.
+//
+// The override set is consulted first and is keyed by transcript id across all
+// genes, not per gene. That matters wherever the GENCODE release still carries
+// an older gene symbol than the override table -- GENCODE calls NSD2 "WHSC1",
+// so a per-gene lookup finds nothing and the gene silently loses its override.
+func pickCanonical(transcripts []*cache.Transcript, isoformSource string, overrides map[string]bool) *cache.Transcript {
+	for _, tx := range transcripts {
+		if overrides[stripTxVersion(tx.ID)] {
+			return tx
+		}
+	}
 
-	// First pass: look for the matching canonical flag.
+	// No override knows any of these transcripts: fall back to the flags the
+	// transcripts carry.
+	useMSK := strings.EqualFold(cache.NormalizeIsoformSource(isoformSource), cache.IsoformSourceMSKCC)
 	for _, tx := range transcripts {
 		if useMSK && tx.IsCanonicalMSK {
 			return tx
@@ -192,7 +204,6 @@ func pickCanonical(transcripts []*cache.Transcript, isoformSource string) *cache
 		}
 	}
 
-	// Fallback: try the other canonical flag.
 	for _, tx := range transcripts {
 		if tx.IsCanonicalEnsembl || tx.IsCanonicalMSK {
 			return tx
@@ -450,7 +461,8 @@ func (s *Server) handleEnsemblCanonicalGeneByHugo(w http.ResponseWriter, r *http
 	}
 
 	symbol := r.PathValue("hugoSymbol")
-	tx := findCanonicalByGene(ctx.cache, symbol)
+	source := r.URL.Query().Get("isoformOverrideSource")
+	tx := pickCanonical(ctx.cache.FindTranscriptsByGene(symbol), source, s.OverrideTranscripts(source))
 	if tx == nil {
 		writeError(w, http.StatusNotFound, "gene not found: "+symbol)
 		return
@@ -476,18 +488,8 @@ func (s *Server) handleEnsemblCanonicalGeneByEntrez(w http.ResponseWriter, r *ht
 	}
 
 	entrezID := r.PathValue("entrezGeneId")
-	var found *cache.Transcript
-	for _, chrom := range ctx.cache.Chromosomes() {
-		for _, t := range ctx.cache.FindTranscriptsByChrom(chrom) {
-			if t.EntrezGeneID == entrezID && t.IsCanonicalMSK {
-				found = t
-				break
-			}
-		}
-		if found != nil {
-			break
-		}
-	}
+	source := r.URL.Query().Get("isoformOverrideSource")
+	found := pickCanonical(ctx.cache.FindTranscriptsByEntrezID(entrezID), source, s.OverrideTranscripts(source))
 	if found == nil {
 		writeError(w, http.StatusNotFound, "gene not found for entrez ID: "+entrezID)
 		return
@@ -517,18 +519,6 @@ func (s *Server) handleCancerHotspotsTranscript(w http.ResponseWriter, r *http.R
 	// For now return empty array (matches GN behavior for most transcripts).
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte("[]\n"))
-}
-
-// findCanonicalByGene finds the MSK canonical transcript for a gene symbol.
-func findCanonicalByGene(c *cache.Cache, geneName string) *cache.Transcript {
-	for _, chrom := range c.Chromosomes() {
-		for _, t := range c.FindTranscriptsByChrom(chrom) {
-			if t.GeneName == geneName && t.IsCanonicalMSK {
-				return t
-			}
-		}
-	}
-	return nil
 }
 
 // handlePtmExperimentalGet handles GET /genome-nexus/{assembly}/ptm/experimental?ensemblTranscriptId={id}

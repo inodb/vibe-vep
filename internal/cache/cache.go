@@ -16,6 +16,8 @@ type Cache struct {
 	geneIDIndex map[string][]*Transcript
 	// proteinIndex maps Ensembl protein ID (ENSP...) to transcripts
 	proteinIndex map[string][]*Transcript
+	// entrezIndex maps Entrez gene ID to transcripts
+	entrezIndex map[string][]*Transcript
 	// trees stores interval trees indexed by chromosome (built by BuildIndex)
 	trees map[string]*IntervalTree
 }
@@ -35,6 +37,7 @@ func (c *Cache) AddTranscript(t *Transcript) {
 	c.geneIndex = nil
 	c.geneIDIndex = nil
 	c.proteinIndex = nil
+	c.entrezIndex = nil
 }
 
 // BuildIndex builds interval trees for all chromosomes for O(log n + k) lookup,
@@ -199,12 +202,21 @@ func (c *Cache) FindTranscriptsByProteinID(proteinID string) []*Transcript {
 	return c.proteinIndex[stripIDVersion(proteinID)]
 }
 
-// buildLookupIndexes constructs the gene name, gene ID and protein ID indexes
-// in one pass over the transcripts.
+// FindTranscriptsByEntrezID returns all transcripts for an Entrez gene ID.
+func (c *Cache) FindTranscriptsByEntrezID(entrezID string) []*Transcript {
+	if c.entrezIndex == nil {
+		c.buildLookupIndexes()
+	}
+	return c.entrezIndex[entrezID]
+}
+
+// buildLookupIndexes constructs the gene name, gene ID, protein ID and Entrez
+// gene ID indexes in one pass over the transcripts.
 func (c *Cache) buildLookupIndexes() {
 	c.geneIndex = make(map[string][]*Transcript)
 	c.geneIDIndex = make(map[string][]*Transcript)
 	c.proteinIndex = make(map[string][]*Transcript)
+	c.entrezIndex = make(map[string][]*Transcript)
 	for _, transcripts := range c.transcripts {
 		for _, t := range transcripts {
 			if t.GeneName != "" {
@@ -215,6 +227,9 @@ func (c *Cache) buildLookupIndexes() {
 			}
 			if id := stripIDVersion(t.ProteinID); id != "" {
 				c.proteinIndex[id] = append(c.proteinIndex[id], t)
+			}
+			if t.EntrezGeneID != "" {
+				c.entrezIndex[t.EntrezGeneID] = append(c.entrezIndex[t.EntrezGeneID], t)
 			}
 		}
 	}
