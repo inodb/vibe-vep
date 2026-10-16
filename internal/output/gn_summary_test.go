@@ -232,3 +232,28 @@ func TestResolveCanonicalNarrowsToTheRightGene(t *testing.T) {
 	require.NotNil(t, got)
 	assert.Equal(t, "ENST00000360203", got.TranscriptID)
 }
+
+func TestAlphaMissenseFromAnnotation(t *testing.T) {
+	// A scored missense substitution carries both halves of the call.
+	ann := &annotate.Annotation{}
+	ann.SetExtraKey("alphamissense.score", "0.9871")
+	ann.SetExtraKey("alphamissense.class", "likely_pathogenic")
+
+	am := alphaMissenseFrom(ann)
+	require.NotNil(t, am)
+	assert.Equal(t, "likely_pathogenic", am.Pathogenicity)
+	require.NotNil(t, am.Score)
+	assert.InDelta(t, 0.9871, *am.Score, 1e-9)
+
+	// A variant AlphaMissense does not score reports nothing at all, rather
+	// than an empty object.
+	assert.Nil(t, alphaMissenseFrom(&annotate.Annotation{}))
+
+	// A class with no parseable score still reports the class.
+	partial := &annotate.Annotation{}
+	partial.SetExtraKey("alphamissense.class", "ambiguous")
+	am = alphaMissenseFrom(partial)
+	require.NotNil(t, am)
+	assert.Equal(t, "ambiguous", am.Pathogenicity)
+	assert.Nil(t, am.Score)
+}

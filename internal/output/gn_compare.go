@@ -143,6 +143,8 @@ type GNAnnotationSummary struct {
 	TranscriptConsequenceSummary   *GNTranscriptConsequenceSummary  `json:"transcriptConsequenceSummary"`
 	TranscriptConsequenceSummaries []GNTranscriptConsequenceSummary `json:"transcriptConsequenceSummaries"`
 	TranscriptConsequences         []GNTranscriptConsequenceSummary `json:"transcriptConsequences"`
+
+	AlphaMissense *GNAlphaMissense `json:"alphaMissense,omitempty"`
 }
 
 // GNGenomicLocation represents a genomic location in the annotation summary.
@@ -176,6 +178,8 @@ type GNTranscriptConsequenceSummary struct {
 	SIFTScore             *float64        `json:"siftScore,omitempty"`
 	SIFTPrediction        string          `json:"siftPrediction,omitempty"`
 
+	AlphaMissense *GNAlphaMissense `json:"alphaMissense,omitempty"`
+
 	// UniprotID names the protein entry the transcript translates to, which
 	// clients use to line a variant up against protein-level annotation.
 	UniprotID string `json:"uniprotId,omitempty"`
@@ -183,6 +187,14 @@ type GNTranscriptConsequenceSummary struct {
 	// IsVue marks a protein change that came from reVUE's published evidence
 	// rather than from the sequence.
 	IsVue bool `json:"isVue,omitempty"`
+}
+
+// GNAlphaMissense is AlphaMissense's pathogenicity call for a missense
+// substitution. genome-nexus takes it from VEP's AlphaMissense plugin; here it
+// comes from the locally indexed table.
+type GNAlphaMissense struct {
+	Score         *float64 `json:"score,omitempty"`
+	Pathogenicity string   `json:"pathogenicity,omitempty"`
 }
 
 // GNIntegerRange represents a start/end integer range.
@@ -221,6 +233,8 @@ type GNTranscriptConsequence struct {
 	SIFTPrediction      string   `json:"sift_prediction"`
 	PolyPhenScore       *float64 `json:"polyphen_score"`
 	PolyPhenPrediction  string   `json:"polyphen_prediction"`
+
+	AlphaMissense *GNAlphaMissense `json:"alphaMissense,omitempty"`
 }
 
 // ParseGNAnnotation parses a JSON line into a GNAnnotation.

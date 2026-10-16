@@ -141,6 +141,7 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 			}
 		}
 		tc.PolyPhenPrediction = ann.GetExtraKey("polyphen.prediction")
+		tc.AlphaMissense = alphaMissenseFrom(ann)
 
 		result.TranscriptConsequences = append(result.TranscriptConsequences, tc)
 	}
@@ -306,6 +307,9 @@ func buildAnnotationSummary(result *GNAnnotation, anns []*annotate.Annotation, c
 	})
 	summary.TranscriptConsequenceSummaries = summaries
 	summary.TranscriptConsequenceSummary = canonicalSummary
+	if canonicalSummary != nil {
+		summary.AlphaMissense = canonicalSummary.AlphaMissense
+	}
 	// Deprecated field: only canonical transcript.
 	if canonicalSummary != nil {
 		summary.TranscriptConsequences = []GNTranscriptConsequenceSummary{*canonicalSummary}
@@ -355,6 +359,7 @@ func buildTranscriptConsequenceSummary(tc *GNTranscriptConsequence, ann *annotat
 		SIFTPrediction:        tc.SIFTPrediction,
 		PolyphenScore:         tc.PolyPhenScore,
 		PolyphenPrediction:    tc.PolyPhenPrediction,
+		AlphaMissense:         tc.AlphaMissense,
 	}
 
 	// genome-nexus's RefSeqResolver reports the first RefSeq accession only.
@@ -599,4 +604,20 @@ func isEmptyAllele(allele string) bool {
 		return true
 	}
 	return strings.Contains(allele, "--")
+}
+
+// alphaMissenseFrom reads AlphaMissense's call off an annotation, or nothing
+// where the variant is not a missense substitution it scores.
+func alphaMissenseFrom(ann *annotate.Annotation) *GNAlphaMissense {
+	class := ann.GetExtraKey("alphamissense.class")
+	raw := ann.GetExtraKey("alphamissense.score")
+	if class == "" && raw == "" {
+		return nil
+	}
+
+	am := &GNAlphaMissense{Pathogenicity: class}
+	if score, err := strconv.ParseFloat(raw, 64); err == nil {
+		am.Score = &score
+	}
+	return am
 }
