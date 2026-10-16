@@ -423,6 +423,13 @@ func loadOverrideTranscripts(logger *zap.Logger, srv *server.Server, assemblies 
 		}
 		logger.Info("loaded isoform overrides", counts...)
 
+		if meta, err := cache.LoadGeneMetadata(canonicalPath); err != nil {
+			logger.Warn("could not load gene metadata", zap.Error(err))
+		} else {
+			srv.SetGeneMetadata(meta)
+			logger.Info("loaded gene metadata", zap.Int("genes", len(meta)))
+		}
+
 		if symbols, err := cache.LoadPreviousGeneSymbols(canonicalPath); err != nil {
 			logger.Warn("could not load previous gene symbols", zap.Error(err))
 		} else {

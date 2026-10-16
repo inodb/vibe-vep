@@ -9,6 +9,7 @@ import (
 	"github.com/inodb/vibe-vep/internal/datasource/pfam"
 	"github.com/inodb/vibe-vep/internal/datasource/ptm"
 	"github.com/inodb/vibe-vep/internal/datasource/uniprot"
+	"github.com/inodb/vibe-vep/internal/output"
 )
 
 // ensemblTranscriptResponse is the JSON response for canonical transcript / transcript lookup endpoints.
@@ -457,11 +458,15 @@ func (ctx *assemblyContext) transcriptRecord(tx *cache.Transcript) any {
 }
 
 // ensemblGeneResponse is the JSON response for canonical gene lookups.
+// ensemblGeneResponse is the JSON response for canonical gene lookups,
+// mirroring genome-nexus's EnsemblGene. It names no protein: a gene has one
+// per transcript, and the model carries none.
 type ensemblGeneResponse struct {
-	GeneID       string `json:"geneId"`
-	HugoSymbol   string `json:"hugoSymbol"`
-	EntrezGeneID string `json:"entrezGeneId,omitempty"`
-	UniprotID    string `json:"uniprotId,omitempty"`
+	GeneID          string   `json:"geneId"`
+	HugoSymbol      string   `json:"hugoSymbol"`
+	Synonyms        []string `json:"synonyms,omitempty"`
+	PreviousSymbols []string `json:"previousSymbols,omitempty"`
+	EntrezGeneID    string   `json:"entrezGeneId,omitempty"`
 }
 
 // handleEnsemblCanonicalGeneByHugo handles GET /genome-nexus/{assembly}/ensembl/canonical-gene/hgnc/{hugoSymbol}
@@ -479,16 +484,7 @@ func (s *Server) handleEnsemblCanonicalGeneByHugo(w http.ResponseWriter, r *http
 		return
 	}
 
-	uniprotID := ""
-	if ctx.uniprot != nil {
-		uniprotID = ctx.uniprot.LookupByTranscript(tx.ID)
-	}
-	writeJSON(w, http.StatusOK, ensemblGeneResponse{
-		GeneID:       tx.GeneID,
-		HugoSymbol:   tx.GeneName,
-		EntrezGeneID: tx.EntrezGeneID,
-		UniprotID:    uniprotID,
-	})
+	writeJSON(w, http.StatusOK, s.geneResponseFor(tx))
 }
 
 // handleEnsemblCanonicalGeneByEntrez handles GET /genome-nexus/{assembly}/ensembl/canonical-gene/entrez/{entrezGeneId}
@@ -506,16 +502,7 @@ func (s *Server) handleEnsemblCanonicalGeneByEntrez(w http.ResponseWriter, r *ht
 		return
 	}
 
-	entrezUniprotID := ""
-	if ctx.uniprot != nil {
-		entrezUniprotID = ctx.uniprot.LookupByTranscript(found.ID)
-	}
-	writeJSON(w, http.StatusOK, ensemblGeneResponse{
-		GeneID:       found.GeneID,
-		HugoSymbol:   found.GeneName,
-		EntrezGeneID: found.EntrezGeneID,
-		UniprotID:    entrezUniprotID,
-	})
+	writeJSON(w, http.StatusOK, s.geneResponseFor(found))
 }
 
 // handlePtmExperimentalGet handles GET /genome-nexus/{assembly}/ptm/experimental?ensemblTranscriptId={id}
@@ -598,17 +585,18 @@ func decodeStringList(w http.ResponseWriter, r *http.Request) ([]string, bool) {
 }
 
 // geneResponseFor renders a gene from the transcript chosen to represent it.
-func geneResponseFor(ctx *assemblyContext, tx *cache.Transcript) ensemblGeneResponse {
-	uniprotID := ""
-	if ctx.uniprot != nil {
-		uniprotID = ctx.uniprot.LookupByTranscript(tx.ID)
-	}
-	return ensemblGeneResponse{
+func (s *Server) geneResponseFor(tx *cache.Transcript) ensemblGeneResponse {
+	symbol := output.OfficialGeneSymbol(tx.GeneName, s.OfficialGeneSymbols())
+	resp := ensemblGeneResponse{
 		GeneID:       tx.GeneID,
-		HugoSymbol:   tx.GeneName,
+		HugoSymbol:   symbol,
 		EntrezGeneID: tx.EntrezGeneID,
-		UniprotID:    uniprotID,
 	}
+	if meta, ok := s.GeneMetadata(symbol); ok {
+		resp.Synonyms = meta.Synonyms
+		resp.PreviousSymbols = meta.PreviousSymbols
+	}
+	return resp
 }
 
 // handleEnsemblCanonicalByHugoPost handles POST
@@ -676,7 +664,7 @@ func (s *Server) canonicalGenesPost(w http.ResponseWriter, r *http.Request, find
 		if tx == nil {
 			continue
 		}
-		results = append(results, geneResponseFor(ctx, tx))
+		results = append(results, s.geneResponseFor(tx))
 	}
 	writeJSON(w, http.StatusOK, results)
 }

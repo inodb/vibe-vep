@@ -62,6 +62,11 @@ type Server struct {
 	// a gene the GENCODE release still calls WHSC1 is reported as NSD2.
 	officialGeneSymbols map[string]string
 
+	// geneMetadata holds what the biomart HGNC table says about each gene
+	// beyond its canonical transcript: its HGNC id, which VEP reports on
+	// every transcript consequence, and the other names it answers to.
+	geneMetadata map[string]cache.GeneMetadata
+
 	// revue holds the published protein effects that replace the predicted
 	// one for variants whose real effect the sequence does not show.
 	revue *revue.Store
@@ -157,6 +162,30 @@ func (s *Server) OfficialGeneSymbols() map[string]string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.officialGeneSymbols
+}
+
+// SetGeneMetadata records the biomart HGNC table's gene identifiers and
+// alternative names, keyed by approved symbol.
+func (s *Server) SetGeneMetadata(meta map[string]cache.GeneMetadata) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.geneMetadata = meta
+}
+
+// GeneMetadata returns what is known about a gene by its approved symbol,
+// following the retired-symbol map first so that a GENCODE release still
+// naming a gene WHSC1 finds NSD2's entry.
+func (s *Server) GeneMetadata(symbol string) (cache.GeneMetadata, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if meta, ok := s.geneMetadata[symbol]; ok {
+		return meta, true
+	}
+	if official, ok := s.officialGeneSymbols[symbol]; ok {
+		meta, found := s.geneMetadata[official]
+		return meta, found
+	}
+	return cache.GeneMetadata{}, false
 }
 
 // SetRevue records the reVUE catalogue of revised protein effects.

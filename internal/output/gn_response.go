@@ -38,6 +38,11 @@ type GNMarshalOptions struct {
 	// UniprotIDs maps a transcript to the protein entry it translates to.
 	UniprotIDs func(transcriptID string) string
 
+	// HGNCIDs gives a gene's HGNC identifier by symbol, which VEP reports on
+	// every transcript consequence. The GENCODE GTF has no such attribute,
+	// so it comes from the biomart HGNC table instead.
+	HGNCIDs func(symbol string) string
+
 	// IncludePtms adds the post-translational modification sites on each
 	// transcript, and PtmLookup supplies them.
 	IncludePtms bool
@@ -113,7 +118,7 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 			TranscriptID:        stripVersion(ann.TranscriptID),
 			GeneSymbol:          ann.GeneName,
 			GeneID:              ann.GeneID,
-			HGNCId:              ann.HGNCId,
+			HGNCId:              hgncID(opt, ann),
 			ProteinID:           ann.ProteinID,
 			ConsequenceTerms:    splitConsequence(ann.Consequence),
 			Impact:              ann.Impact,
@@ -362,7 +367,7 @@ func buildTranscriptConsequenceSummary(tc *GNTranscriptConsequence, ann *annotat
 		AminoAcids:     tc.AminoAcids,
 		AminoAcidRef:   aaRef,
 		AminoAcidAlt:   aaAlt,
-		HugoGeneSymbol: officialGeneSymbol(tc.GeneSymbol, opt.OfficialGeneSymbols),
+		HugoGeneSymbol: OfficialGeneSymbol(tc.GeneSymbol, opt.OfficialGeneSymbols),
 		HGVSpShort:     hgvspShort,
 		HGVSp:          gnResolveHgvsp(tc),
 		HGVSc:          tc.HGVSc,
@@ -538,9 +543,22 @@ func splitAminoAcids(aa string) (ref, alt string) {
 	return aa, ""
 }
 
-// officialGeneSymbol reports a gene by its approved symbol. A symbol with no
+// hgncID reports the HGNC identifier for an annotation's gene. GENCODE
+// supplies it on some assemblies; where it does not, the biomart HGNC table
+// does, looked up by the gene's approved symbol.
+func hgncID(opt GNMarshalOptions, ann *annotate.Annotation) string {
+	if ann.HGNCId != "" {
+		return strings.TrimPrefix(ann.HGNCId, "HGNC:")
+	}
+	if opt.HGNCIDs == nil {
+		return ""
+	}
+	return opt.HGNCIDs(OfficialGeneSymbol(ann.GeneName, opt.OfficialGeneSymbols))
+}
+
+// OfficialGeneSymbol reports a gene by its approved symbol. A symbol with no
 // known replacement, which is nearly all of them, is returned unchanged.
-func officialGeneSymbol(symbol string, officialGeneSymbols map[string]string) string {
+func OfficialGeneSymbol(symbol string, officialGeneSymbols map[string]string) string {
 	if official, ok := officialGeneSymbols[symbol]; ok {
 		return official
 	}

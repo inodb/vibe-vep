@@ -368,3 +368,74 @@ func parseCanonicalOverridesBySource(reader io.Reader) (map[string]CanonicalOver
 	}
 	return bySource, nil
 }
+
+// GeneMetadata is what the biomart HGNC table says about a gene beyond its
+// canonical transcript: the identifiers and alternative names the /ensembl
+// gene endpoints and VEP's hgnc_id field report.
+type GeneMetadata struct {
+	// HGNCID is the numeric part of the HGNC identifier. The table writes it
+	// as "HGNC:1097"; VEP reports it, and so genome-nexus does, as "1097".
+	HGNCID string
+
+	// Synonyms and PreviousSymbols are the other names a gene answers to,
+	// in the order the table lists them.
+	Synonyms        []string
+	PreviousSymbols []string
+}
+
+const (
+	biomartHGNCIDCol   = 14 // hgnc_id
+	biomartSynonymsCol = 21 // synonyms
+)
+
+// LoadGeneMetadata reads the biomart HGNC table, keyed by approved symbol.
+func LoadGeneMetadata(path string) (map[string]GeneMetadata, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open biomart canonicals: %w", err)
+	}
+	defer f.Close()
+	return parseGeneMetadata(f)
+}
+
+// splitNameList reads one of the table's comma-separated name lists.
+func splitNameList(s string) []string {
+	var out []string
+	for _, name := range strings.Split(s, ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func parseGeneMetadata(reader io.Reader) (map[string]GeneMetadata, error) {
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+
+	// Header.
+	if !scanner.Scan() {
+		return map[string]GeneMetadata{}, nil
+	}
+
+	meta := make(map[string]GeneMetadata)
+	for scanner.Scan() {
+		fields := strings.Split(scanner.Text(), "\t")
+		if len(fields) <= biomartPrevSymbolsCol {
+			continue
+		}
+		symbol := strings.TrimSpace(fields[biomartGeneCol])
+		if symbol == "" {
+			continue
+		}
+		meta[symbol] = GeneMetadata{
+			HGNCID:          strings.TrimPrefix(strings.TrimSpace(fields[biomartHGNCIDCol]), "HGNC:"),
+			Synonyms:        splitNameList(fields[biomartSynonymsCol]),
+			PreviousSymbols: splitNameList(fields[biomartPrevSymbolsCol]),
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan biomart canonicals: %w", err)
+	}
+	return meta, nil
+}

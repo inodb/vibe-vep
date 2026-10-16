@@ -350,10 +350,14 @@ func (s *Server) parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions 
 		CancerGenes:              cancer,
 		CuratedGenes:             curated,
 		OfficialGeneSymbols:      s.OfficialGeneSymbols(),
-		Revue:                    s.Revue(),
-		UniprotIDs:               s.uniprotLookup(r),
-		IncludePtms:              strings.Contains(fields, "ptms"),
-		PtmLookup:                s.ptmLookup(r),
+		HGNCIDs: func(symbol string) string {
+			meta, _ := s.GeneMetadata(symbol)
+			return meta.HGNCID
+		},
+		Revue:       s.Revue(),
+		UniprotIDs:  s.uniprotLookup(r),
+		IncludePtms: strings.Contains(fields, "ptms"),
+		PtmLookup:   s.ptmLookup(r),
 		// genome-nexus is deployed with overwrite_by_confirmed_revue_only on,
 		// so an entry still under review does not displace a prediction.
 		RevueConfirmedOnly: true,
