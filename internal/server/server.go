@@ -11,6 +11,7 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/datasource/ensembltranscript"
 	"github.com/inodb/vibe-vep/internal/datasource/hotspots"
 	"github.com/inodb/vibe-vep/internal/datasource/mutationassessor"
 	"github.com/inodb/vibe-vep/internal/datasource/myvariantinfo"
@@ -31,6 +32,10 @@ type assemblyContext struct {
 	uniprot   *uniprot.Store
 	hotspots  *hotspots.Store
 	mutAssess *mutationassessor.Store
+	// ensemblTx holds the Ensembl transcript records the /ensembl endpoints
+	// report. They cannot be derived from the GENCODE cache, so without it
+	// those endpoints answer from the cache and omit what it cannot supply.
+	ensemblTx *ensembltranscript.Store
 	assembly  string // normalized: "GRCh38"
 }
 
@@ -80,6 +85,16 @@ func (s *Server) SetHotspotsStore(assembly string, store *hotspots.Store) {
 	defer s.mu.Unlock()
 	if ctx, ok := s.assemblies[strings.ToLower(assembly)]; ok {
 		ctx.hotspots = store
+	}
+}
+
+// SetEnsemblTranscriptStore records the Ensembl transcript records for an
+// assembly, which the /ensembl endpoints report.
+func (s *Server) SetEnsemblTranscriptStore(assembly string, store *ensembltranscript.Store) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ctx, ok := s.assemblies[strings.ToLower(assembly)]; ok {
+		ctx.ensemblTx = store
 	}
 }
 

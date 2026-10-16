@@ -330,6 +330,20 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 		}
 	}
 
+	// Download the Ensembl transcript records. The /ensembl endpoints report
+	// CCDS and RefSeq accessions, exon identifiers and Pfam domain ranges,
+	// none of which the GENCODE GTF carries, so they come from the same file
+	// genome-nexus loads into its ensembl.transcript collection.
+	{
+		fmt.Printf("\nDownloading Ensembl transcript records...\n")
+		txFile := filepath.Join(rawDir, EnsemblTranscriptsFileName)
+		if sum, err := downloadFile(getEnsemblTranscriptsURL(assembly), txFile); err != nil {
+			logger.Warn("could not download ensembl transcript records", zap.Error(err))
+		} else {
+			addChecksum(txFile, sum)
+		}
+	}
+
 	// Download the per-source version table. It names the release of every
 	// curated source, and is what /version reports.
 	{
@@ -518,20 +532,22 @@ func formatSize(bytes int64) string {
 
 // Annotation source data file names.
 const (
-	ClinVarFileName           = "clinvar.vcf.gz"
-	SignalFileName            = "signaldb_all_variants_frequencies.txt"
-	DbSnpFileName             = "dbsnp.vcf.gz"
-	EnsemblPredDBName         = "ensembl_sift_polyphen.sqlite"
-	EnsemblTranslationMD5Name = "translation_md5.txt.gz"
-	EnsemblPredictionsName    = "protein_function_predictions.txt.gz"
-	PfamAFileName             = "pfamA.txt"
-	PfamBiomartFileName       = "ensembl_biomart_pfam.txt"
-	PtmFileName               = "ptm.json.gz"
-	UniprotMappingFileName    = "enst_to_uniprot_mapping_id.txt"
-	CancerGeneListFileName    = "cancerGeneList.tsv"
-	RevueFileName             = "VUEs.json"
-	HotspotsFileName          = "hotspots_v2_and_3d.txt"
-	MutationAssessorDBName    = "mutation_assessor.sqlite"
+	ClinVarFileName            = "clinvar.vcf.gz"
+	SignalFileName             = "signaldb_all_variants_frequencies.txt"
+	DbSnpFileName              = "dbsnp.vcf.gz"
+	EnsemblPredDBName          = "ensembl_sift_polyphen.sqlite"
+	EnsemblTranslationMD5Name  = "translation_md5.txt.gz"
+	EnsemblPredictionsName     = "protein_function_predictions.txt.gz"
+	PfamAFileName              = "pfamA.txt"
+	PfamBiomartFileName        = "ensembl_biomart_pfam.txt"
+	PtmFileName                = "ptm.json.gz"
+	UniprotMappingFileName     = "enst_to_uniprot_mapping_id.txt"
+	CancerGeneListFileName     = "cancerGeneList.tsv"
+	RevueFileName              = "VUEs.json"
+	HotspotsFileName           = "hotspots_v2_and_3d.txt"
+	EnsemblTranscriptsFileName = "ensembl_biomart_transcripts.json.gz"
+	EnsemblTranscriptDBName    = "ensembl_transcripts.sqlite"
+	MutationAssessorDBName     = "mutation_assessor.sqlite"
 )
 
 // GnomadFileName returns the expected filename for the given assembly.
@@ -691,6 +707,12 @@ func MutationAssessorFiles(rawDir string) []string {
 // getHotspotsURL returns the download URL for the cancer hotspots table.
 func getHotspotsURL(assembly string) string {
 	return importerExportURL(assembly, HotspotsFileName)
+}
+
+// getEnsemblTranscriptsURL returns the download URL for the Ensembl
+// transcript records the /ensembl endpoints serve.
+func getEnsemblTranscriptsURL(assembly string) string {
+	return importerExportURL(assembly, EnsemblTranscriptsFileName)
 }
 
 // getAnnotationVersionURL returns the URL of the per-source version table

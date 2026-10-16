@@ -16,6 +16,7 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/datasource/ensembltranscript"
 	"github.com/inodb/vibe-vep/internal/datasource/hotspots"
 	"github.com/inodb/vibe-vep/internal/datasource/mutationassessor"
 	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
@@ -177,6 +178,11 @@ func runServe(logger *zap.Logger, cfg runServeConfig) error {
 		// Load the cancer hotspots table if available.
 		if hotspotsStore := loadHotspotsStore(logger, normalized); hotspotsStore != nil {
 			srv.SetHotspotsStore(normalized, hotspotsStore)
+		}
+
+		// Load the Ensembl transcript records if the index was built.
+		if txStore := loadEnsemblTranscriptStore(logger, normalized); txStore != nil {
+			srv.SetEnsemblTranscriptStore(normalized, txStore)
 		}
 
 		// Load Mutation Assessor predictions if the index was built.
@@ -508,6 +514,26 @@ func loadHotspotsStore(logger *zap.Logger, assembly string) *hotspots.Store {
 		zap.String("path", path),
 		zap.Int("transcripts", store.TranscriptCount()),
 		zap.Int("hotspots", store.HotspotCount()))
+	return store
+}
+
+// loadEnsemblTranscriptStore opens the Ensembl transcript index, if one was
+// built. The /ensembl endpoints degrade to the GENCODE cache without it, so a
+// missing index is not an error.
+func loadEnsemblTranscriptStore(logger *zap.Logger, assembly string) *ensembltranscript.Store {
+	rawDir := RawDir(assembly)
+	if rawDir == "" {
+		return nil
+	}
+	path := filepath.Join(filepath.Dir(rawDir), EnsemblTranscriptDBName)
+	store, err := ensembltranscript.Open(path)
+	if err != nil {
+		logger.Debug("ensembl transcript index not available, serving /ensembl from the GENCODE cache",
+			zap.String("path", path), zap.Error(err))
+		return nil
+	}
+	logger.Info("loaded ensembl transcript records",
+		zap.String("path", path), zap.Int("transcripts", store.Count()))
 	return store
 }
 

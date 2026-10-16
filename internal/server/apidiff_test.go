@@ -96,7 +96,7 @@ func TestAPIDiff(t *testing.T) {
 				continue
 			}
 			got := encodeCapture(status, body, c.SortKey)
-			want, got = reconcileOracleGaps(want, got)
+			want, got = reconcile(want, got)
 			if bytes.Equal(got, want) {
 				same++
 				continue
@@ -178,10 +178,16 @@ var oracleGapKeys = map[string]string{
 	"alphaMissense": "oracle runs VEP without the AlphaMissense plugin",
 }
 
-// reconcileOracleGaps re-encodes both sides with the declared gaps removed
-// from ours wherever the oracle is silent about them. Responses that are not
-// JSON are returned untouched.
-func reconcileOracleGaps(want, got []byte) ([]byte, []byte) {
+// reconcile re-encodes both sides so they are comparable: arrays with no
+// meaningful order are sorted, and the declared oracle gaps are removed from
+// ours wherever the oracle is silent about them. Responses that are not JSON
+// are returned untouched.
+//
+// A capture is normalised here rather than trusted as written, because it was
+// recorded by whatever version of this harness ran at the time. Changing a
+// normalisation rule must change both sides at once, or the rule reads as a
+// difference in every captured case.
+func reconcile(want, got []byte) ([]byte, []byte) {
 	wantStatus, wantVal, ok := decodeCapture(want)
 	if !ok {
 		return want, got
@@ -190,6 +196,8 @@ func reconcileOracleGaps(want, got []byte) ([]byte, []byte) {
 	if !ok {
 		return want, got
 	}
+	sortUnorderedArrays(wantVal)
+	sortUnorderedArrays(gotVal)
 	pruneOracleGaps(wantVal, gotVal)
 	return reencode(wantStatus, wantVal), reencode(gotStatus, gotVal)
 }

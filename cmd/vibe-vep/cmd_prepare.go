@@ -8,6 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/inodb/vibe-vep/internal/datasource/ensembltranscript"
 	"github.com/inodb/vibe-vep/internal/datasource/mutationassessor"
 	"github.com/inodb/vibe-vep/internal/genomicindex"
 	"github.com/spf13/cobra"
@@ -67,6 +68,11 @@ index so subsequent annotate/compare runs start instantly.`,
 				logger.Info("genomic index already up to date")
 			}
 
+			// Build the Ensembl transcript index, if its file was fetched.
+			if err := prepareEnsemblTranscripts(logger, cacheDir); err != nil {
+				return err
+			}
+
 			// Build the Mutation Assessor index, if its files were fetched.
 			if err := prepareMutationAssessor(logger, cacheDir); err != nil {
 				return err
@@ -79,6 +85,29 @@ index so subsequent annotate/compare runs start instantly.`,
 	cmd.Flags().StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
 
 	return cmd
+}
+
+// prepareEnsemblTranscripts builds the Ensembl transcript index the /ensembl
+// endpoints report from. A missing source file is not an error: those
+// endpoints fall back to the GENCODE cache, which answers with less.
+func prepareEnsemblTranscripts(logger *zap.Logger, cacheDir string) error {
+	source := filepath.Join(rawDirForCache(cacheDir), EnsemblTranscriptsFileName)
+	if _, err := os.Stat(source); err != nil {
+		logger.Info("Ensembl transcript records not downloaded, skipping",
+			zap.String("missing", source))
+		return nil
+	}
+
+	dbPath := filepath.Join(cacheDir, EnsemblTranscriptDBName)
+	logger.Info("building Ensembl transcript index...")
+	start := time.Now()
+	if err := ensembltranscript.Build(source, dbPath, func(msg string, args ...any) {
+		logger.Info(fmt.Sprintf(msg, args...))
+	}); err != nil {
+		return fmt.Errorf("build Ensembl transcript index: %w", err)
+	}
+	logger.Info("built Ensembl transcript index", zap.Duration("elapsed", time.Since(start)))
+	return nil
 }
 
 // prepareMutationAssessor builds the Mutation Assessor index from the

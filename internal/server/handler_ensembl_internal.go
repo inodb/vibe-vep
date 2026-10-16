@@ -81,9 +81,8 @@ func (s *Server) handleEnsemblCanonicalByHugo(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	resp := buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(ctx.transcriptRecord(tx))
 }
 
 // handleEnsemblTranscriptByID handles GET /genome-nexus/{assembly}/ensembl/transcript/{transcriptId}
@@ -110,9 +109,8 @@ func (s *Server) handleEnsemblTranscriptByID(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	resp := buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(ctx.transcriptRecord(tx))
 }
 
 // handlePfamDomainPost handles POST /genome-nexus/{assembly}/pfam/domain
@@ -359,7 +357,7 @@ func (s *Server) handleEnsemblTranscriptPost(w http.ResponseWriter, r *http.Requ
 	// The four lists are alternatives, not a union: genome-nexus takes the
 	// first non-empty one and ignores the rest, in this order. Sending both
 	// transcriptIds and hugoSymbols returns the transcripts, not both sets.
-	results := make([]ensemblTranscriptResponse, 0)
+	results := make([]any, 0)
 	switch {
 	case len(filter.TranscriptIDs) > 0:
 		for _, txID := range filter.TranscriptIDs {
@@ -368,7 +366,7 @@ func (s *Server) handleEnsemblTranscriptPost(w http.ResponseWriter, r *http.Requ
 				tx = ctx.cache.GetTranscriptByPrefix(txID)
 			}
 			if tx != nil {
-				results = append(results, buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot))
+				results = append(results, ctx.transcriptRecord(tx))
 			}
 		}
 	case len(filter.GeneIDs) > 0:
@@ -407,7 +405,7 @@ func (s *Server) handleEnsemblTranscriptGet(w http.ResponseWriter, r *http.Reque
 	proteinID := q.Get("proteinId")
 	hugoSymbol := q.Get("hugoSymbol")
 
-	results := make([]ensemblTranscriptResponse, 0)
+	results := make([]any, 0)
 	if geneID == "" && proteinID == "" && hugoSymbol == "" {
 		writeJSON(w, http.StatusOK, results)
 		return
@@ -431,18 +429,31 @@ func (s *Server) handleEnsemblTranscriptGet(w http.ResponseWriter, r *http.Reque
 		if hugoSymbol != "" && tx.GeneName != hugoSymbol {
 			continue
 		}
-		results = append(results, buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot))
+		results = append(results, ctx.transcriptRecord(tx))
 	}
 
 	writeJSON(w, http.StatusOK, results)
 }
 
 // appendTranscripts renders a set of transcripts into the response slice.
-func appendTranscripts(dst []ensemblTranscriptResponse, ctx *assemblyContext, txs []*cache.Transcript) []ensemblTranscriptResponse {
+func appendTranscripts(dst []any, ctx *assemblyContext, txs []*cache.Transcript) []any {
 	for _, tx := range txs {
-		dst = append(dst, buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot))
+		dst = append(dst, ctx.transcriptRecord(tx))
 	}
 	return dst
+}
+
+// transcriptRecord returns a transcript as the /ensembl endpoints report it.
+//
+// The record comes from genome-nexus-importer's own export where that index
+// was built, so the answer matches genome-nexus exactly. Without it the record
+// is derived from the GENCODE cache instead, which has no CCDS or RefSeq
+// accession, no exon identifiers and no Pfam domains to report.
+func (ctx *assemblyContext) transcriptRecord(tx *cache.Transcript) any {
+	if doc, ok := ctx.ensemblTx.ByTranscriptID(tx.ID); ok {
+		return doc
+	}
+	return buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot)
 }
 
 // ensemblGeneResponse is the JSON response for canonical gene lookups.
@@ -617,13 +628,13 @@ func (s *Server) handleEnsemblCanonicalByHugoPost(w http.ResponseWriter, r *http
 	isoformSource := r.URL.Query().Get("isoformOverrideSource")
 	overrides := s.OverrideTranscripts(isoformSource)
 
-	results := make([]ensemblTranscriptResponse, 0, len(symbols))
+	results := make([]any, 0, len(symbols))
 	for _, symbol := range symbols {
 		tx := pickCanonical(ctx.cache.FindTranscriptsByGene(symbol), isoformSource, overrides)
 		if tx == nil {
 			continue
 		}
-		results = append(results, buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot))
+		results = append(results, ctx.transcriptRecord(tx))
 	}
 	writeJSON(w, http.StatusOK, results)
 }
