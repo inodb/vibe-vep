@@ -2,6 +2,12 @@
 
 package server
 
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
+
 // The corpus the differential harness drives both servers with. It is checked
 // in rather than generated so that a run is reproducible and a difference can
 // be chased back to a named case.
@@ -51,3 +57,92 @@ var hardTranscripts = []string{
 
 // hardSymbols include a retired symbol, a readthrough, and one no gene claims.
 var hardSymbols = []string{"BRAF", "TP53", "NSD2", "WHSC1", "RTEL1", "RTEL1-TNFRSF6B", "CDKN2A", "NOT_A_GENE"}
+
+// apiCases expands the corpus into one request per endpoint per input.
+func apiCases() []apiCase {
+	var cases []apiCase
+	add := func(name, method, path, body, sortKey string) {
+		cases = append(cases, apiCase{Name: name, Method: method, Path: path, Body: body, SortKey: sortKey})
+	}
+
+	// Annotation, the endpoints that carry the most surface.
+	for _, v := range hardVariants {
+		add("annotation genomic GET "+v.name, "GET",
+			"/annotation/genomic/"+v.genomic+"?fields=annotation_summary&isoformOverrideSource=mskcc", "", "")
+		add("annotation genomic GET all fields "+v.name, "GET",
+			"/annotation/genomic/"+v.genomic+
+				"?fields=annotation_summary,clinvar,hotspots,ptms,signal&isoformOverrideSource=mskcc", "", "")
+	}
+	add("annotation genomic POST batch", "POST",
+		"/annotation/genomic?fields=annotation_summary&isoformOverrideSource=mskcc",
+		genomicLocationsJSON(), "")
+
+	// The isoform override sources, which pick different transcripts.
+	for _, source := range []string{"mskcc", "uniprot", "ensembl", "genome_nexus", ""} {
+		label := source
+		if label == "" {
+			label = "unset"
+		}
+		add("canonical transcript CDKN2A isoform "+label, "GET",
+			"/ensembl/canonical-transcript/hgnc/CDKN2A?isoformOverrideSource="+source, "", "")
+	}
+
+	for _, sym := range hardSymbols {
+		add("canonical transcript "+sym, "GET", "/ensembl/canonical-transcript/hgnc/"+sym, "", "")
+		add("canonical gene "+sym, "GET", "/ensembl/canonical-gene/hgnc/"+sym, "", "")
+	}
+	add("canonical transcript batch", "POST", "/ensembl/canonical-transcript/hgnc",
+		jsonList(hardSymbols), "transcriptId")
+	add("canonical gene batch", "POST", "/ensembl/canonical-gene/hgnc",
+		jsonList(hardSymbols), "hugoSymbol")
+
+	for _, tx := range hardTranscripts {
+		add("transcript "+tx, "GET", "/ensembl/transcript/"+tx, "", "")
+		add("ptms "+tx, "GET", "/ptm/experimental?ensemblTranscriptId="+tx, "", "")
+		add("hotspots transcript "+tx, "GET", "/cancer_hotspots/transcript/"+tx, "", "residue")
+		add("hotspots transcript v2 "+tx, "GET", "/cancer_hotspots/transcript/"+tx+"?version=v2", "", "residue")
+	}
+	add("transcript filter by ids", "POST", "/ensembl/transcript",
+		`{"transcriptIds":`+jsonList(hardTranscripts)+`}`, "transcriptId")
+	add("transcript filter by symbols", "POST", "/ensembl/transcript",
+		`{"hugoSymbols":["BRAF"]}`, "transcriptId")
+	add("transcript filter empty", "POST", "/ensembl/transcript", `{}`, "transcriptId")
+	add("transcript list no params", "GET", "/ensembl/transcript", "", "transcriptId")
+
+	for _, v := range hardVariants {
+		add("hotspots genomic "+v.name, "GET", "/cancer_hotspots/genomic/"+v.genomic, "", "residue")
+	}
+	add("hotspots genomic batch", "POST", "/cancer_hotspots/genomic", genomicLocationsJSON(), "")
+
+	add("pfam domain PF00069", "GET", "/pfam/domain/PF00069", "", "")
+	add("pfam domain batch", "POST", "/pfam/domain", `["PF00069","PF07714"]`, "pfamAccession")
+	add("version", "GET", "/version", "", "")
+
+	return cases
+}
+
+// genomicLocationsJSON renders the hard variants as the body the genomic
+// endpoints take.
+func genomicLocationsJSON() string {
+	var b strings.Builder
+	b.WriteByte('[')
+	for i, v := range hardVariants {
+		parts := strings.Split(v.genomic, ",")
+		if len(parts) != 5 {
+			continue
+		}
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		fmt.Fprintf(&b, `{"chromosome":%q,"start":%s,"end":%s,"referenceAllele":%q,"variantAllele":%q}`,
+			parts[0], parts[1], parts[2], parts[3], parts[4])
+	}
+	b.WriteByte(']')
+	return b.String()
+}
+
+// jsonList renders a list of identifiers as a JSON array.
+func jsonList(items []string) string {
+	out, _ := json.Marshal(items)
+	return string(out)
+}
