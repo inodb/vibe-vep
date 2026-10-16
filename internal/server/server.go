@@ -246,6 +246,7 @@ func (s *Server) registerGenomeNexusRoutes(mux *http.ServeMux, prefix string) {
 	mux.HandleFunc("GET "+prefix+"/ensembl/canonical-transcript/hgnc/{hugoSymbol}", s.handleEnsemblCanonicalByHugo)
 	mux.HandleFunc("GET "+prefix+"/ensembl/transcript/{transcriptId}", s.handleEnsemblTranscriptByID)
 	mux.HandleFunc("POST "+prefix+"/ensembl/transcript", s.handleEnsemblTranscriptPost)
+	mux.HandleFunc("GET "+prefix+"/ensembl/transcript", s.handleEnsemblTranscriptGet)
 	mux.HandleFunc("POST "+prefix+"/pfam/domain", s.handlePfamDomainPost)
 	mux.HandleFunc("GET "+prefix+"/pfam/domain/{pfamAccession}", s.handlePfamDomainGet)
 	mux.HandleFunc("GET "+prefix+"/ensembl/canonical-gene/hgnc/{hugoSymbol}", s.handleEnsemblCanonicalGeneByHugo)

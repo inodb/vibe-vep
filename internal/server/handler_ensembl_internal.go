@@ -345,34 +345,93 @@ func (s *Server) handleEnsemblTranscriptPost(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	pfamStore := ctx.pfam
-	uniprotStore := ctx.uniprot
-	var results []ensemblTranscriptResponse
-
-	// Lookup by transcript IDs
-	for _, txID := range filter.TranscriptIDs {
-		tx := ctx.cache.GetTranscript(txID)
-		if tx == nil {
-			tx = ctx.cache.GetTranscriptByPrefix(txID)
-		}
-		if tx != nil {
-			results = append(results, buildTranscriptResponse(tx, pfamStore, uniprotStore))
-		}
-	}
-
-	// Lookup by hugo symbols (all transcripts for the gene).
-	for _, symbol := range filter.HugoSymbols {
-		for _, chrom := range ctx.cache.Chromosomes() {
-			for _, t := range ctx.cache.FindTranscriptsByChrom(chrom) {
-				if t.GeneName == symbol {
-					results = append(results, buildTranscriptResponse(t, pfamStore, uniprotStore))
-				}
+	// The four lists are alternatives, not a union: genome-nexus takes the
+	// first non-empty one and ignores the rest, in this order. Sending both
+	// transcriptIds and hugoSymbols returns the transcripts, not both sets.
+	results := make([]ensemblTranscriptResponse, 0)
+	switch {
+	case len(filter.TranscriptIDs) > 0:
+		for _, txID := range filter.TranscriptIDs {
+			tx := ctx.cache.GetTranscript(txID)
+			if tx == nil {
+				tx = ctx.cache.GetTranscriptByPrefix(txID)
+			}
+			if tx != nil {
+				results = append(results, buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot))
 			}
 		}
+	case len(filter.GeneIDs) > 0:
+		for _, geneID := range filter.GeneIDs {
+			results = appendTranscripts(results, ctx, ctx.cache.FindTranscriptsByGeneID(geneID))
+		}
+	case len(filter.ProteinIDs) > 0:
+		for _, proteinID := range filter.ProteinIDs {
+			results = appendTranscripts(results, ctx, ctx.cache.FindTranscriptsByProteinID(proteinID))
+		}
+	case len(filter.HugoSymbols) > 0:
+		for _, symbol := range filter.HugoSymbols {
+			results = appendTranscripts(results, ctx, ctx.cache.FindTranscriptsByGene(symbol))
+		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	writeJSON(w, http.StatusOK, results)
+}
+
+// handleEnsemblTranscriptGet handles GET {prefix}/ensembl/transcript, the
+// single-valued form of the filter above.
+//
+// Here the parameters are conjunctive rather than alternative: a gene and a
+// protein together mean transcripts matching both. With no parameters at all
+// the answer is an empty list -- genome-nexus's own documentation claims it
+// returns every transcript, but its implementation does not, and the
+// implementation is what clients were built against.
+func (s *Server) handleEnsemblTranscriptGet(w http.ResponseWriter, r *http.Request) {
+	ctx := s.requireAssembly(w, r)
+	if ctx == nil {
+		return
+	}
+
+	q := r.URL.Query()
+	geneID := q.Get("geneId")
+	proteinID := q.Get("proteinId")
+	hugoSymbol := q.Get("hugoSymbol")
+
+	results := make([]ensemblTranscriptResponse, 0)
+	if geneID == "" && proteinID == "" && hugoSymbol == "" {
+		writeJSON(w, http.StatusOK, results)
+		return
+	}
+
+	// Start from whichever identifier is most selective, then narrow.
+	var candidates []*cache.Transcript
+	switch {
+	case geneID != "":
+		candidates = ctx.cache.FindTranscriptsByGeneID(geneID)
+	case proteinID != "":
+		candidates = ctx.cache.FindTranscriptsByProteinID(proteinID)
+	default:
+		candidates = ctx.cache.FindTranscriptsByGene(hugoSymbol)
+	}
+
+	for _, tx := range candidates {
+		if proteinID != "" && stripTxVersion(tx.ProteinID) != stripTxVersion(proteinID) {
+			continue
+		}
+		if hugoSymbol != "" && tx.GeneName != hugoSymbol {
+			continue
+		}
+		results = append(results, buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot))
+	}
+
+	writeJSON(w, http.StatusOK, results)
+}
+
+// appendTranscripts renders a set of transcripts into the response slice.
+func appendTranscripts(dst []ensemblTranscriptResponse, ctx *assemblyContext, txs []*cache.Transcript) []ensemblTranscriptResponse {
+	for _, tx := range txs {
+		dst = append(dst, buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot))
+	}
+	return dst
 }
 
 // ensemblGeneResponse is the JSON response for canonical gene lookups.
