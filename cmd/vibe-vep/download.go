@@ -304,6 +304,20 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 		}
 	}
 
+	// Download Mutation Assessor if enabled in config. It is 1.66 GB across
+	// four files, and is never unpacked -- the loader reads the gzip.
+	if viper.GetBool("annotations.mutation-assessor") {
+		fmt.Printf("\nMutation Assessor enabled in config, downloading %d files...\n", len(mutationAssessorURLs()))
+		for _, u := range mutationAssessorURLs() {
+			maFile := filepath.Join(rawDir, filepath.Base(u))
+			if sum, err := downloadFile(u, maFile); err != nil {
+				logger.Warn("could not download Mutation Assessor data", zap.String("url", u), zap.Error(err))
+			} else {
+				addChecksum(maFile, sum)
+			}
+		}
+	}
+
 	// Download the cancer hotspots table. It is small, curated per assembly,
 	// and the same file the matching gn-mongo image imports.
 	{
@@ -517,6 +531,7 @@ const (
 	CancerGeneListFileName    = "cancerGeneList.tsv"
 	RevueFileName             = "VUEs.json"
 	HotspotsFileName          = "hotspots_v2_and_3d.txt"
+	MutationAssessorDBName    = "mutation_assessor.sqlite"
 )
 
 // GnomadFileName returns the expected filename for the given assembly.
@@ -649,6 +664,28 @@ func importerBundle(assembly string) string {
 func importerExportURL(assembly, filename string) string {
 	const base = "https://raw.githubusercontent.com/genome-nexus/genome-nexus-importer/master/data"
 	return base + "/" + importerBundle(assembly) + "/export/" + filename
+}
+
+// mutationAssessorURLs returns the four files Mutation Assessor is
+// distributed as. They are assembly-independent: the predictions are keyed by
+// UniProt accession and protein change, not by genomic coordinate.
+func mutationAssessorURLs() []string {
+	const base = "https://genome-nexus-static-data.s3.us-east-1.amazonaws.com"
+	urls := make([]string, 0, 4)
+	for i := 1; i <= 4; i++ {
+		urls = append(urls, fmt.Sprintf("%s/mutationassessor_v4_%d.tsv.gz", base, i))
+	}
+	return urls
+}
+
+// MutationAssessorFiles returns the downloaded Mutation Assessor files, in
+// the order they should be loaded.
+func MutationAssessorFiles(rawDir string) []string {
+	paths := make([]string, 0, 4)
+	for _, u := range mutationAssessorURLs() {
+		paths = append(paths, filepath.Join(rawDir, filepath.Base(u)))
+	}
+	return paths
 }
 
 // getHotspotsURL returns the download URL for the cancer hotspots table.

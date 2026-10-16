@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/inodb/vibe-vep/internal/datasource/mutationassessor"
 	"github.com/inodb/vibe-vep/internal/genomicindex"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -64,6 +67,11 @@ index so subsequent annotate/compare runs start instantly.`,
 				logger.Info("genomic index already up to date")
 			}
 
+			// Build the Mutation Assessor index, if its files were fetched.
+			if err := prepareMutationAssessor(logger, cacheDir); err != nil {
+				return err
+			}
+
 			return nil
 		},
 	}
@@ -71,4 +79,32 @@ index so subsequent annotate/compare runs start instantly.`,
 	cmd.Flags().StringVar(&assembly, "assembly", "GRCh38", "Genome assembly: GRCh37 or GRCh38")
 
 	return cmd
+}
+
+// prepareMutationAssessor builds the Mutation Assessor index from the
+// downloaded files. Missing files are not an error: the source is optional,
+// and saying so once is more use than failing the whole prepare.
+func prepareMutationAssessor(logger *zap.Logger, cacheDir string) error {
+	dbPath := filepath.Join(cacheDir, MutationAssessorDBName)
+	files := MutationAssessorFiles(rawDirForCache(cacheDir))
+
+	for _, f := range files {
+		if _, err := os.Stat(f); err != nil {
+			logger.Info("Mutation Assessor files not downloaded, skipping",
+				zap.String("missing", f))
+			return nil
+		}
+	}
+	if mutationassessor.Ready(dbPath) {
+		logger.Info("Mutation Assessor index already up to date")
+		return nil
+	}
+
+	logger.Info("building Mutation Assessor index...")
+	start := time.Now()
+	if err := mutationassessor.Build(dbPath, files); err != nil {
+		return fmt.Errorf("build Mutation Assessor index: %w", err)
+	}
+	logger.Info("built Mutation Assessor index", zap.Duration("elapsed", time.Since(start)))
+	return nil
 }
