@@ -381,3 +381,36 @@ func TestServerEndpointsUnderBothMounts(t *testing.T) {
 		}
 	}
 }
+
+// TestGNPostDegradesPerItem checks that one unresolvable notation costs the
+// caller that entry and nothing else. genome-nexus reports a failure per item;
+// aborting the batch would lose every good annotation alongside the bad one.
+func TestGNPostDegradesPerItem(t *testing.T) {
+	srv := newTestServerWithKRAS(t)
+	handler := srv.Handler()
+
+	body := `["12:g.25245351C>A","not-a-variant","12:g.25245351C>A"]`
+	req := httptest.NewRequest(http.MethodPost, "/annotation", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp []output.GNAnnotation
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v\nbody: %s", err, w.Body.String())
+	}
+	if len(resp) != 3 {
+		t.Fatalf("expected one entry per input, got %d", len(resp))
+	}
+	if !resp[0].SuccessfullyAnnotated || !resp[2].SuccessfullyAnnotated {
+		t.Error("the good entries should still be annotated")
+	}
+	if resp[1].SuccessfullyAnnotated {
+		t.Error("the bad entry should be reported as not annotated")
+	}
+	if resp[1].OriginalVariantQuery != "not-a-variant" {
+		t.Errorf("the bad entry should carry its own query, got %q", resp[1].OriginalVariantQuery)
+	}
+}

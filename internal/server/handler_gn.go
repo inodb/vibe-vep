@@ -81,16 +81,16 @@ func (s *Server) handleGNGenomicPost(w http.ResponseWriter, r *http.Request) {
 		anns, err := s.annotateVariant(ctx, v)
 		if err != nil {
 			s.logger.Error("annotation error", zap.Error(err), zap.String("input", inputLabel))
-			writeError(w, http.StatusInternalServerError, "annotation failed: "+err.Error())
-			return
+			results = append(results, gnErrorEntry(inputLabel, ctx.assembly, "annotation failed: "+err.Error()))
+			continue
 		}
 
 		opts := baseOpts
 		s.enrichMyVariantInfo(&opts, v, ctx.assembly, anns)
 		data, err := output.MarshalGNAnnotation(inputLabel, v, anns, ctx.assembly, opts)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "marshal error: "+err.Error())
-			return
+			results = append(results, gnErrorEntry(inputLabel, ctx.assembly, "marshal error: "+err.Error()))
+			continue
 		}
 		results = append(results, data)
 	}
@@ -166,24 +166,24 @@ func (s *Server) handleGNHGVSPost(w http.ResponseWriter, r *http.Request) {
 	for _, notation := range notations {
 		variants, err := s.resolveHGVS(ctx, notation)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("notation %q: %s", notation, err.Error()))
-			return
+			results = append(results, gnErrorEntry(notation, ctx.assembly, err.Error()))
+			continue
 		}
 
 		for _, v := range variants {
 			anns, err := s.annotateVariant(ctx, v)
 			if err != nil {
 				s.logger.Error("annotation error", zap.Error(err), zap.String("input", notation))
-				writeError(w, http.StatusInternalServerError, "annotation failed: "+err.Error())
-				return
+				results = append(results, gnErrorEntry(notation, ctx.assembly, "annotation failed: "+err.Error()))
+				continue
 			}
 
 			opts := baseOpts
 			s.enrichMyVariantInfo(&opts, v, ctx.assembly, anns)
 			data, err := output.MarshalGNAnnotation(notation, v, anns, ctx.assembly, opts)
 			if err != nil {
-				writeError(w, http.StatusInternalServerError, "marshal error: "+err.Error())
-				return
+				results = append(results, gnErrorEntry(notation, ctx.assembly, "marshal error: "+err.Error()))
+				continue
 			}
 			results = append(results, data)
 		}

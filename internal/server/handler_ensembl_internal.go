@@ -13,16 +13,16 @@ import (
 
 // ensemblTranscriptResponse is the JSON response for canonical transcript / transcript lookup endpoints.
 type ensemblTranscriptResponse struct {
-	TranscriptID  string              `json:"transcriptId"`
-	GeneID        string              `json:"geneId"`
-	ProteinID     string              `json:"proteinId,omitempty"`
-	HugoSymbols   []string            `json:"hugoSymbols"`
-	ProteinLength int                 `json:"proteinLength"`
-	PfamDomains   []pfamDomainJSON    `json:"pfamDomains"`
-	Exons         []exonJSON          `json:"exons"`
-	UTRs          []utrJSON           `json:"utrs"`
-	UniprotID     string              `json:"uniprotId,omitempty"`
-	EntrezGeneID  string              `json:"entrezGeneId,omitempty"`
+	TranscriptID  string           `json:"transcriptId"`
+	GeneID        string           `json:"geneId"`
+	ProteinID     string           `json:"proteinId,omitempty"`
+	HugoSymbols   []string         `json:"hugoSymbols"`
+	ProteinLength int              `json:"proteinLength"`
+	PfamDomains   []pfamDomainJSON `json:"pfamDomains"`
+	Exons         []exonJSON       `json:"exons"`
+	UTRs          []utrJSON        `json:"utrs"`
+	UniprotID     string           `json:"uniprotId,omitempty"`
+	EntrezGeneID  string           `json:"entrezGeneId,omitempty"`
 }
 
 type pfamDomainJSON struct {
@@ -32,7 +32,7 @@ type pfamDomainJSON struct {
 }
 
 type exonJSON struct {
-	ExonID   string `json:"exonId"`
+	ExonID    string `json:"exonId"`
 	ExonStart int64  `json:"exonStart"`
 	ExonEnd   int64  `json:"exonEnd"`
 	Rank      int    `json:"rank"`
