@@ -257,6 +257,7 @@ func (s *Server) registerGenomeNexusRoutes(mux *http.ServeMux, prefix string) {
 
 	// Ensembl internal endpoints (transcript/PFAM lookups for frontend).
 	mux.HandleFunc("GET "+prefix+"/ensembl/canonical-transcript/hgnc/{hugoSymbol}", s.handleEnsemblCanonicalByHugo)
+	mux.HandleFunc("POST "+prefix+"/ensembl/canonical-transcript/hgnc", s.handleEnsemblCanonicalByHugoPost)
 	mux.HandleFunc("GET "+prefix+"/ensembl/transcript/{transcriptId}", s.handleEnsemblTranscriptByID)
 	mux.HandleFunc("POST "+prefix+"/ensembl/transcript", s.handleEnsemblTranscriptPost)
 	mux.HandleFunc("GET "+prefix+"/ensembl/transcript", s.handleEnsemblTranscriptGet)
@@ -264,6 +265,8 @@ func (s *Server) registerGenomeNexusRoutes(mux *http.ServeMux, prefix string) {
 	mux.HandleFunc("GET "+prefix+"/pfam/domain/{pfamAccession}", s.handlePfamDomainGet)
 	mux.HandleFunc("GET "+prefix+"/ensembl/canonical-gene/hgnc/{hugoSymbol}", s.handleEnsemblCanonicalGeneByHugo)
 	mux.HandleFunc("GET "+prefix+"/ensembl/canonical-gene/entrez/{entrezGeneId}", s.handleEnsemblCanonicalGeneByEntrez)
+	mux.HandleFunc("POST "+prefix+"/ensembl/canonical-gene/hgnc", s.handleEnsemblCanonicalGeneByHugoPost)
+	mux.HandleFunc("POST "+prefix+"/ensembl/canonical-gene/entrez", s.handleEnsemblCanonicalGeneByEntrezPost)
 	mux.HandleFunc("GET "+prefix+"/cancer_hotspots/transcript/{transcriptId}", s.handleCancerHotspotsTranscript)
 
 	// PTM endpoints.

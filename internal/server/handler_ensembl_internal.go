@@ -588,3 +588,98 @@ func stripTxVersion(id string) string {
 	}
 	return id
 }
+
+// decodeStringList reads the plain JSON array of identifiers the batch
+// endpoints take as a body.
+func decodeStringList(w http.ResponseWriter, r *http.Request) ([]string, bool) {
+	var ids []string
+	if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return nil, false
+	}
+	return ids, true
+}
+
+// geneResponseFor renders a gene from the transcript chosen to represent it.
+func geneResponseFor(ctx *assemblyContext, tx *cache.Transcript) ensemblGeneResponse {
+	uniprotID := ""
+	if ctx.uniprot != nil {
+		uniprotID = ctx.uniprot.LookupByTranscript(tx.ID)
+	}
+	return ensemblGeneResponse{
+		GeneID:       tx.GeneID,
+		HugoSymbol:   tx.GeneName,
+		EntrezGeneID: tx.EntrezGeneID,
+		UniprotID:    uniprotID,
+	}
+}
+
+// handleEnsemblCanonicalByHugoPost handles POST
+// {prefix}/ensembl/canonical-transcript/hgnc, the batch form of the lookup
+// above. A symbol with no canonical transcript is left out of the answer
+// rather than failing the request.
+func (s *Server) handleEnsemblCanonicalByHugoPost(w http.ResponseWriter, r *http.Request) {
+	ctx := s.requireAssembly(w, r)
+	if ctx == nil {
+		return
+	}
+	symbols, ok := decodeStringList(w, r)
+	if !ok {
+		return
+	}
+
+	isoformSource := r.URL.Query().Get("isoformOverrideSource")
+	overrides := s.OverrideTranscripts(isoformSource)
+
+	results := make([]ensemblTranscriptResponse, 0, len(symbols))
+	for _, symbol := range symbols {
+		tx := pickCanonical(ctx.cache.FindTranscriptsByGene(symbol), isoformSource, overrides)
+		if tx == nil {
+			continue
+		}
+		results = append(results, buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot))
+	}
+	writeJSON(w, http.StatusOK, results)
+}
+
+// handleEnsemblCanonicalGeneByHugoPost handles POST
+// {prefix}/ensembl/canonical-gene/hgnc.
+func (s *Server) handleEnsemblCanonicalGeneByHugoPost(w http.ResponseWriter, r *http.Request) {
+	s.canonicalGenesPost(w, r, func(ctx *assemblyContext, id string) []*cache.Transcript {
+		return ctx.cache.FindTranscriptsByGene(id)
+	})
+}
+
+// handleEnsemblCanonicalGeneByEntrezPost handles POST
+// {prefix}/ensembl/canonical-gene/entrez.
+func (s *Server) handleEnsemblCanonicalGeneByEntrezPost(w http.ResponseWriter, r *http.Request) {
+	s.canonicalGenesPost(w, r, func(ctx *assemblyContext, id string) []*cache.Transcript {
+		return ctx.cache.FindTranscriptsByEntrezID(id)
+	})
+}
+
+// canonicalGenesPost answers a batch of gene lookups, differing only in how an
+// identifier reaches its transcripts.
+func (s *Server) canonicalGenesPost(w http.ResponseWriter, r *http.Request, find func(*assemblyContext, string) []*cache.Transcript) {
+	ctx := s.requireAssembly(w, r)
+	if ctx == nil {
+		return
+	}
+	ids, ok := decodeStringList(w, r)
+	if !ok {
+		return
+	}
+
+	source := r.URL.Query().Get("isoformOverrideSource")
+	overrides := s.OverrideTranscripts(source)
+
+	results := make([]ensemblGeneResponse, 0, len(ids))
+	for _, id := range ids {
+		tx := pickCanonical(find(ctx, id), source, overrides)
+		if tx == nil {
+			continue
+		}
+		results = append(results, geneResponseFor(ctx, tx))
+	}
+	writeJSON(w, http.StatusOK, results)
+}

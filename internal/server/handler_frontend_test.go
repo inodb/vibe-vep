@@ -378,3 +378,47 @@ func TestEnsemblTranscriptGetIsConjunctive(t *testing.T) {
 		t.Errorf("contradictory filters returned %d, want 0", n)
 	}
 }
+
+// TestCanonicalBatchEndpoints checks the three batch lookups answer in the
+// same shape as their single-value forms, skip identifiers they cannot
+// resolve rather than failing, and serialise empty as [].
+func TestCanonicalBatchEndpoints(t *testing.T) {
+	srv := newTestServerWithKRAS(t)
+	handler := srv.Handler()
+
+	post := func(path, body string) ([]map[string]any, string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s %s: expected 200, got %d", path, body, w.Code)
+		}
+		raw := strings.TrimSpace(w.Body.String())
+		var out []map[string]any
+		if err := json.Unmarshal([]byte(raw), &out); err != nil {
+			t.Fatalf("%s: decode: %v (body %s)", path, err, raw)
+		}
+		return out, raw
+	}
+
+	// A known gene resolves; an unknown one is skipped, not fatal.
+	got, _ := post("/ensembl/canonical-transcript/hgnc", `["KRAS","NOT_A_GENE"]`)
+	if len(got) != 1 {
+		t.Fatalf("canonical-transcript batch returned %d, want 1", len(got))
+	}
+	if got[0]["transcriptId"] == "" {
+		t.Error("expected a transcript id in the response")
+	}
+
+	got, _ = post("/ensembl/canonical-gene/hgnc", `["KRAS"]`)
+	if len(got) != 1 || got[0]["hugoSymbol"] != "KRAS" {
+		t.Errorf("canonical-gene batch = %v, want one KRAS entry", got)
+	}
+
+	// Nothing resolvable still answers [], never null.
+	_, raw := post("/ensembl/canonical-gene/entrez", `["0"]`)
+	if raw != "[]" {
+		t.Errorf("entrez batch with no matches = %q, want []", raw)
+	}
+}
