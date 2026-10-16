@@ -130,6 +130,7 @@ func (l *GTFLoader) parseGTF(reader io.Reader, filterChrom string) (map[string]*
 				GeneID:             stripVersion(feat.attributes["gene_id"]),
 				GeneName:           feat.attributes["gene_name"],
 				ProteinID:          stripVersion(feat.attributes["protein_id"]),
+				ProteinIDVersion:   versionSuffix(feat.attributes["protein_id"]),
 				HGNCId:             feat.attributes["hgnc_id"],
 				Chrom:              feat.chrom,
 				Start:              feat.start,
@@ -365,6 +366,15 @@ func parseStrand(s string) int8 {
 
 // stripVersion removes the version suffix from an Ensembl ID.
 // e.g., "ENST00000456328.2" -> "ENST00000456328"
+// versionSuffix returns the ".N" part of a versioned Ensembl id, without the
+// dot, or "" when the id carries no version.
+func versionSuffix(id string) string {
+	if idx := strings.LastIndex(id, "."); idx != -1 {
+		return id[idx+1:]
+	}
+	return ""
+}
+
 func stripVersion(id string) string {
 	if idx := strings.LastIndex(id, "."); idx != -1 {
 		return id[:idx]
@@ -383,15 +393,15 @@ func normalizeChrom(chrom string) string {
 
 // GENCODELoader combines GTF and FASTA loaders for complete annotation data.
 type GENCODELoader struct {
-	gtfPath                string
-	fastaPath              string
-	gtf                    *GTFLoader
-	fasta                  *FASTALoader
-	mskCanonicalOverrides  CanonicalOverrides
-	ensCanonicalOverrides  CanonicalOverrides
-	entrezGeneIDs          GeneEntrezMap
-	refSeqIDs              map[string][]string
-	genomePath             string
+	gtfPath               string
+	fastaPath             string
+	gtf                   *GTFLoader
+	fasta                 *FASTALoader
+	mskCanonicalOverrides CanonicalOverrides
+	ensCanonicalOverrides CanonicalOverrides
+	entrezGeneIDs         GeneEntrezMap
+	refSeqIDs             map[string][]string
+	genomePath            string
 }
 
 // SetGenomePath supplies a genomic FASTA used only to copy short intron windows

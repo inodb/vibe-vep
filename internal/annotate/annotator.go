@@ -123,6 +123,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 			GeneName:           t.GeneName,
 			GeneID:             t.GeneID,
 			ProteinID:          t.ProteinID,
+			ProteinIDVersion:   t.ProteinIDVersion,
 			HGNCId:             t.HGNCId,
 			EntrezGeneID:       t.EntrezGeneID,
 			RefSeqIDs:          t.RefSeqIDs,

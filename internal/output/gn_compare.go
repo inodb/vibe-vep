@@ -223,35 +223,39 @@ type GNIntegerRange struct {
 }
 
 // GNTranscriptConsequence represents a transcript consequence from genome-nexus.
+// GNTranscriptConsequence is one transcript's view of a variant, in the shape
+// genome-nexus serves. The field set is its TranscriptConsequence model: VEP
+// reports cDNA and CDS positions, impact and intron number too, but
+// genome-nexus does not carry them through, so they are absent here as well.
 type GNTranscriptConsequence struct {
-	TranscriptID        string   `json:"transcript_id"`
-	GeneSymbol          string   `json:"gene_symbol"`
-	GeneID              string   `json:"gene_id"`
-	HGNCId              string   `json:"hgnc_id,omitempty"`
-	ProteinID           string   `json:"protein_id,omitempty"`
-	ConsequenceTerms    []string `json:"consequence_terms"`
-	Impact              string   `json:"impact"`
-	VariantAllele       string   `json:"variant_allele"`
-	AminoAcids          string   `json:"amino_acids"`
-	Codons              string   `json:"codons"`
-	ProteinStart        int64    `json:"protein_start"`
-	ProteinEnd          int64    `json:"protein_end"`
-	CDSStart            int64    `json:"cds_start"`
-	CDSEnd              int64    `json:"cds_end"`
-	CDNAStart           int64    `json:"cdna_start"`
-	CDNAEnd             int64    `json:"cdna_end"`
-	HGVSp               string   `json:"hgvsp"`
-	HGVSc               string   `json:"hgvsc"`
-	Exon                string   `json:"exon"`
-	Intron              string   `json:"intron"`
-	Biotype             string   `json:"biotype"`
+	TranscriptID     string   `json:"transcript_id"`
+	GeneSymbol       string   `json:"gene_symbol"`
+	GeneID           string   `json:"gene_id"`
+	HGNCId           string   `json:"hgnc_id,omitempty"`
+	ProteinID        string   `json:"protein_id,omitempty"`
+	ConsequenceTerms []string `json:"consequence_terms"`
+	VariantAllele    string   `json:"variant_allele"`
+
+	// Impact orders the consequences so the frontend's [0] is the one worth
+	// reading. genome-nexus does not report it, so neither do we.
+	Impact string `json:"-"`
+
+	AminoAcids          string   `json:"amino_acids,omitempty"`
+	Codons              string   `json:"codons,omitempty"`
+	ProteinStart        int64    `json:"protein_start,omitempty"`
+	ProteinEnd          int64    `json:"protein_end,omitempty"`
+	HGVSp               string   `json:"hgvsp,omitempty"`
+	HGVSc               string   `json:"hgvsc,omitempty"`
+	HGVSg               string   `json:"hgvsg,omitempty"`
+	Exon                string   `json:"exon,omitempty"`
+	Biotype             string   `json:"biotype,omitempty"`
 	RefseqTranscriptIds []string `json:"refseq_transcript_ids,omitempty"`
 	HGVSOffset          int      `json:"hgvs_offset,omitempty"`
-	Canonical           string   `json:"canonical"`
-	SIFTScore           *float64 `json:"sift_score"`
-	SIFTPrediction      string   `json:"sift_prediction"`
-	PolyPhenScore       *float64 `json:"polyphen_score"`
-	PolyPhenPrediction  string   `json:"polyphen_prediction"`
+	Canonical           string   `json:"canonical,omitempty"`
+	SIFTScore           *float64 `json:"sift_score,omitempty"`
+	SIFTPrediction      string   `json:"sift_prediction,omitempty"`
+	PolyPhenScore       *float64 `json:"polyphen_score,omitempty"`
+	PolyPhenPrediction  string   `json:"polyphen_prediction,omitempty"`
 
 	AlphaMissense *GNAlphaMissense `json:"alphaMissense,omitempty"`
 }

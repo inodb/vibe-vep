@@ -75,10 +75,13 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 	hgvsg := formatHGVSgWithReference(v.Chrom, start, end, ref, alt)
 
 	result := GNAnnotation{
-		Variant:               variant,
-		OriginalVariantQuery:  input,
-		HGVSg:                 hgvsg,
-		ID:                    annotate.FormatVariantID(v.Chrom, v.Pos, v.Ref, v.Alt),
+		Variant:              variant,
+		OriginalVariantQuery: input,
+		HGVSg:                hgvsg,
+		// genome-nexus reports as "id" whatever it asked VEP about, which is
+		// the variant in genomic HGVS -- not the renormalised "hgvsg", which
+		// may shift an insertion to a duplication.
+		ID:                    variant,
 		AssemblyName:          assembly,
 		SeqRegionName:         v.Chrom,
 		Start:                 start,
@@ -119,14 +122,10 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 			Codons:              ann.CodonChange,
 			ProteinStart:        pStart,
 			ProteinEnd:          pEnd,
-			CDSStart:            ann.CDSPosition,
-			CDSEnd:              ann.CDSPosition,
-			CDNAStart:           ann.CDNAPosition,
-			CDNAEnd:             ann.CDNAPosition,
-			HGVSp:               ann.HGVSp,
+			HGVSp:               prefixProtein(ann.ProteinID, ann.ProteinIDVersion, ann.HGVSp),
 			HGVSc:               prefixTranscript(ann.TranscriptID, ann.HGVSc),
+			HGVSg:               hgvsg,
 			Exon:                ann.ExonNumber,
-			Intron:              ann.IntronNumber,
 			Biotype:             ann.Biotype,
 			Canonical:           canonical,
 			RefseqTranscriptIds: ann.RefSeqIDs,
@@ -463,6 +462,22 @@ func formatResidue(aaChange string, proteinPos int64) string {
 
 // prefixTranscript prepends the transcript ID to an HGVSc/HGVSp notation
 // (e.g. "c.2369C>T" → "ENST00000275493.7:c.2369C>T").
+// prefixProtein names the protein an HGVS p. notation describes, as VEP does:
+// the versioned Ensembl protein id, then the change. The summary reports the
+// bare change instead, so this applies only to transcript consequences.
+func prefixProtein(proteinID, version, notation string) string {
+	if notation == "" || proteinID == "" {
+		return notation
+	}
+	if strings.Contains(notation, ":") {
+		return notation
+	}
+	if version != "" {
+		proteinID += "." + version
+	}
+	return proteinID + ":" + notation
+}
+
 func prefixTranscript(txID, notation string) string {
 	if notation == "" || txID == "" {
 		return notation

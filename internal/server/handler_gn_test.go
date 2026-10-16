@@ -68,9 +68,6 @@ func TestGNGenomicGet_KRASG12C(t *testing.T) {
 	if canonical.GeneSymbol != "KRAS" {
 		t.Errorf("gene_symbol: got %q, want KRAS", canonical.GeneSymbol)
 	}
-	if canonical.Impact != "MODERATE" {
-		t.Errorf("impact: got %q, want MODERATE", canonical.Impact)
-	}
 	if !contains(canonical.ConsequenceTerms, "missense_variant") {
 		t.Errorf("consequence_terms: got %v, want to contain missense_variant", canonical.ConsequenceTerms)
 	}
@@ -80,14 +77,26 @@ func TestGNGenomicGet_KRASG12C(t *testing.T) {
 	if canonical.ProteinStart != 12 {
 		t.Errorf("protein_start: got %d, want 12", canonical.ProteinStart)
 	}
-	if canonical.HGVSp != "p.Gly12Cys" {
-		t.Errorf("hgvsp: got %q, want p.Gly12Cys", canonical.HGVSp)
+	// VEP names the versioned protein an HGVS p. change describes; the
+	// annotation summary reports the bare change instead.
+	if !strings.HasSuffix(canonical.HGVSp, ":p.Gly12Cys") {
+		t.Errorf("hgvsp: got %q, want a protein-prefixed p.Gly12Cys", canonical.HGVSp)
 	}
 	if canonical.Canonical != "1" {
 		t.Errorf("canonical: got %q, want 1", canonical.Canonical)
 	}
 	if canonical.Biotype != "protein_coding" {
 		t.Errorf("biotype: got %q, want protein_coding", canonical.Biotype)
+	}
+
+	// genome-nexus's TranscriptConsequence model carries none of these, so
+	// they must not appear on the wire however useful VEP finds them.
+	for _, absent := range []string{
+		`"impact"`, `"intron"`, `"cds_start"`, `"cds_end"`, `"cdna_start"`, `"cdna_end"`,
+	} {
+		if strings.Contains(w.Body.String(), absent) {
+			t.Errorf("response carries %s, which genome-nexus does not report", absent)
+		}
 	}
 }
 

@@ -61,6 +61,7 @@ type Annotation struct {
 	GeneName           string            // Gene symbol
 	GeneID             string            // Gene identifier
 	ProteinID          string            // Ensembl protein ID (e.g., ENSP00000493376)
+	ProteinIDVersion   string            // version suffix of the protein ID (e.g. "6")
 	HGNCId             string            // HGNC identifier (e.g., HGNC:14825)
 	EntrezGeneID       string            // NCBI Entrez gene ID (e.g., "673")
 	RefSeqIDs          []string          // RefSeq mRNA accessions (versioned), in GENCODE metadata order
