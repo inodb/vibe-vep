@@ -38,6 +38,11 @@ type GNMarshalOptions struct {
 	// UniprotIDs maps a transcript to the protein entry it translates to.
 	UniprotIDs func(transcriptID string) string
 
+	// IncludePtms adds the post-translational modification sites on each
+	// transcript, and PtmLookup supplies them.
+	IncludePtms bool
+	PtmLookup   func(transcriptID string) []GNPtmEntry
+
 	// Revue is the catalogue of variants whose published protein effect is
 	// not the one the sequence predicts. Nil leaves every prediction alone.
 	Revue *revue.Store
@@ -148,6 +153,19 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 
 	if opt.IncludeAnnotationSummary {
 		result.AnnotationSummary = buildAnnotationSummary(&result, anns, canonicalAnn, assembly, opt)
+	}
+
+	// PTM sites, one list per transcript consequence in the same order.
+	if opt.IncludePtms && opt.PtmLookup != nil {
+		sites := make([][]GNPtmEntry, 0, len(result.TranscriptConsequences))
+		for _, tc := range result.TranscriptConsequences {
+			found := opt.PtmLookup(tc.TranscriptID)
+			if found == nil {
+				found = []GNPtmEntry{}
+			}
+			sites = append(sites, found)
+		}
+		result.PtmAnnotation = &GNPtms{Annotation: sites}
 	}
 
 	// Sort transcript consequences: canonical first (genome-nexus convention).

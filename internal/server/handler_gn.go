@@ -352,6 +352,8 @@ func (s *Server) parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions 
 		OfficialGeneSymbols:      s.OfficialGeneSymbols(),
 		Revue:                    s.Revue(),
 		UniprotIDs:               s.uniprotLookup(r),
+		IncludePtms:              strings.Contains(fields, "ptms"),
+		PtmLookup:                s.ptmLookup(r),
 		// genome-nexus is deployed with overwrite_by_confirmed_revue_only on,
 		// so an entry still under review does not displace a prediction.
 		RevueConfirmedOnly: true,
@@ -394,4 +396,32 @@ func (s *Server) uniprotLookup(r *http.Request) func(string) string {
 		return nil
 	}
 	return ctx.uniprot.LookupByTranscript
+}
+
+// ptmLookup returns the post-translational modification lookup for the
+// assembly a request names, or nil where no PTM data is loaded.
+func (s *Server) ptmLookup(r *http.Request) func(string) []output.GNPtmEntry {
+	ctx := s.getAssembly(r.PathValue("assembly"))
+	if ctx == nil {
+		ctx = s.soleAssembly()
+	}
+	if ctx == nil || ctx.ptm == nil {
+		return nil
+	}
+	return func(transcriptID string) []output.GNPtmEntry {
+		sites := ctx.ptm.LookupByTranscript(transcriptID)
+		entries := make([]output.GNPtmEntry, 0, len(sites))
+		for _, p := range sites {
+			entries = append(entries, output.GNPtmEntry{
+				UniprotEntry:         p.UniprotEntry,
+				UniprotAccession:     p.UniprotAccession,
+				EnsemblTranscriptIds: p.EnsemblTranscriptIds,
+				Position:             p.Position,
+				Type:                 p.Type,
+				PubmedIds:            p.PubmedIds,
+				Sequence:             p.Sequence,
+			})
+		}
+		return entries
+	}
 }

@@ -30,6 +30,7 @@ type GNAnnotation struct {
 	Hotspots               *GNHotspots                `json:"hotspots,omitempty"`
 	SignalAnnotation       *GNSignalAnnotation        `json:"signalAnnotation,omitempty"`
 	MyVariantInfo          *GNMyVariantInfoAnnotation `json:"my_variant_info,omitempty"`
+	PtmAnnotation          *GNPtms                    `json:"ptmAnnotation,omitempty"`
 }
 
 // GNMyVariantInfoAnnotation wraps the myvariant.info annotation in genome-nexus format.
@@ -195,6 +196,24 @@ type GNTranscriptConsequenceSummary struct {
 type GNAlphaMissense struct {
 	Score         *float64 `json:"score,omitempty"`
 	Pathogenicity string   `json:"pathogenicity,omitempty"`
+}
+
+// GNPtmEntry is one post-translational modification site.
+type GNPtmEntry struct {
+	UniprotEntry         string   `json:"uniprotEntry,omitempty"`
+	UniprotAccession     string   `json:"uniprotAccession,omitempty"`
+	EnsemblTranscriptIds []string `json:"ensemblTranscriptIds,omitempty"`
+	Position             int      `json:"position"`
+	Type                 string   `json:"type,omitempty"`
+	PubmedIds            []string `json:"pubmedIds,omitempty"`
+	Sequence             string   `json:"sequence,omitempty"`
+}
+
+// GNPtms holds one list of modification sites per transcript consequence, in
+// the same order. genome-nexus never sets a license here, so neither does this.
+type GNPtms struct {
+	License    string         `json:"license,omitempty"`
+	Annotation [][]GNPtmEntry `json:"annotation,omitempty"`
 }
 
 // GNIntegerRange represents a start/end integer range.
