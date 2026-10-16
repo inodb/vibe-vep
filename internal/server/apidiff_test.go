@@ -96,7 +96,7 @@ func TestAPIDiff(t *testing.T) {
 				continue
 			}
 			got := encodeCapture(status, body, c.SortKey)
-			want, got = reconcile(want, got)
+			want, got = reconcile(want, got, c.SortKey)
 			if bytes.Equal(got, want) {
 				same++
 				continue
@@ -187,7 +187,7 @@ var oracleGapKeys = map[string]string{
 // recorded by whatever version of this harness ran at the time. Changing a
 // normalisation rule must change both sides at once, or the rule reads as a
 // difference in every captured case.
-func reconcile(want, got []byte) ([]byte, []byte) {
+func reconcile(want, got []byte, sortKey string) ([]byte, []byte) {
 	wantStatus, wantVal, ok := decodeCapture(want)
 	if !ok {
 		return want, got
@@ -195,6 +195,10 @@ func reconcile(want, got []byte) ([]byte, []byte) {
 	gotStatus, gotVal, ok := decodeCapture(got)
 	if !ok {
 		return want, got
+	}
+	if sortKey != "" {
+		wantVal = sortTopLevel(wantVal, sortKey)
+		gotVal = sortTopLevel(gotVal, sortKey)
 	}
 	sortUnorderedArrays(wantVal)
 	sortUnorderedArrays(gotVal)
@@ -293,6 +297,15 @@ func sortUnorderedArrays(v any) {
 	}
 }
 
+// sortAnyElement is the SortKey for a top-level array whose elements have no
+// one identifying field. Elements are then ordered by their whole encoded
+// value, which is deterministic without naming anything.
+//
+// It is opt-in rather than the default because plenty of arrays here are
+// ordered on purpose: a batch response answers in the order it was asked, and
+// reordering it would hide exactly the fault that invariant exists to catch.
+const sortAnyElement = "*"
+
 // sortTopLevel orders a top-level array by one of its fields, for responses
 // whose order carries no meaning.
 func sortTopLevel(v any, key string) any {
@@ -301,18 +314,39 @@ func sortTopLevel(v any, key string) any {
 		return v
 	}
 	sort.SliceStable(arr, func(i, j int) bool {
-		return fieldString(arr[i], key) < fieldString(arr[j], key)
+		return sortValue(arr[i], key) < sortValue(arr[j], key)
 	})
 	return arr
 }
 
+// sortValue renders the part of an element its order is decided by.
+func sortValue(v any, key string) string {
+	if key == sortAnyElement {
+		encoded, err := json.Marshal(v)
+		if err != nil {
+			return ""
+		}
+		return string(encoded)
+	}
+	return fieldString(v, key)
+}
+
+// fieldString reads one field of an element as text. Numbers are included:
+// sorting them as text is not numeric order, but it is the same order on both
+// sides, which is all this needs.
 func fieldString(v any, key string) string {
 	m, ok := v.(map[string]any)
 	if !ok {
 		return ""
 	}
-	s, _ := m[key].(string)
-	return s
+	switch value := m[key].(type) {
+	case nil:
+		return ""
+	case string:
+		return value
+	default:
+		return fmt.Sprint(value)
+	}
 }
 
 // diffPaths lists the JSON paths at which two canonical responses disagree,

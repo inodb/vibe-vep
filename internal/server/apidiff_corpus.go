@@ -98,7 +98,9 @@ func apiCases() []apiCase {
 
 	for _, tx := range hardTranscripts {
 		add("transcript "+tx, "GET", "/ensembl/transcript/"+tx, "", "")
-		add("ptms "+tx, "GET", "/ptm/experimental?ensemblTranscriptId="+tx, "", "")
+		// genome-nexus returns PTM sites in whatever order the collection
+		// hands them over, and they have no one identifying field.
+		add("ptms "+tx, "GET", "/ptm/experimental?ensemblTranscriptId="+tx, "", sortAnyElement)
 		add("hotspots transcript "+tx, "GET", "/cancer_hotspots/transcript/"+tx, "", "residue")
 		add("hotspots transcript v2 "+tx, "GET", "/cancer_hotspots/transcript/"+tx+"?version=v2", "", "residue")
 	}
