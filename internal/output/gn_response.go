@@ -632,6 +632,14 @@ func applyRevisedEffect(tcs *GNTranscriptConsequenceSummary, genomicLocation str
 	tcs.IsVue = true
 }
 
+// FormatGenomicHGVS names a variant in genomic HGVS, the way an annotation's
+// "variant" field reports it.
+func FormatGenomicHGVS(v *vcf.Variant) string {
+	ref, alt := alleleStrings(v)
+	start, end := mafCoordinates(v)
+	return formatHGVSg(v.Chrom, start, end, ref, alt)
+}
+
 // formatHGVSg names a variant in genomic HGVS. This is the "variant" field,
 // which names the change without restating the bases it removes: a deletion
 // is g.100_102del rather than g.100_102delACG.

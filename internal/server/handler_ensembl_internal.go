@@ -72,13 +72,13 @@ func (s *Server) handleEnsemblCanonicalByHugo(w http.ResponseWriter, r *http.Req
 
 	transcripts := s.transcriptsForSymbol(ctx, hugoSymbol)
 	if len(transcripts) == 0 {
-		writeError(w, http.StatusNotFound, "no transcripts found for gene "+hugoSymbol)
+		writeError(w, http.StatusNotFound, "Ensembl transcript not found: "+hugoSymbol)
 		return
 	}
 
 	tx := pickCanonical(transcripts, isoformSource, s.OverrideTranscripts(isoformSource))
 	if tx == nil {
-		writeError(w, http.StatusNotFound, "no canonical transcript found for gene "+hugoSymbol)
+		writeError(w, http.StatusNotFound, "Ensembl transcript not found: "+hugoSymbol)
 		return
 	}
 

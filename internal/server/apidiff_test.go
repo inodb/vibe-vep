@@ -79,7 +79,7 @@ func TestAPIDiff(t *testing.T) {
 		t.Logf("captured %d, failed %d", captured, failed)
 
 	case "replay":
-		same, differ, missing := 0, 0, 0
+		same, differ, missing, accepted := 0, 0, 0, 0
 		// Counting the paths that differ, rather than only the cases, turns a
 		// wall of diffs into a short list of things to go and fix.
 		paths := map[string]int{}
@@ -101,6 +101,11 @@ func TestAPIDiff(t *testing.T) {
 				same++
 				continue
 			}
+			if reason, ok := acceptedDivergences[c.Name]; ok {
+				accepted++
+				t.Logf("accepted divergence: %s -- %s", c.Name, reason)
+				continue
+			}
 			differ++
 			diffs := diffPaths(want, got)
 			for _, d := range diffs {
@@ -108,7 +113,8 @@ func TestAPIDiff(t *testing.T) {
 			}
 			t.Errorf("%s (%s %s)\n%s", c.Name, c.Method, c.Path, summarise(diffs, want, got))
 		}
-		t.Logf("identical %d, differing %d, not captured %d", same, differ, missing)
+		t.Logf("identical %d, differing %d, accepted %d, not captured %d",
+			same, differ, accepted, missing)
 		if len(paths) > 0 {
 			t.Logf("differing paths, most common first:\n%s", rankPaths(paths))
 		}
@@ -169,6 +175,29 @@ func encodeCapture(status int, body []byte, sortKey string) []byte {
 // returns one and we disagree, that stays a difference.
 //
 // Every entry needs a reason, and the list is meant to stay short.
+// acceptedDivergences names cases where vibe-vep deliberately answers
+// differently from the oracle, with why. They are counted and listed on every
+// run rather than hidden, so the list cannot grow without someone noticing.
+//
+// Each needs a reason that says why the difference is wanted, not merely that
+// it exists. "We have not got to it yet" is not one of these -- that is a
+// failing case.
+var acceptedDivergences = map[string]string{
+	"transcript ENST00000288602.6":             versionedIDReason,
+	"hotspots transcript ENST00000288602.6":    versionedIDReason,
+	"hotspots transcript v2 ENST00000288602.6": versionedIDReason,
+	"transcript filter by ids":                 versionedIDReason + " (one of the ids asked for carries a version)",
+
+	// vep111.genomenexus.org serves its web app for this path rather than a
+	// 404 from the API, so there is no oracle answer to compare against.
+	"canonical gene NOT_A_GENE": "the oracle answers this path with the frontend's HTML, not an API response",
+}
+
+// versionedIDReason is why we answer where genome-nexus does not.
+const versionedIDReason = "genome-nexus keys these on the bare Ensembl id, so a versioned one finds " +
+	"nothing and it answers 200 with an empty body; vibe-vep resolves it. No client " +
+	"written against genome-nexus sends a versioned id here, so answering is additive"
+
 var oracleGapKeys = map[string]string{
 	// genome-nexus carries AlphaMissense on TranscriptConsequence,
 	// TranscriptConsequenceSummary and VariantAnnotationSummary, but fills it

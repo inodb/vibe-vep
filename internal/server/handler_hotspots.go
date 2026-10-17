@@ -322,9 +322,13 @@ func (s *Server) handleHotspotsByGenomicPost(w http.ResponseWriter, r *http.Requ
 	out := make([]aggregatedHotspots, 0, len(locations))
 	for i := range locations {
 		gl := locations[i]
+		v := gl.ToVariant()
 		out = append(out, aggregatedHotspots{
 			GenomicLocation: &gl,
-			Hotspots:        s.hotspotsForVariant(ctx, gl.ToVariant(), version),
+			// genome-nexus names the variant it resolved the location to,
+			// which is how a caller matches an answer to its question.
+			Variant:  output.FormatGenomicHGVS(v),
+			Hotspots: s.hotspotsForVariant(ctx, v, version),
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
