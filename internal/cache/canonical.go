@@ -381,6 +381,11 @@ type GeneMetadata struct {
 	// in the order the table lists them.
 	Synonyms        []string
 	PreviousSymbols []string
+
+	// EntrezGeneID is NCBI's identifier for the gene. The transcript cache
+	// carries one too, but joined on the symbol GENCODE uses, which misses
+	// wherever that symbol has since been retired.
+	EntrezGeneID string
 }
 
 const (
@@ -428,10 +433,17 @@ func parseGeneMetadata(reader io.Reader) (map[string]GeneMetadata, error) {
 		if symbol == "" {
 			continue
 		}
+		entrez := ""
+		if len(fields) > biomartEntrezCol {
+			if id := strings.TrimSpace(fields[biomartEntrezCol]); id != "nan" {
+				entrez = id
+			}
+		}
 		meta[symbol] = GeneMetadata{
 			HGNCID:          strings.TrimPrefix(strings.TrimSpace(fields[biomartHGNCIDCol]), "HGNC:"),
 			Synonyms:        splitNameList(fields[biomartSynonymsCol]),
 			PreviousSymbols: splitNameList(fields[biomartPrevSymbolsCol]),
+			EntrezGeneID:    entrez,
 		}
 	}
 	if err := scanner.Err(); err != nil {

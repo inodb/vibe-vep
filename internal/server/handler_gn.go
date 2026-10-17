@@ -354,6 +354,10 @@ func (s *Server) parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions 
 			meta, _ := s.GeneMetadata(symbol)
 			return meta.HGNCID
 		},
+		EntrezGeneIDs: func(symbol string) string {
+			meta, _ := s.GeneMetadata(symbol)
+			return meta.EntrezGeneID
+		},
 		Revue:         s.Revue(),
 		UniprotIDs:    s.uniprotLookup(r),
 		IncludePtms:   strings.Contains(fields, "ptms"),

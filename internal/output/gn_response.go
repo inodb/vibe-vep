@@ -43,6 +43,11 @@ type GNMarshalOptions struct {
 	// so it comes from the biomart HGNC table instead.
 	HGNCIDs func(symbol string) string
 
+	// EntrezGeneIDs gives a gene's NCBI identifier by approved symbol, for
+	// the genes whose symbol the annotation's own copy was joined on before
+	// it was retired.
+	EntrezGeneIDs func(symbol string) string
+
 	// IncludePtms adds the post-translational modification sites on each
 	// transcript, and PtmLookup supplies them.
 	IncludePtms bool
@@ -413,6 +418,10 @@ func buildTranscriptConsequenceSummary(tc *GNTranscriptConsequence, ann *annotat
 	// looks it up by gene, and vibe-vep carries it on the annotation.
 	if ann != nil {
 		tcs.EntrezGeneID = ann.EntrezGeneID
+		if tcs.EntrezGeneID == "" && opt.EntrezGeneIDs != nil {
+			tcs.EntrezGeneID = opt.EntrezGeneIDs(
+				OfficialGeneSymbol(ann.GeneName, opt.OfficialGeneSymbols))
+		}
 	}
 
 	if opt.UniprotIDs != nil {

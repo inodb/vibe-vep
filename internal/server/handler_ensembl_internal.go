@@ -617,6 +617,9 @@ func (s *Server) geneResponseFor(tx *cache.Transcript) ensemblGeneResponse {
 	if meta, ok := s.GeneMetadata(symbol); ok {
 		resp.Synonyms = meta.Synonyms
 		resp.PreviousSymbols = meta.PreviousSymbols
+		if resp.EntrezGeneID == "" {
+			resp.EntrezGeneID = meta.EntrezGeneID
+		}
 	}
 	return resp
 }
