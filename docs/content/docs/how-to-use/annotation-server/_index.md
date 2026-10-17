@@ -88,6 +88,7 @@ Sizes are for GRCh37 and were measured, not estimated.
 | gencode | `gencode.v19.annotation.gtf.gz`, `.pc_transcripts.fa.gz` | [GENCODE](https://www.gencodegenes.org/) via EBI FTP | 38 + 28 MB |
 | gencode | `GRCh37.p13.genome.fa.gz` | GENCODE via EBI FTP | 805 MB |
 | hgnc | `ensembl_biomart_canonical_transcripts_per_hgnc.txt` | [genome-nexus-importer](https://github.com/genome-nexus/genome-nexus-importer) `data/<bundle>/export/` | 23 MB |
+| ensembl | `ensembl_biomart_transcripts.json.gz` | genome-nexus-importer `data/<bundle>/export/` | 27 MB |
 | — | `annotation_version.txt` | genome-nexus-importer `data/<bundle>/export/` | 3 KB |
 | pfam | `pfamA.txt`, `ensembl_biomart_pfam.txt` | genome-nexus-importer | 0.8 + 13 MB |
 | ptm | `ptm.json.gz` | genome-nexus-importer `data/ptm/export/` | 18 MB |
@@ -107,6 +108,22 @@ its index exists means the next rebuild has nothing to read: it will now fail
 loudly rather than leave an empty index behind, but you will still be waiting
 on a re-download. Roughly 2.6 GB of raw files buys you a rebuild that takes
 minutes instead of an hour.
+
+### Why the Ensembl transcript records are a file and not the GENCODE cache
+
+The `/ensembl` endpoints report a transcript's CCDS and RefSeq accessions, its
+exon identifiers and versions, and its Pfam domain ranges. The GENCODE GTF
+carries none of those, so they cannot be derived from the transcript cache
+however much is read from it.
+
+genome-nexus answers those endpoints from its `ensembl.transcript` collection,
+which genome-nexus-importer publishes as
+`ensembl_biomart_transcripts.json.gz`. vibe-vep reads the same file into
+`ensembl_transcripts.sqlite` (215,170 transcripts, 336 MB, about 15 seconds to
+build), so the two agree by construction rather than by effort.
+
+Without it those endpoints still answer, from the GENCODE cache, with the
+fields it can supply and no others.
 
 `VUEs.json` is the one that moves: reVUE publishes new findings, and a Genome
 Nexus deployment re-reads the catalogue every time it starts. This server
