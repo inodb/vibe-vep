@@ -420,8 +420,11 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 // writeError writes a JSON error response.
+// writeError reports a failure the way genome-nexus does, under "message".
+// Clients read that key, so reporting it under any other name is a failure
+// they cannot see the reason for.
 func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
+	writeJSON(w, status, map[string]string{"message": msg})
 }
 
 // writeGNError writes a genome-nexus style error response that includes

@@ -70,7 +70,7 @@ func (s *Server) handleEnsemblCanonicalByHugo(w http.ResponseWriter, r *http.Req
 
 	isoformSource := r.URL.Query().Get("isoformOverrideSource")
 
-	transcripts := ctx.cache.FindTranscriptsByGene(hugoSymbol)
+	transcripts := s.transcriptsForSymbol(ctx, hugoSymbol)
 	if len(transcripts) == 0 {
 		writeError(w, http.StatusNotFound, "no transcripts found for gene "+hugoSymbol)
 		return
@@ -380,7 +380,7 @@ func (s *Server) handleEnsemblTranscriptPost(w http.ResponseWriter, r *http.Requ
 		}
 	case len(filter.HugoSymbols) > 0:
 		for _, symbol := range filter.HugoSymbols {
-			results = appendTranscripts(results, ctx, ctx.cache.FindTranscriptsByGene(symbol))
+			results = appendTranscripts(results, ctx, s.transcriptsForSymbol(ctx, symbol))
 		}
 	}
 
@@ -420,7 +420,7 @@ func (s *Server) handleEnsemblTranscriptGet(w http.ResponseWriter, r *http.Reque
 	case proteinID != "":
 		candidates = ctx.cache.FindTranscriptsByProteinID(proteinID)
 	default:
-		candidates = ctx.cache.FindTranscriptsByGene(hugoSymbol)
+		candidates = s.transcriptsForSymbol(ctx, hugoSymbol)
 	}
 
 	for _, tx := range candidates {
@@ -442,6 +442,28 @@ func appendTranscripts(dst []any, ctx *assemblyContext, txs []*cache.Transcript)
 		dst = append(dst, ctx.transcriptRecord(tx))
 	}
 	return dst
+}
+
+// transcriptsForSymbol finds a gene's transcripts by any name it answers to.
+//
+// The GENCODE release a cache was built from may predate a symbol change, so
+// the gene HGNC now calls NSD2 is still WHSC1 there. Asking by the approved
+// symbol has to work -- it is the name a caller is most likely to hold -- so
+// a symbol that finds nothing is retried against the names it replaced.
+func (s *Server) transcriptsForSymbol(ctx *assemblyContext, symbol string) []*cache.Transcript {
+	if found := ctx.cache.FindTranscriptsByGene(symbol); len(found) > 0 {
+		return found
+	}
+	meta, ok := s.GeneMetadata(symbol)
+	if !ok {
+		return nil
+	}
+	for _, previous := range meta.PreviousSymbols {
+		if found := ctx.cache.FindTranscriptsByGene(previous); len(found) > 0 {
+			return found
+		}
+	}
+	return nil
 }
 
 // transcriptRecord returns a transcript as the /ensembl endpoints report it.
@@ -478,7 +500,7 @@ func (s *Server) handleEnsemblCanonicalGeneByHugo(w http.ResponseWriter, r *http
 
 	symbol := r.PathValue("hugoSymbol")
 	source := r.URL.Query().Get("isoformOverrideSource")
-	tx := pickCanonical(ctx.cache.FindTranscriptsByGene(symbol), source, s.OverrideTranscripts(source))
+	tx := pickCanonical(s.transcriptsForSymbol(ctx, symbol), source, s.OverrideTranscripts(source))
 	if tx == nil {
 		writeError(w, http.StatusNotFound, "gene not found: "+symbol)
 		return
@@ -618,7 +640,7 @@ func (s *Server) handleEnsemblCanonicalByHugoPost(w http.ResponseWriter, r *http
 
 	results := make([]any, 0, len(symbols))
 	for _, symbol := range symbols {
-		tx := pickCanonical(ctx.cache.FindTranscriptsByGene(symbol), isoformSource, overrides)
+		tx := pickCanonical(s.transcriptsForSymbol(ctx, symbol), isoformSource, overrides)
 		if tx == nil {
 			continue
 		}
@@ -631,7 +653,7 @@ func (s *Server) handleEnsemblCanonicalByHugoPost(w http.ResponseWriter, r *http
 // {prefix}/ensembl/canonical-gene/hgnc.
 func (s *Server) handleEnsemblCanonicalGeneByHugoPost(w http.ResponseWriter, r *http.Request) {
 	s.canonicalGenesPost(w, r, func(ctx *assemblyContext, id string) []*cache.Transcript {
-		return ctx.cache.FindTranscriptsByGene(id)
+		return s.transcriptsForSymbol(ctx, id)
 	})
 }
 
