@@ -9,6 +9,8 @@ import (
 
 	"go.uber.org/zap"
 
+	"strings"
+
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
@@ -111,11 +113,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 		addStartRetainedWhenTheStartReforms(v, t, result)
 		nameStartLostSpan(t, result)
 
-		// Append biotype-specific modifier terms per VEP convention
-		consequence := result.Consequence
-		if t.Biotype == "nonsense_mediated_decay" {
-			consequence += ",NMD_transcript_variant"
-		}
+		consequence := withTranscriptModifier(result.Consequence, t)
 
 		ann := &Annotation{
 			VariantID:          FormatVariantID(v.Chrom, v.Pos, v.Ref, v.Alt),
@@ -274,4 +272,41 @@ func peptideMD5(cds string) string {
 	}
 	h := md5.Sum(buf[:n])
 	return hex.EncodeToString(h[:])
+}
+
+// withTranscriptModifier appends the modifier term VEP adds to say what kind
+// of transcript a consequence was called against.
+//
+// There are two, and they are exclusive: a transcript marked for
+// nonsense-mediated decay gets NMD_transcript_variant, and one with no coding
+// sequence at all gets non_coding_transcript_variant.
+//
+// Neither is added when the variant falls outside the transcript, because
+// upstream_gene_variant and downstream_gene_variant describe a position
+// relative to a gene rather than anything happening inside a transcript.
+// Nor is non_coding_transcript_variant added alongside
+// non_coding_transcript_exon_variant, which already says it.
+func withTranscriptModifier(consequence string, t *cache.Transcript) string {
+	terms := strings.Split(consequence, ",")
+	for _, term := range terms {
+		switch term {
+		case ConsequenceUpstreamGene,
+			ConsequenceDownstreamGene,
+			ConsequenceIntergenicVariant:
+			return consequence
+		}
+	}
+
+	if t.Biotype == "nonsense_mediated_decay" {
+		return consequence + ",NMD_transcript_variant"
+	}
+	if t.IsProteinCoding() {
+		return consequence
+	}
+	for _, term := range terms {
+		if term == ConsequenceNonCodingExon {
+			return consequence
+		}
+	}
+	return consequence + ",non_coding_transcript_variant"
 }
