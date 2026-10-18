@@ -109,6 +109,28 @@ loudly rather than leave an empty index behind, but you will still be waiting
 on a re-download. Roughly 2.6 GB of raw files buys you a rebuild that takes
 minutes instead of an hour.
 
+### Checking more than the canonical transcript
+
+A MAF carries one transcript per variant, so comparing MAFs checks only the
+one genome-nexus picked as canonical. A variant reaches many more, and the
+`/annotation` endpoints report all of them.
+
+`TestTranscriptCoverage` checks that set directly: for a stratified sample of
+the MSK-IMPACT cohort it asks both servers about each variant and compares
+which transcripts came back. A transcript genome-nexus reports and vibe-vep
+does not is a failure; the reverse is listed but allowed, since those are
+transcripts GENCODE has and the oracle's VEP cache does not annotate against.
+
+It runs in the same two passes as the response diff, so a replay needs no
+network:
+
+```bash
+APIDIFF_MODE=capture APIDIFF_BASE=https://vep111.genomenexus.org APIDIFF_DELAY=1s \
+  go test -tags apidiff ./internal/server/ -run TestTranscriptCoverage -v
+APIDIFF_MODE=replay APIDIFF_BASE=http://localhost:38081 \
+  go test -tags apidiff ./internal/server/ -run TestTranscriptCoverage -v
+```
+
 ### Why the Ensembl transcript records are a file and not the GENCODE cache
 
 The `/ensembl` endpoints report a transcript's CCDS and RefSeq accessions, its
