@@ -193,10 +193,13 @@ var acceptedDivergences = map[string]string{
 	"canonical gene NOT_A_GENE": "the oracle answers this path with the frontend's HTML, not an API response",
 }
 
-// versionedIDReason is why we answer where genome-nexus does not.
+// versionedIDReason is why we answer where genome-nexus does not. Accepting
+// a version is a decision taken deliberately, not an oversight, and
+// TestVersionedTranscriptIDs holds every endpoint to it.
 const versionedIDReason = "genome-nexus keys these on the bare Ensembl id, so a versioned one finds " +
-	"nothing and it answers 200 with an empty body; vibe-vep resolves it. No client " +
-	"written against genome-nexus sends a versioned id here, so answering is additive"
+	"nothing and it answers 200 with an empty body. vibe-vep resolves it instead: a caller " +
+	"holding ENST00000288602.6 is asking about a transcript we know, and matching the oracle " +
+	"here would mean reproducing a defect"
 
 var oracleGapKeys = map[string]string{
 	// genome-nexus carries AlphaMissense on TranscriptConsequence,

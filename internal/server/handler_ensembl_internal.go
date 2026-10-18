@@ -99,12 +99,7 @@ func (s *Server) handleEnsemblTranscriptByID(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	tx := ctx.cache.GetTranscript(txID)
-	if tx == nil {
-		// Input is likely unversioned (e.g. "ENST00000357654") but cache
-		// stores versioned IDs (e.g. "ENST00000357654.9"). Try prefix match.
-		tx = ctx.cache.GetTranscriptByPrefix(txID)
-	}
+	tx := lookupTranscript(ctx, txID)
 	if tx == nil {
 		writeError(w, http.StatusNotFound, "transcript not found: "+txID)
 		return
@@ -362,10 +357,7 @@ func (s *Server) handleEnsemblTranscriptPost(w http.ResponseWriter, r *http.Requ
 	switch {
 	case len(filter.TranscriptIDs) > 0:
 		for _, txID := range filter.TranscriptIDs {
-			tx := ctx.cache.GetTranscript(txID)
-			if tx == nil {
-				tx = ctx.cache.GetTranscriptByPrefix(txID)
-			}
+			tx := lookupTranscript(ctx, txID)
 			if tx != nil {
 				results = append(results, ctx.transcriptRecord(tx))
 			}
@@ -588,6 +580,16 @@ func lookupPtms(store *ptm.Store, transcriptID string) []ptm.PTM {
 }
 
 // stripTxVersion removes the version suffix from a transcript ID (e.g. "ENST00000357654.9" → "ENST00000357654").
+// lookupTranscript finds a transcript by id written either way round: the
+// cache keys on the versioned id, callers mostly hold the bare one, and
+// either spelling has to resolve.
+func lookupTranscript(ctx *assemblyContext, txID string) *cache.Transcript {
+	if tx := ctx.cache.GetTranscript(txID); tx != nil {
+		return tx
+	}
+	return ctx.cache.GetTranscriptByPrefix(stripTxVersion(txID))
+}
+
 func stripTxVersion(id string) string {
 	if i := strings.IndexByte(id, '.'); i >= 0 {
 		return id[:i]
