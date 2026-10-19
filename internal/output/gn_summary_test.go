@@ -19,44 +19,43 @@ func TestFormatHGVSg(t *testing.T) {
 		{
 			name:  "substitution carries both alleles either way",
 			chrom: "2", start: 216809708, end: 216809708, ref: "C", alt: "T",
-			want: "2:g.216809708C>T", wantWithRefSeq: "2:g.216809708C>T",
+			want: "2:g.216809708C>T",
 		},
 		{
 			name:  "single base deletion",
 			chrom: "13", start: 32914438, end: 32914438, ref: "T", alt: "-",
-			want: "13:g.32914438del", wantWithRefSeq: "13:g.32914438delT",
+			want: "13:g.32914438del",
 		},
 		{
 			name:  "multi base deletion names the range",
 			chrom: "1", start: 206811015, end: 206811016, ref: "AC", alt: "-",
-			want: "1:g.206811015_206811016del", wantWithRefSeq: "1:g.206811015_206811016delAC",
+			want: "1:g.206811015_206811016del",
 		},
 		{
 			name:  "insertion falls between two bases and removes nothing",
 			chrom: "17", start: 36002277, end: 36002278, ref: "-", alt: "A",
-			want: "17:g.36002277_36002278insA", wantWithRefSeq: "17:g.36002277_36002278insA",
+			want: "17:g.36002277_36002278insA",
 		},
 		{
 			name:  "multi base delins splits into del and ins",
 			chrom: "2", start: 216809708, end: 216809709, ref: "CA", alt: "T",
-			want: "2:g.216809708_216809709delinsT", wantWithRefSeq: "2:g.216809708_216809709delCAinsT",
+			want: "2:g.216809708_216809709delinsT",
 		},
 		{
 			name:  "single base delins",
 			chrom: "17", start: 7579363, end: 7579363, ref: "A", alt: "TTT",
-			want: "17:g.7579363delinsTTT", wantWithRefSeq: "17:g.7579363delAinsTTT",
+			want: "17:g.7579363delinsTTT",
 		},
 		{
 			name:  "a position before the first base cannot be named",
 			chrom: "1", start: 0, end: 0, ref: "A", alt: "T",
-			want: "", wantWithRefSeq: "",
+			want: "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, formatHGVSg(tt.chrom, tt.start, tt.end, tt.ref, tt.alt))
-			assert.Equal(t, tt.wantWithRefSeq, formatHGVSgWithReference(tt.chrom, tt.start, tt.end, tt.ref, tt.alt))
 		})
 	}
 }

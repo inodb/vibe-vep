@@ -88,7 +88,19 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 	start, end := mafCoordinates(v)
 
 	variant := formatHGVSg(v.Chrom, start, end, ref, alt)
-	hgvsg := formatHGVSgWithReference(v.Chrom, start, end, ref, alt)
+	// "variant" and "hgvsg" differ only in that hgvsg is renormalised, which
+	// can shift an insertion to a duplication. Neither restates the bases a
+	// change removes: VEP writes g.100_102del, not g.100_102delACG.
+	hgvsg := variant
+
+	// Ensembl names an insertion by the two bases it falls between, the later
+	// one first, so start is end+1 there and the span reads as empty. The
+	// summary's genomicLocation keeps the query's own coordinates instead,
+	// which is what the annotation pipeline reads.
+	reportedStart, reportedEnd := start, end
+	if isEmptyAllele(ref) {
+		reportedStart, reportedEnd = end, start
+	}
 
 	result := GNAnnotation{
 		Variant:              variant,
@@ -100,8 +112,8 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 		ID:                    variant,
 		AssemblyName:          assembly,
 		SeqRegionName:         v.Chrom,
-		Start:                 start,
-		End:                   end,
+		Start:                 reportedStart,
+		End:                   reportedEnd,
 		AlleleString:          ref + "/" + alt,
 		Strand:                1,
 		SuccessfullyAnnotated: true,
@@ -133,8 +145,8 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 			ProteinID:           ann.ProteinID,
 			ConsequenceTerms:    splitConsequence(ann.Consequence),
 			Impact:              ann.Impact,
-			VariantAllele:       ann.Allele,
-			AminoAcids:          aminoAcidsField(ann),
+			VariantAllele:       dashIfEmpty(ann.Allele),
+			AminoAcids:          vepAminoAcids(ann),
 			Codons:              ann.CodonChange,
 			ProteinStart:        pStart,
 			ProteinEnd:          pEnd,
@@ -640,6 +652,62 @@ func FormatGenomicHGVS(v *vcf.Variant) string {
 	return formatHGVSg(v.Chrom, start, end, ref, alt)
 }
 
+// vepAminoAcids reports the amino_acids field the way VEP does: the
+// translation of the codons on either side of the change.
+//
+// A simple substitution is already known as a ref/alt pair, so that is used
+// where there is one. Everything else -- frameshifts above all, which are
+// most of the cases -- is read off the codons, which is where VEP gets it
+// too: "aaA/aa" is K/X, because the altered side no longer has a whole codon.
+func vepAminoAcids(ann *annotate.Annotation) string {
+	if aa := aminoAcidsField(ann); aa != "" {
+		return aa
+	}
+	return aminoAcidsFromCodons(ann.CodonChange)
+}
+
+// aminoAcidsFromCodons translates both sides of a codons field.
+func aminoAcidsFromCodons(codons string) string {
+	ref, alt, ok := strings.Cut(codons, "/")
+	if !ok {
+		return ""
+	}
+	refAA, altAA := translateCodonSide(ref), translateCodonSide(alt)
+	if refAA == "-" && altAA == "-" {
+		return ""
+	}
+	return refAA + "/" + altAA
+}
+
+// translateCodonSide translates one side of a codons field. The codons are
+// written with the changed bases in upper case and their context in lower,
+// so they are folded before translation. A trailing part-codon, which is what
+// a frameshift leaves behind, becomes X.
+func translateCodonSide(seq string) string {
+	if seq == "" || seq == "-" {
+		return "-"
+	}
+	upper := strings.ToUpper(seq)
+	aa := annotate.TranslateSequence(upper)
+	if len(upper)%3 != 0 {
+		aa += "X"
+	}
+	if aa == "" {
+		return "-"
+	}
+	return aa
+}
+
+// dashIfEmpty writes an absent allele the way VEP does. A deletion removes
+// bases and puts none back, and that is reported as "-" rather than as an
+// empty string.
+func dashIfEmpty(allele string) string {
+	if isEmptyAllele(allele) {
+		return "-"
+	}
+	return allele
+}
+
 // formatHGVSg names a variant in genomic HGVS. This is the "variant" field,
 // which names the change without restating the bases it removes: a deletion
 // is g.100_102del rather than g.100_102delACG.
@@ -662,26 +730,6 @@ func formatHGVSg(chrom string, start, end int64, ref, alt string) string {
 		return prefix + strconv.FormatInt(start, 10) + "delins" + alt
 	default:
 		return prefix + strconv.FormatInt(start, 10) + ref + ">" + alt
-	}
-}
-
-// formatHGVSgWithReference is the "hgvsg" field, which does restate the bases
-// a change removes, so that the notation carries the reference allele the
-// annotator worked from.
-func formatHGVSgWithReference(chrom string, start, end int64, ref, alt string) string {
-	hgvs := formatHGVSg(chrom, start, end, ref, alt)
-	switch {
-	case hgvs == "" || isEmptyAllele(ref):
-		// An insertion removes nothing, so nothing is left out.
-		return hgvs
-	case isEmptyAllele(alt):
-		return hgvs + ref
-	default:
-		if i := strings.Index(hgvs, "delins"); i >= 0 {
-			return hgvs[:i] + "del" + ref + hgvs[i+3:]
-		}
-		// A substitution already carries both alleles.
-		return hgvs
 	}
 }
 
