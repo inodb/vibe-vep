@@ -179,7 +179,7 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 	}
 
 	if opt.IncludeAnnotationSummary {
-		result.AnnotationSummary = buildAnnotationSummary(&result, anns, canonicalAnn, assembly, opt)
+		result.AnnotationSummary = buildAnnotationSummary(&result, start, end, anns, canonicalAnn, assembly, opt)
 	}
 
 	// PTM sites, one list per transcript consequence in the same order.
@@ -306,8 +306,10 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 	return json.Marshal(result)
 }
 
-// buildAnnotationSummary constructs the annotation_summary enrichment.
-func buildAnnotationSummary(result *GNAnnotation, anns []*annotate.Annotation, canonical *annotate.Annotation, assembly string, opt GNMarshalOptions) *GNAnnotationSummary {
+// buildAnnotationSummary takes the variant's own coordinates separately from
+// the response, because the response carries Ensembl's reversed span for an
+// insertion and the summary reports the query's coordinates instead.
+func buildAnnotationSummary(result *GNAnnotation, genomicStart, genomicEnd int64, anns []*annotate.Annotation, canonical *annotate.Annotation, assembly string, opt GNMarshalOptions) *GNAnnotationSummary {
 	ref, alt := splitAlleleString(result.AlleleString)
 	variantType := gnVariantType(ref, alt)
 	inframe := gnIsInframe(ref, alt)
@@ -315,9 +317,13 @@ func buildAnnotationSummary(result *GNAnnotation, anns []*annotate.Annotation, c
 	summary := &GNAnnotationSummary{
 		Variant: result.Variant,
 		GenomicLocation: GNGenomicLocation{
-			Chromosome:      result.SeqRegionName,
-			Start:           result.Start,
-			End:             result.End,
+			Chromosome: result.SeqRegionName,
+			// The query's own coordinates, not the top-level start and end,
+			// which carry Ensembl's reversed span for an insertion. The
+			// annotation pipeline reads these and writes them to the MAF's
+			// Start_Position and End_Position.
+			Start:           genomicStart,
+			End:             genomicEnd,
 			ReferenceAllele: ref,
 			VariantAllele:   alt,
 		},
