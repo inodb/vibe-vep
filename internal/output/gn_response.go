@@ -581,13 +581,15 @@ func sortCanonicalFirst(tcs []GNTranscriptConsequence) {
 	})
 }
 
-// splitAminoAcids splits "V/E" into ref "V" and alt "E".
+// splitAminoAcids splits "V/E" into ref "V" and alt "E". A synonymous change
+// is written once -- "T" -- and means the amino acid is unchanged, so both
+// sides are that one.
 func splitAminoAcids(aa string) (ref, alt string) {
-	parts := strings.SplitN(aa, "/", 2)
-	if len(parts) == 2 {
-		return parts[0], parts[1]
+	ref, alt, ok := strings.Cut(aa, "/")
+	if !ok {
+		return ref, ref
 	}
-	return aa, ""
+	return ref, alt
 }
 
 // hgncID reports the HGNC identifier for an annotation's gene. GENCODE
@@ -667,9 +669,20 @@ func FormatGenomicHGVS(v *vcf.Variant) string {
 // too: "aaA/aa" is K/X, because the altered side no longer has a whole codon.
 func vepAminoAcids(ann *annotate.Annotation) string {
 	if aa := aminoAcidsField(ann); aa != "" {
-		return aa
+		return collapseUnchangedAminoAcid(aa)
 	}
-	return aminoAcidsFromCodons(ann.CodonChange)
+	return collapseUnchangedAminoAcid(aminoAcidsFromCodons(ann.CodonChange))
+}
+
+// collapseUnchangedAminoAcid writes a synonymous change the way VEP does.
+// Where the codon changes but the amino acid does not, VEP names it once --
+// "T", not "T/T".
+func collapseUnchangedAminoAcid(aa string) string {
+	ref, alt, ok := strings.Cut(aa, "/")
+	if ok && ref == alt {
+		return ref
+	}
+	return aa
 }
 
 // aminoAcidsFromCodons translates both sides of a codons field.

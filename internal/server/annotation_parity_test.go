@@ -62,7 +62,7 @@ func TestAnnotationFieldParity(t *testing.T) {
 		batch := variants[from:to]
 
 		time.Sleep(delay)
-		oracle, ours, err := annotateBothSides(oracleBase, vibeBase, batch)
+		oracle, ours, err := annotateBothSidesRetrying(t, oracleBase, vibeBase, batch)
 		if err != nil {
 			t.Fatalf("batch %d-%d: %v", from, to, err)
 		}
@@ -325,6 +325,24 @@ func transcriptsByID(annotation map[string]any) map[string]map[string]any {
 		}
 	}
 	return out
+}
+
+// annotateBothSidesRetrying rides out a failed batch rather than losing the
+// run. A pass over the whole cohort takes hours and leans on someone else's
+// service, where a timeout or a refused connection says nothing about the
+// annotation.
+func annotateBothSidesRetrying(t *testing.T, oracleBase, vibeBase string, batch []map[string]any) (oracle, ours []map[string]any, err error) {
+	const attempts = 4
+	backoff := 2 * time.Second
+	for attempt := 1; ; attempt++ {
+		oracle, ours, err = annotateBothSides(oracleBase, vibeBase, batch)
+		if err == nil || attempt == attempts {
+			return oracle, ours, err
+		}
+		t.Logf("batch failed (%v), retrying in %s", err, backoff)
+		time.Sleep(backoff)
+		backoff *= 2
+	}
 }
 
 // annotateBothSides asks the two servers the same batch at the same time and
