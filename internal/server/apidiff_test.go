@@ -208,6 +208,19 @@ var oracleGapKeys = map[string]string{
 	// vep111.genomenexus.org nor www.genomenexus.org does, so both answer
 	// without the field while vibe-vep reads the scores from its own index.
 	"alphaMissense": "oracle runs VEP without the AlphaMissense plugin",
+
+	// Same again for VEP's own prediction plugins. genome-nexus serves
+	// sift and polyphen straight from VEP's output and lists both in its
+	// /version, but vep111.genomenexus.org answers without them for every
+	// variant tried, so it has no score to disagree with.
+	"sift_score":          "oracle runs VEP without the SIFT plugin",
+	"sift_prediction":     "oracle runs VEP without the SIFT plugin",
+	"polyphen_score":      "oracle runs VEP without the PolyPhen plugin",
+	"polyphen_prediction": "oracle runs VEP without the PolyPhen plugin",
+	"siftScore":           "oracle runs VEP without the SIFT plugin",
+	"siftPrediction":      "oracle runs VEP without the SIFT plugin",
+	"polyphenScore":       "oracle runs VEP without the PolyPhen plugin",
+	"polyphenPrediction":  "oracle runs VEP without the PolyPhen plugin",
 }
 
 // reconcile re-encodes both sides so they are comparable: arrays with no
