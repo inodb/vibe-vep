@@ -335,3 +335,21 @@ func (t *Transcript) FindNearestExonIdx(pos int64) int {
 func (e *Exon) IsCoding() bool {
 	return e.CDSStart > 0 && e.CDSEnd > 0
 }
+
+// SequenceLength names one of the limits on how much sequence a cached
+// transcript keeps.
+type SequenceLength struct {
+	Name  string
+	Bases int
+}
+
+// SequenceLengths reports those limits, so that the cache fingerprint covers
+// them. A cache built under a shorter one holds less sequence than a binary
+// expecting the longer one would find, while being structurally identical --
+// which is exactly the kind of staleness that goes unnoticed.
+func SequenceLengths() []SequenceLength {
+	return []SequenceLength{
+		{"utr3_scan_bases", UTR3ScanBases},
+		{"utr5_tail_bases", UTR5TailBases},
+	}
+}

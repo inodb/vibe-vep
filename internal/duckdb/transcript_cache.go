@@ -14,9 +14,15 @@ import (
 	"github.com/inodb/vibe-vep/internal/cache"
 )
 
-// transcriptSchemaHash returns a short hash derived from the field names and
-// types of cache.Transcript. Any rename, addition, or removal of a field
-// changes the hash, which causes Valid to reject a stale gob cache.
+// transcriptSchemaHash returns a short hash of what a cached transcript
+// holds. Any rename, addition or removal of a field changes it, and so does a
+// change to how much sequence is kept, which causes Valid to reject a stale
+// gob cache.
+//
+// The lengths matter as much as the shape. Raising the 3'UTR retained per
+// transcript leaves the struct identical, so without them a cache built under
+// the old length is accepted and quietly answers from less sequence than the
+// binary expects.
 func transcriptSchemaHash() string {
 	var t cache.Transcript
 	typ := reflect.TypeOf(t)
@@ -24,6 +30,9 @@ func transcriptSchemaHash() string {
 	for i := 0; i < typ.NumField(); i++ {
 		f := typ.Field(i)
 		fmt.Fprintf(h, "%s:%s\n", f.Name, f.Type.String())
+	}
+	for _, length := range cache.SequenceLengths() {
+		fmt.Fprintf(h, "%s=%d\n", length.Name, length.Bases)
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))[:16]
 }

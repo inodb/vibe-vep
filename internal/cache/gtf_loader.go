@@ -12,9 +12,18 @@ import (
 	"strings"
 )
 
-// utr3ScanBases is how much 3'UTR to retain per transcript for stop-codon
-// scanning after a frameshift. See the measurement note at its use site.
-const utr3ScanBases = 1500
+// UTR3ScanBases is how much 3'UTR to retain per transcript.
+//
+// Two things need it. Stop-codon scanning after a frameshift was what set it
+// first, and 1500 covered that: the furthest new stop found against VEP111
+// sits 375 codons downstream. Naming an insertion in the 3'UTR needs it too,
+// and reaches further -- a duplication past the end of what is kept can only
+// be written as an insertion, since there is no sequence to recognise it in.
+//
+// 5000 was measured rather than guessed: of the 3'UTR duplications vibe-vep
+// was still getting wrong, every one sat below *5000, and none below *1500.
+// UTR3ScanBases is exported so the cache fingerprint can cover it.
+const UTR3ScanBases = 5000
 
 // GTFLoader loads transcript data from GENCODE GTF files.
 type GTFLoader struct {
@@ -513,7 +522,7 @@ func (l *GENCODELoader) Load(c *Cache) error {
 				// against VEP111 the furthest new stop sits 375 codons (1125bp)
 				// downstream, and 300bp resolved none of those 168 variants.
 				// Offsets here are relative to the unpadded CDS.
-				if extended := l.fasta.GetCDSPlusDownstream(t.ID, utr3ScanBases); extended != "" && len(extended) > rawCDSLen {
+				if extended := l.fasta.GetCDSPlusDownstream(t.ID, UTR3ScanBases); extended != "" && len(extended) > rawCDSLen {
 					t.UTR3Sequence = extended[rawCDSLen:]
 				}
 			}

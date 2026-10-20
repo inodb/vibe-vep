@@ -38,9 +38,9 @@ func TestBiomartCanonicals_CancerGenesDiffer(t *testing.T) {
 	header := "hgnc_symbol\tcol1\tcanon_tx\tcol3\tcol4\tcol5\tcol6\tcol7\tcol8\tcol9\tcol10\tmskcc_tx\n"
 
 	genes := []struct {
-		gene       string
-		ensemblTx  string
-		mskTx      string
+		gene      string
+		ensemblTx string
+		mskTx     string
 	}{
 		{"ABL1", "ENST00000372348", "ENST00000318560"},
 		{"AKT1", "ENST00000554581", "ENST00000349310"},
