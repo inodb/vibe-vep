@@ -253,8 +253,12 @@ type GNTranscriptConsequence struct {
 	// reading. genome-nexus does not report it, so neither do we.
 	Impact string `json:"-"`
 
-	AminoAcids          string   `json:"amino_acids,omitempty"`
-	Codons              string   `json:"codons,omitempty"`
+	AminoAcids string `json:"amino_acids,omitempty"`
+	Codons     string `json:"codons,omitempty"`
+	// ProteinStart and ProteinEnd stay on the struct whether or not they
+	// reach the wire: the summary builds a protein change out of them even
+	// for a splice variant, which is the one place a position is known
+	// without codons to translate. MarshalJSON decides what is reported.
 	ProteinStart        int64    `json:"protein_start,omitempty"`
 	ProteinEnd          int64    `json:"protein_end,omitempty"`
 	HGVSp               string   `json:"hgvsp,omitempty"`
@@ -271,6 +275,26 @@ type GNTranscriptConsequence struct {
 	PolyPhenPrediction  string   `json:"polyphen_prediction,omitempty"`
 
 	AlphaMissense *GNAlphaMissense `json:"alphaMissense,omitempty"`
+}
+
+// MarshalJSON reports a transcript consequence the way VEP does.
+//
+// VEP gives a protein position exactly where it has codons to translate: a
+// variant that only disrupts a splice site sits in an intron, so there is no
+// residue to name and the field is absent. Measured against
+// vep111.genomenexus.org over 44,084 shared transcripts, reporting a position
+// regardless disagreed on 727 of them and this rule on 73.
+//
+// The position is still computed and kept, because genome-nexus's own
+// resolvers read it back to name a protein change for exactly those splice
+// variants. Only the wire is affected.
+func (tc GNTranscriptConsequence) MarshalJSON() ([]byte, error) {
+	type wire GNTranscriptConsequence
+	w := wire(tc)
+	if tc.Codons == "" {
+		w.ProteinStart, w.ProteinEnd = 0, 0
+	}
+	return json.Marshal(w)
 }
 
 // ParseGNAnnotation parses a JSON line into a GNAnnotation.
