@@ -134,30 +134,32 @@ duplication is never recognised and no `hgvs_offset` is reported.
 
 Measured over 1,378 reverse-strand indel consequences:
 
-| | agreement with vibe-vep |
-|---|---|
-| VEP 111 (`vep111.genomenexus.org`) | 83.4% |
-| VEP 116 (`www.genomenexus.org`) | 91.9% |
-
-VEP 111 and VEP 116 agree with each other on **100%** of forward-strand indels
-and **78.7%** of reverse-strand ones, so the release changed reverse-strand
-behaviour only, and changed it toward vibe-vep. One case:
-
-```
-7:g.2968322_2968323insG, ENST00000355508 (reverse strand)
-  VEP 111    c.76_77insC
-  VEP 116    c.76dup
-  vibe-vep   c.76dup
-```
-
 So a reverse-strand `dup`/`ins` difference against VEP 111 is the oracle's
 defect, not ours, and is not something to fix. Forward-strand differences are
-ours: there VEP 111 and 116 agree, and vibe-vep is the one not shifting far
-enough.
+ours: vibe-vep is the one not shifting far enough there, and that gap shows
+against any oracle.
 
-The harness takes the oracle as a parameter, so both can be measured:
+`7:g.2968322_2968323insG` on ENST00000355508, a reverse-strand transcript, is
+the shape of it: VEP 111 writes `c.76_77insC` where vibe-vep writes `c.76dup`.
+The inserted base duplicates its neighbour, so the duplication is the correct
+name.
+
+### Comparing against a later release
+
+**`www.genomenexus.org` is not a clean VEP 116 measurement.** It answers from
+genome-nexus's own annotation store, which was populated by an earlier VEP, so
+what comes back is a mixture of releases rather than the behaviour of one.
+Numbers taken from it were used here to ask whether the reverse-strand
+difference was version-specific, and they pointed that way, but they do not
+establish what any particular VEP release does.
+
+The claim that the behaviour changed rests on Ensembl issue #1609 instead,
+where the maintainer states the bug was introduced in release 110 and says a
+fix was coming in e112. Settling it by measurement means running
+`ensembl-vep` at a pinned release directly, which has not been done.
+
+The harness takes the oracle as a parameter:
 
 ```bash
 ORACLE_BASE=https://vep111.genomenexus.org ...   # VEP 111, matches our bundle
-ORACLE_BASE=https://www.genomenexus.org    ...   # VEP 116, the later behaviour
 ```
