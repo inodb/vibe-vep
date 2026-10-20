@@ -142,3 +142,24 @@ func (s *Store) BySymbol(symbol string) []json.RawMessage {
 		JOIN transcript_symbol s ON s.transcript_id = t.transcript_id
 		WHERE s.symbol = ?`, symbol)
 }
+
+// HugoSymbol returns the HGNC symbol a transcript's gene is approved under,
+// or "" when the index does not name one.
+//
+// This is the symbol Ensembl and VEP report. A GENCODE release predating an
+// HGNC assignment still carries the clone-based name -- AC005152.2 where the
+// gene is now SOX9-AS1 -- and that name appears in no alias table, so it can
+// only be resolved through the transcript.
+func (s *Store) HugoSymbol(transcriptID string) string {
+	doc, ok := s.ByTranscriptID(transcriptID)
+	if !ok {
+		return ""
+	}
+	var record struct {
+		HugoSymbols []string `json:"hugoSymbols"`
+	}
+	if err := json.Unmarshal(doc, &record); err != nil || len(record.HugoSymbols) == 0 {
+		return ""
+	}
+	return record.HugoSymbols[0]
+}

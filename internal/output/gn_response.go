@@ -38,6 +38,12 @@ type GNMarshalOptions struct {
 	// UniprotIDs maps a transcript to the protein entry it translates to.
 	UniprotIDs func(transcriptID string) string
 
+	// GeneSymbols names a transcript's gene, given what the GENCODE release
+	// called it. Most of the time that name stands; where GENCODE predates an
+	// HGNC assignment and carries a clone-based name instead, the Ensembl
+	// transcript records know the approved symbol.
+	GeneSymbols func(transcriptID, gencodeName string) string
+
 	// HGNCIDs gives a gene's HGNC identifier by symbol, which VEP reports on
 	// every transcript consequence. The GENCODE GTF has no such attribute,
 	// so it comes from the biomart HGNC table instead.
@@ -139,7 +145,7 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 		pStart, pEnd := proteinRange(ann)
 		tc := GNTranscriptConsequence{
 			TranscriptID:        stripVersion(ann.TranscriptID),
-			GeneSymbol:          ann.GeneName,
+			GeneSymbol:          geneSymbol(opt, ann),
 			GeneID:              ann.GeneID,
 			HGNCId:              hgncID(opt, ann),
 			ProteinID:           ann.ProteinID,
@@ -592,6 +598,18 @@ func splitAminoAcids(aa string) (ref, alt string) {
 	return ref, alt
 }
 
+// geneSymbol names an annotation's gene the way Ensembl does, preferring the
+// HGNC symbol the transcript is recorded under over whatever the GENCODE
+// release called it.
+func geneSymbol(opt GNMarshalOptions, ann *annotate.Annotation) string {
+	if opt.GeneSymbols != nil {
+		if symbol := opt.GeneSymbols(ann.TranscriptID, ann.GeneName); symbol != "" {
+			return symbol
+		}
+	}
+	return ann.GeneName
+}
+
 // hgncID reports the HGNC identifier for an annotation's gene. GENCODE
 // supplies it on some assemblies; where it does not, the biomart HGNC table
 // does, looked up by the gene's approved symbol.
@@ -602,7 +620,7 @@ func hgncID(opt GNMarshalOptions, ann *annotate.Annotation) string {
 	if opt.HGNCIDs == nil {
 		return ""
 	}
-	return opt.HGNCIDs(OfficialGeneSymbol(ann.GeneName, opt.OfficialGeneSymbols))
+	return opt.HGNCIDs(OfficialGeneSymbol(geneSymbol(opt, ann), opt.OfficialGeneSymbols))
 }
 
 // OfficialGeneSymbol reports a gene by its approved symbol. A symbol with no

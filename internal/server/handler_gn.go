@@ -350,6 +350,7 @@ func (s *Server) parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions 
 		CancerGenes:              cancer,
 		CuratedGenes:             curated,
 		OfficialGeneSymbols:      s.OfficialGeneSymbols(),
+		GeneSymbols:              s.geneSymbolLookup(r),
 		HGNCIDs: func(symbol string) string {
 			meta, _ := s.GeneMetadata(symbol)
 			return meta.HGNCID
@@ -409,6 +410,34 @@ func (s *Server) uniprotLookup(r *http.Request) func(string) string {
 
 // ptmLookup returns the post-translational modification lookup for the
 // assembly a request names, or nil where no PTM data is loaded.
+// geneSymbolLookup names a transcript's gene.
+//
+// Whatever the GENCODE release calls it stands, so long as HGNC knows that
+// name. Where it does not -- a clone-based name like AC005152.2, from a
+// release predating the HGNC assignment -- the Ensembl transcript records
+// have the approved symbol, which here is SOX9-AS1.
+//
+// The test is "does HGNC know this name", not "does it look like a clone
+// name", and it has to be that way round: Ensembl 92 and GENCODE v19 assign
+// some transcripts to different genes outright, and preferring the transcript
+// records everywhere renamed TCF3 to TCF7L1, ERF to ETF1 and TRAF2 to TANK
+// across 1,684 MAF rows.
+func (s *Server) geneSymbolLookup(r *http.Request) func(string, string) string {
+	ctx := s.getAssembly(r.PathValue("assembly"))
+	if ctx == nil {
+		ctx = s.soleAssembly()
+	}
+	if ctx == nil || ctx.ensemblTx == nil {
+		return nil
+	}
+	return func(transcriptID, gencodeName string) string {
+		if _, known := s.GeneMetadata(gencodeName); known {
+			return gencodeName
+		}
+		return ctx.ensemblTx.HugoSymbol(transcriptID)
+	}
+}
+
 // hotspotLookup answers the "hotspots" field of an annotation from the
 // hotspots table, so that a residue which is a hotspot more than once -- BRAF
 // V600 is both a single residue hotspot and a 3d one -- reports every record
