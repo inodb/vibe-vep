@@ -109,3 +109,55 @@ go test ./internal/output/ -run 'TestValidationBenchmark(GDC|All|AllGRCh37)' -v 
 Full markdown reports are generated in each study directory:
 - `testdata/datahub_gdc/validation_report.md` — GRCh38 (32 GDC studies)
 - `testdata/datahub_all/GRCh37/validation_report.md` — GRCh37 (431 studies)
+
+## Which VEP release the benchmark is measured against
+
+The genome-nexus parity work is measured against `vep111.genomenexus.org`,
+which runs VEP cache 111. That release carries a bug in HGVS c. notation on
+reverse-strand transcripts, so part of the measured difference is the oracle
+being wrong rather than vibe-vep.
+
+Ensembl [issue #1609](https://github.com/Ensembl/ensembl-vep/issues/1609)
+reports it: for the same variant VEP 109 gave `c.1988_1989dup` while VEP 111
+gave `c.1989_1990insAG`, which is a duplication of CT reported as an insertion
+of AG. The maintainer states the bug was **introduced in release 110**, says a
+fix would come in e112, and closed it as a duplicate of
+[#1488](https://github.com/Ensembl/ensembl-vep/issues/1488). The example,
+`NM_017617.5` (NOTCH1), is on the reverse strand, which the issue text does
+not mention.
+
+What goes wrong is that VEP 110 and 111 resolve the 3' ambiguity once in
+genomic forward orientation and then project the result into transcript
+coordinates. On a forward-strand transcript that is the same direction HGVS
+requires; on a reverse-strand transcript it is the opposite one, so the
+duplication is never recognised and no `hgvs_offset` is reported.
+
+Measured over 1,378 reverse-strand indel consequences:
+
+| | agreement with vibe-vep |
+|---|---|
+| VEP 111 (`vep111.genomenexus.org`) | 83.4% |
+| VEP 116 (`www.genomenexus.org`) | 91.9% |
+
+VEP 111 and VEP 116 agree with each other on **100%** of forward-strand indels
+and **78.7%** of reverse-strand ones, so the release changed reverse-strand
+behaviour only, and changed it toward vibe-vep. One case:
+
+```
+7:g.2968322_2968323insG, ENST00000355508 (reverse strand)
+  VEP 111    c.76_77insC
+  VEP 116    c.76dup
+  vibe-vep   c.76dup
+```
+
+So a reverse-strand `dup`/`ins` difference against VEP 111 is the oracle's
+defect, not ours, and is not something to fix. Forward-strand differences are
+ours: there VEP 111 and 116 agree, and vibe-vep is the one not shifting far
+enough.
+
+The harness takes the oracle as a parameter, so both can be measured:
+
+```bash
+ORACLE_BASE=https://vep111.genomenexus.org ...   # VEP 111, matches our bundle
+ORACLE_BASE=https://www.genomenexus.org    ...   # VEP 116, the later behaviour
+```
