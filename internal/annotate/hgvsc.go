@@ -323,6 +323,14 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 		return "c." + strconv.FormatInt(dup.cdsStart, 10) + "_" + strconv.FormatInt(dup.cdsEnd, 10) + "dup"
 	}
 
+	// The same question again, past the stop codon. checkDuplication works in
+	// CDS coordinates, which a 3'UTR position does not have, so an insertion
+	// there was always written as one however plainly it duplicated its
+	// neighbour.
+	if name, ok := duplicationInUTR3(v, t, insertedSeq); ok {
+		return prefix + name
+	}
+
 	// Check for duplication at splice junctions where one flanking position
 	// is intronic (CDS=0) and the other is exonic. The CDS-based dup check
 	// above bails when the anchor is intronic, but the inserted base may
@@ -1658,6 +1666,86 @@ func checkSpliceJunctionDup(v *vcf.Variant, t *cache.Transcript, insertedSeq str
 // Per HGVS convention, the inserted sequence must match either the bases
 // immediately before or immediately after the insertion point.
 // Returns the CDS positions of the duplicated bases for direct HGVS formatting.
+// duplicationInUTR3 reports an insertion in the 3'UTR that duplicates the
+// bases beside it, as "*163dup" or "*163_*164dup".
+//
+// The region is decided by asking genomicToHGVScPos what it would call the
+// anchor, so this cannot disagree with the position the notation is built
+// from. The cached 3'UTR runs to utr3ScanBases, and an insertion past that
+// is left as an insertion rather than guessed at.
+func duplicationInUTR3(v *vcf.Variant, t *cache.Transcript, insertedSeq string) (string, bool) {
+	if len(insertedSeq) == 0 || len(t.UTR3Sequence) == 0 {
+		return "", false
+	}
+
+	// The base the insertion follows, in transcript order.
+	anchor := v.Pos
+	if t.IsReverseStrand() {
+		anchor = v.Pos + 1
+	}
+	// a is the anchor's position as HGVS names it: "*1" is the first base
+	// after the stop codon, so "*a" is utr[a-1].
+	a, ok := utr3Offset(anchor, t)
+	if !ok {
+		return "", false
+	}
+	anchorOffset := a
+
+	n := len(insertedSeq)
+	utr := t.UTR3Sequence
+	if a > len(utr) {
+		return "", false
+	}
+
+	// 3'-shift first. An insertion can move downstream for as long as the
+	// base after it repeats the first base being inserted, and HGVS names it
+	// at the furthest such position. Without this a run of eight A's gives
+	// *343dup where VEP gives *351dup -- a duplication either way, named in
+	// the wrong place.
+	shifted := []byte(insertedSeq)
+	for a < len(utr) && utr[a] == shifted[0] {
+		shifted = append(shifted[1:], shifted[0])
+		a++
+	}
+	moved := string(shifted)
+
+	// Duplicating the bases ending at the anchor: *(a-n+1) through *a.
+	if a-n >= 0 && a <= len(utr) && utr[a-n:a] == moved {
+		return utr3RangeStr(a-n+1, a), true
+	}
+	// Duplicating the bases beginning after it: *(a+1) through *(a+n).
+	if a+n <= len(utr) && utr[a:a+n] == moved {
+		return utr3RangeStr(a+1, a+n), true
+	}
+	// Not a duplication, but the shift still moved it.
+	if moved != insertedSeq || a != anchorOffset {
+		return "*" + strconv.Itoa(a) + "_*" + strconv.Itoa(a+1) + "ins" + moved, true
+	}
+	return "", false
+}
+
+// utr3Offset gives the "*N" a genomic position is named by, reporting false
+// where it is not in the 3'UTR at all.
+func utr3Offset(pos int64, t *cache.Transcript) (int, bool) {
+	name := genomicToHGVScPos(pos, t)
+	if !strings.HasPrefix(name, "*") {
+		return 0, false
+	}
+	n, err := strconv.Atoi(name[1:])
+	if err != nil || n < 1 {
+		return 0, false
+	}
+	return n, true
+}
+
+// utr3RangeStr names one or two 3'UTR positions.
+func utr3RangeStr(start, end int) string {
+	if start == end {
+		return "*" + strconv.Itoa(start) + "dup"
+	}
+	return "*" + strconv.Itoa(start) + "_*" + strconv.Itoa(end) + "dup"
+}
+
 func checkDuplication(v *vcf.Variant, t *cache.Transcript, insertedSeq string) dupResult {
 	if len(insertedSeq) == 0 || len(t.CDSSequence) == 0 {
 		return dupResult{}

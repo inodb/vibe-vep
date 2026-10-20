@@ -221,6 +221,12 @@ var oracleGapKeys = map[string]string{
 	"siftPrediction":      "oracle runs VEP without the SIFT plugin",
 	"polyphenScore":       "oracle runs VEP without the PolyPhen plugin",
 	"polyphenPrediction":  "oracle runs VEP without the PolyPhen plugin",
+
+	// www.genomenexus.org reports hgvsg on the annotation but not on each
+	// transcript consequence, where vep111.genomenexus.org reports both.
+	// Honoured only where the oracle is silent, so the field is still
+	// compared against an oracle that does send it.
+	"hgvsg": "oracle does not repeat hgvsg on each transcript consequence",
 }
 
 // reconcile re-encodes both sides so they are comparable: arrays with no
