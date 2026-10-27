@@ -615,35 +615,27 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 	// For deletions, compute protein position from the first deleted base
 	// instead of the VCF anchor (which is one position before the deletion).
 	if refLen > altLen && len(t.CDSSequence) > 0 {
-		var firstDelGenomic, lastDelGenomic int64
-		if t.IsForwardStrand() {
-			firstDelGenomic = v.Pos + 1
-			lastDelGenomic = v.Pos + int64(refLen) - 1
-		} else {
-			firstDelGenomic = v.Pos + int64(refLen) - 1
-			lastDelGenomic = v.Pos + 1
-		}
-		if firstDelCDS := GenomicToCDS(firstDelGenomic, t); firstDelCDS > 0 {
-			delCodonNum, _ := CDSToCodonPosition(firstDelCDS)
-			result.ProteinPosition = delCodonNum
-		}
-		// protein_start is reported at the first genuinely changed base. The
-		// positions above assume a VCF anchor (v.Pos+1), but genome-nexus sends
-		// MAF-style alleles where v.Pos IS the first deleted base, which put
-		// protein_start one codon too high on every such deletion.
+		// Where the deleted bases are, in transcript order.
+		//
+		// v.Pos is the first deleted base when the caller sends MAF-style
+		// alleles, as genome-nexus does, and the anchor before it when the
+		// caller sends VCF-style ones. The shared prefix tells them apart, so
+		// counting from it works for both -- where assuming the VCF anchor
+		// put every MAF-style deletion one base out.
 		shared := 0
 		for shared < len(v.Ref) && shared < len(v.Alt) && v.Ref[shared] == v.Alt[shared] {
 			shared++
 		}
-		firstChanged, lastChanged := v.Pos+int64(shared), v.Pos+int64(refLen)-1
+		firstDelGenomic, lastDelGenomic := v.Pos+int64(shared), v.Pos+int64(refLen)-1
 		if !t.IsForwardStrand() {
-			firstChanged, lastChanged = lastChanged, firstChanged
+			firstDelGenomic, lastDelGenomic = lastDelGenomic, firstDelGenomic
 		}
-		if cds := GenomicToCDS(firstChanged, t); cds > 0 {
-			n, _ := CDSToCodonPosition(cds)
-			result.ProteinStart = n
+		if firstDelCDS := GenomicToCDS(firstDelGenomic, t); firstDelCDS > 0 {
+			delCodonNum, _ := CDSToCodonPosition(firstDelCDS)
+			result.ProteinPosition = delCodonNum
+			result.ProteinStart = delCodonNum
 		}
-		if cds := GenomicToCDS(lastChanged, t); cds > 0 {
+		if cds := GenomicToCDS(lastDelGenomic, t); cds > 0 {
 			n, _ := CDSToCodonPosition(cds)
 			if n > result.ProteinStart {
 				result.ProteinEnd = n
