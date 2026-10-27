@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
@@ -292,9 +294,89 @@ func (tc GNTranscriptConsequence) MarshalJSON() ([]byte, error) {
 	type wire GNTranscriptConsequence
 	w := wire(tc)
 	if tc.Codons == "" {
-		w.ProteinStart, w.ProteinEnd = 0, 0
+		startCoding, endCoding := codingEndsOfHGVSc(tc.HGVSc)
+		// A change spanning a splice boundary can leave the annotator without
+		// a protein position at all, because the coordinate it works from is
+		// the intronic end. The coding end names its own residue, so take it
+		// from there.
+		if startCoding && w.ProteinStart == 0 {
+			w.ProteinStart = codonOfHGVScStart(tc.HGVSc)
+		}
+		switch {
+		case !startCoding && !endCoding:
+			// Wholly outside the coding sequence: no residue to name.
+			w.ProteinStart, w.ProteinEnd = 0, 0
+		case !startCoding:
+			// Reaches in from an intron or a UTR. Only where it lands is
+			// nameable, and VEP reports that as the end alone.
+			w.ProteinStart = 0
+		case !endCoding:
+			// Reaches out of the coding sequence. The range stops where it
+			// left, so VEP reports the same residue at both ends.
+			w.ProteinEnd = w.ProteinStart
+		}
 	}
 	return json.Marshal(w)
+}
+
+// hgvscRange picks the one or two coordinates out of an HGVS c. or n. name,
+// before the edit that follows them.
+var hgvscRange = regexp.MustCompile(`^[cn]\.([*\-]?\d+(?:[+-]\d+)?)(?:_([*\-]?\d+(?:[+-]\d+)?))?`)
+
+// codonOfHGVScStart gives the residue the first coordinate of a coding HGVS
+// c. name falls in. c.211 is the first base of codon 71, c.213 the last.
+func codonOfHGVScStart(hgvsc string) int64 {
+	name := hgvsc
+	if i := strings.LastIndex(name, ":"); i >= 0 {
+		name = name[i+1:]
+	}
+	if strings.HasPrefix(name, "n.") {
+		return 0
+	}
+	m := hgvscRange.FindStringSubmatch(name)
+	if m == nil {
+		return 0
+	}
+	pos, err := strconv.ParseInt(m[1], 10, 64)
+	if err != nil || pos < 1 {
+		return 0
+	}
+	return (pos + 2) / 3
+}
+
+// codingEndsOfHGVSc reports whether each end of a change lies in the coding
+// sequence, reading it off the name rather than recomputing it.
+//
+// A variant crossing a splice site has one end in an intron and one in an
+// exon, and VEP names a residue only for the end that has one. Which end that
+// is cannot be told from the codons, because a change spanning the boundary
+// has none at all.
+func codingEndsOfHGVSc(hgvsc string) (start, end bool) {
+	name := hgvsc
+	if i := strings.LastIndex(name, ":"); i >= 0 {
+		name = name[i+1:]
+	}
+	// An "n." name belongs to a transcript with no coding sequence at all, so
+	// neither end of it names a residue.
+	if strings.HasPrefix(name, "n.") {
+		return false, false
+	}
+	m := hgvscRange.FindStringSubmatch(name)
+	if m == nil {
+		return false, false
+	}
+	coding := func(coord string) bool {
+		if coord == "" || strings.HasPrefix(coord, "*") || strings.HasPrefix(coord, "-") {
+			return false // a UTR position, not a coding one
+		}
+		// A "+n" or "-n" offset after the position puts it in an intron.
+		return !strings.ContainsAny(coord[1:], "+-")
+	}
+	first := coding(m[1])
+	if m[2] == "" {
+		return first, first
+	}
+	return first, coding(m[2])
 }
 
 // ParseGNAnnotation parses a JSON line into a GNAnnotation.
