@@ -144,6 +144,34 @@ the shape of it: VEP 111 writes `c.76_77insC` where vibe-vep writes `c.76dup`.
 The inserted base duplicates its neighbour, so the duplication is the correct
 name.
 
+### A second VEP 111 defect: intronic anchors on 5'-incomplete transcripts
+
+Where a transcript's CDS is 5'-incomplete (GENCODE `cds_start_NF`, 11,145 of
+196,520 transcripts), VEP numbers c.1 from the first base of the notional
+complete first codon, so the annotated CDS starts at c.2 or c.3. vibe-vep does
+the same, and the two agree exactly on exonic positions.
+
+Its intronic anchors do not follow. For ENST00000562194 (ANKRD11, phase 1, so
+the offset is 2):
+
+```
+first base of exon 2      vep111  c.154A>T      vibe-vep  c.154A>T    agree
+a position in intron 1    vep111  c.152-6636T>C vibe-vep  c.154-6636T>C
+```
+
+The oracle names that base c.154 and then anchors the intron to c.152, which
+its own exonic answer contradicts. ENST00000522932 (phase 2, offset 1) shows
+the same thing: exon 2 starts at c.107 on both sides, and the intron anchors
+to c.106 on the oracle's.
+
+The discrepancy is exactly the offset -- 2 where the first CDS phase is 1, 1
+where it is 2 -- so the anchor is computed from the raw count of annotated CDS
+bases while the exonic numbering includes the padding.
+
+vibe-vep is consistent with itself and with the oracle's own exonic numbering
+here, so these differences are not a gap to close. They were briefly treated
+as one, which is why this is written down.
+
 ### Comparing against a later release
 
 **`www.genomenexus.org` is not a clean VEP 116 measurement.** It answers from
