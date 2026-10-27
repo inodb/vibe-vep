@@ -293,19 +293,20 @@ type GNTranscriptConsequence struct {
 func (tc GNTranscriptConsequence) MarshalJSON() ([]byte, error) {
 	type wire GNTranscriptConsequence
 	w := wire(tc)
+	// A change spanning a splice boundary, or ending in an incomplete
+	// terminal codon, can leave the annotator without a protein position at
+	// all. The HGVS name says which end is coding and where it sits, so the
+	// residue comes from there.
+	startCoding, endCoding := codingEndsOfHGVSc(tc.HGVSc)
+	first, last := codonsOfHGVSc(tc.HGVSc, tc.HGVSOffset)
+	if startCoding && w.ProteinStart == 0 {
+		w.ProteinStart = first
+	}
+	if endCoding && w.ProteinEnd == 0 {
+		w.ProteinEnd = last
+	}
+
 	if tc.Codons == "" {
-		startCoding, endCoding := codingEndsOfHGVSc(tc.HGVSc)
-		// A change spanning a splice boundary can leave the annotator without
-		// a protein position at all, because the coordinate it works from is
-		// the intronic end. The coding end names its own residue, so take it
-		// from there.
-		first, last := codonsOfHGVSc(tc.HGVSc)
-		if startCoding && w.ProteinStart == 0 {
-			w.ProteinStart = first
-		}
-		if endCoding && w.ProteinEnd == 0 {
-			w.ProteinEnd = last
-		}
 		switch {
 		case !startCoding && !endCoding:
 			// Wholly outside the coding sequence: no residue to name.
@@ -341,7 +342,7 @@ var hgvscRange = regexp.MustCompile(`^[cn]\.([*\-]?\d+(?:[+-]\d+)?)(?:_([*\-]?\d
 //
 // Either may be zero: an intronic or UTR coordinate names no residue, and a
 // name with one coordinate reports it as both.
-func codonsOfHGVSc(hgvsc string) (first, last int64) {
+func codonsOfHGVSc(hgvsc string, hgvsOffset int) (first, last int64) {
 	name := hgvsc
 	if i := strings.LastIndex(name, ":"); i >= 0 {
 		name = name[i+1:]
@@ -353,9 +354,20 @@ func codonsOfHGVSc(hgvsc string) (first, last int64) {
 	if m == nil {
 		return 0, 0
 	}
+	// The name is 3'-shifted; VEP names the residue from where the change
+	// sits before shifting, so the shift comes back off first. The offset is
+	// signed by genomic direction, which on a reverse-strand transcript runs
+	// the other way from the transcript, so only its size matters here.
+	shift := int64(hgvsOffset)
+	if shift < 0 {
+		shift = -shift
+	}
 	codon := func(coord string) int64 {
 		pos, err := strconv.ParseInt(coord, 10, 64)
 		if err != nil || pos < 1 {
+			return 0
+		}
+		if pos -= shift; pos < 1 {
 			return 0
 		}
 		return (pos + 2) / 3

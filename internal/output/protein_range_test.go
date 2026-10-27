@@ -40,7 +40,7 @@ func TestCodonsOfHGVSc(t *testing.T) {
 		{"ENST00000269305.4:c.2266_2273del", 756, 758},
 		{"ENST00000502371.1:n.1552_1553del", 0, 0}, // no coding sequence at all
 	} {
-		first, last := codonsOfHGVSc(c.hgvsc)
+		first, last := codonsOfHGVSc(c.hgvsc, 0)
 		if first != c.wantFirst || last != c.wantLast {
 			t.Errorf("codonsOfHGVSc(%q) = %d, %d; want %d, %d",
 				c.hgvsc, first, last, c.wantFirst, c.wantLast)
