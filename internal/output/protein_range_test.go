@@ -27,3 +27,23 @@ func TestCodingEndsOfHGVSc(t *testing.T) {
 		}
 	}
 }
+
+// The residue each coordinate falls in, where it names one at all.
+func TestCodonsOfHGVSc(t *testing.T) {
+	for _, c := range []struct {
+		hgvsc               string
+		wantFirst, wantLast int64
+	}{
+		{"ENST00000395038.2:c.211_213+5delinsAAT", 71, 0}, // only the first end is coding
+		{"ENST00000252674.5:c.421-1_421delinsAA", 0, 141}, // only the second
+		{"ENST00000269305.4:c.1799T>A", 600, 600},         // one coordinate, reported as both
+		{"ENST00000269305.4:c.2266_2273del", 756, 758},
+		{"ENST00000502371.1:n.1552_1553del", 0, 0}, // no coding sequence at all
+	} {
+		first, last := codonsOfHGVSc(c.hgvsc)
+		if first != c.wantFirst || last != c.wantLast {
+			t.Errorf("codonsOfHGVSc(%q) = %d, %d; want %d, %d",
+				c.hgvsc, first, last, c.wantFirst, c.wantLast)
+		}
+	}
+}

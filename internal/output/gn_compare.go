@@ -299,8 +299,12 @@ func (tc GNTranscriptConsequence) MarshalJSON() ([]byte, error) {
 		// a protein position at all, because the coordinate it works from is
 		// the intronic end. The coding end names its own residue, so take it
 		// from there.
+		first, last := codonsOfHGVSc(tc.HGVSc)
 		if startCoding && w.ProteinStart == 0 {
-			w.ProteinStart = codonOfHGVScStart(tc.HGVSc)
+			w.ProteinStart = first
+		}
+		if endCoding && w.ProteinEnd == 0 {
+			w.ProteinEnd = last
 		}
 		switch {
 		case !startCoding && !endCoding:
@@ -314,6 +318,15 @@ func (tc GNTranscriptConsequence) MarshalJSON() ([]byte, error) {
 			// Reaches out of the coding sequence. The range stops where it
 			// left, so VEP reports the same residue at both ends.
 			w.ProteinEnd = w.ProteinStart
+		default:
+			// Both ends coding and still no codons: a splice site at a coding
+			// base, which changes no codon, so VEP names no residue.
+			//
+			// genome-nexus does name one -- its summary reads 987 back out of
+			// the p.X987_splice it built -- but that is the summary's own
+			// work, and it still reports nothing here. The position stays on
+			// the struct for the summary to derive from.
+			w.ProteinStart, w.ProteinEnd = 0, 0
 		}
 	}
 	return json.Marshal(w)
@@ -323,25 +336,35 @@ func (tc GNTranscriptConsequence) MarshalJSON() ([]byte, error) {
 // before the edit that follows them.
 var hgvscRange = regexp.MustCompile(`^[cn]\.([*\-]?\d+(?:[+-]\d+)?)(?:_([*\-]?\d+(?:[+-]\d+)?))?`)
 
-// codonOfHGVScStart gives the residue the first coordinate of a coding HGVS
-// c. name falls in. c.211 is the first base of codon 71, c.213 the last.
-func codonOfHGVScStart(hgvsc string) int64 {
+// codonsOfHGVSc gives the residues the two coordinates of a coding HGVS c.
+// name fall in. c.211 is the first base of codon 71, c.213 the last.
+//
+// Either may be zero: an intronic or UTR coordinate names no residue, and a
+// name with one coordinate reports it as both.
+func codonsOfHGVSc(hgvsc string) (first, last int64) {
 	name := hgvsc
 	if i := strings.LastIndex(name, ":"); i >= 0 {
 		name = name[i+1:]
 	}
 	if strings.HasPrefix(name, "n.") {
-		return 0
+		return 0, 0
 	}
 	m := hgvscRange.FindStringSubmatch(name)
 	if m == nil {
-		return 0
+		return 0, 0
 	}
-	pos, err := strconv.ParseInt(m[1], 10, 64)
-	if err != nil || pos < 1 {
-		return 0
+	codon := func(coord string) int64 {
+		pos, err := strconv.ParseInt(coord, 10, 64)
+		if err != nil || pos < 1 {
+			return 0
+		}
+		return (pos + 2) / 3
 	}
-	return (pos + 2) / 3
+	first = codon(m[1])
+	if m[2] == "" {
+		return first, first
+	}
+	return first, codon(m[2])
 }
 
 // codingEndsOfHGVSc reports whether each end of a change lies in the coding
