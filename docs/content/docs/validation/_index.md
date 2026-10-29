@@ -196,11 +196,33 @@ tandem duplication; VEP names it `48591936_48591937ins...`. This is the same
 shape as the reverse-strand `dup`/`ins` defect above and is not something to
 fix.
 
-The transcript-relative names are a separate matter. `hgvsc` is still shifted
-only where the change is exonic and the transcript codes for something, so
-deep intronic positions and non-coding transcripts keep the unshifted name.
-That is the largest remaining gap against VEP 111, and closing it means
-giving the annotator the reference too, which it has never had.
+The transcript-relative names needed the same thing. `hgvsc` was shifted only
+as far as the transcript cache held sequence -- the coding sequence, both UTR
+tails and a hundred bases of each intron flank -- so a position deeper in an
+intron than that stopped, and a non-coding transcript, which has none of the
+three, never shifted at all. The shifts now fall back to the reference, and
+the forward-strand non-coding gap, 964 transcript consequences, is gone.
+
+Over 20,000 variants the whole series took differing fields from 29,067
+(1.1371%) to 4,498 (0.1760%), and variants identical in every field from
+16,503 to 18,319. On the full cohort it took the MAF from 98.4965% to
+98.5138% against VEP 111, with HGVS_Offset going from 121 differing rows
+to 2.
+
+### What is left is the two oracle defects, and almost nothing else
+
+Of the 2,583 `hgvsc` differences remaining over 20,000 variants:
+
+```
+1,596   reverse-strand dup/ins      Ensembl #1609
+  ~900  cds_start_NF intron anchors oracle contradicts its own exonic numbering
+```
+
+The 224 that looked like a shift gap of ours are the same dup/ins pattern
+seen from the wrong angle: `c.269_270insCAG` against `c.267_269dup` is one
+event named two ways, and the coordinates differ only because a duplication
+names the duplicated bases while an insertion names the positions it falls
+between. There is no HGVSc shift gap of ours left in this corpus.
 
 ### Comparing against a later release
 
