@@ -144,33 +144,55 @@ the shape of it: VEP 111 writes `c.76_77insC` where vibe-vep writes `c.76dup`.
 The inserted base duplicates its neighbour, so the duplication is the correct
 name.
 
-### A second VEP 111 defect: intronic anchors on 5'-incomplete transcripts
+### A second VEP 111 defect: 5'-incomplete transcripts numbered two ways
 
 Where a transcript's CDS is 5'-incomplete (GENCODE `cds_start_NF`, 11,145 of
 196,520 transcripts), VEP numbers c.1 from the first base of the notional
 complete first codon, so the annotated CDS starts at c.2 or c.3. vibe-vep does
-the same, and the two agree exactly on exonic positions.
+the same -- `CDSStartOffset`, `(3 - phase) % 3` -- and that is what keeps its
+own `hgvsc` and `protein_start` describing the same residue.
 
-Its intronic anchors do not follow. For ENST00000562194 (ANKRD11, phase 1, so
-the offset is 2):
+VEP applies the offset to an exonic substitution and to nothing else. Over
+20,000 variants, 977 `hgvsc` differences across 168 transcripts are exactly
+this, and the breakdown is clean:
 
 ```
-first base of exon 2      vep111  c.154A>T      vibe-vep  c.154A>T    agree
-a position in intron 1    vep111  c.152-6636T>C vibe-vep  c.154-6636T>C
+496  substitution, intronic anchor
+319  deletion, exonic
+ 96  deletion, intronic anchor
+ 54  duplication, exonic
+  8  duplication, intronic anchor
+  4  insertion, exonic
+  0  substitution, exonic
 ```
 
-The oracle names that base c.154 and then anchors the intron to c.152, which
-its own exonic answer contradicts. ENST00000522932 (phase 2, offset 1) shows
-the same thing: exon 2 starts at c.107 on both sides, and the intron anchors
-to c.106 on the oracle's.
+Not one exonic substitution disagrees, and nothing else agrees. The gap is
+always the offset: 2 where the first CDS phase is 1, 1 where it is 2.
 
-The discrepancy is exactly the offset -- 2 where the first CDS phase is 1, 1
-where it is 2 -- so the anchor is computed from the raw count of annotated CDS
-bases while the exonic numbering includes the padding.
+RYBP ENST00000477973 (phase 1, offset 2) shows both answers on one
+transcript:
 
-vibe-vep is consistent with itself and with the oracle's own exonic numbering
-here, so these differences are not a gap to close. They were briefly treated
-as one, which is why this is written down.
+```
+exonic substitution   vep111  c.632C>A        vibe-vep  c.632C>A       agree
+exonic deletion       vep111  c.506_508del    vibe-vep  c.508_510del
+```
+
+The oracle calls that base c.632 -- raw position 630 plus the offset -- and
+then names a deletion three exons away from the raw count alone. ANKRD11
+ENST00000562194 is the intronic form of the same thing: exon 2 starts at
+c.154 on both sides, and the oracle anchors intron 1 to c.152.
+
+So the padding is applied where the CDS coordinate is reached through the
+codon, and skipped where it is reached by counting cDNA bases. vibe-vep is
+consistent with itself and with the oracle's own exonic substitutions, and
+matching the rest would mean reproducing the inconsistency: its `c.` names
+would then contradict its own `protein_start` on these transcripts. These
+differences are therefore not a gap to close.
+
+An earlier version of this section called the class "intronic anchors" and
+put it at roughly 900 differences. That was the visible half. The exonic
+indels are the same defect and were being counted as a shift gap of ours,
+which they are not.
 
 ### Genomic HGVS is renormalised; transcript-relative HGVS is not, yet
 
@@ -211,18 +233,89 @@ to 2.
 
 ### What is left is the two oracle defects, and almost nothing else
 
-Of the 2,583 `hgvsc` differences remaining over 20,000 variants:
+Of the 2,512 `hgvsc` differences remaining over 20,000 variants:
 
 ```
-1,596   reverse-strand dup/ins      Ensembl #1609
-  ~900  cds_start_NF intron anchors oracle contradicts its own exonic numbering
+1,530   reverse-strand dup/ins      Ensembl #1609
+  977   cds_start_NF numbering      oracle applies its own offset to
+                                    exonic substitutions and nothing else
+    5   unparsed
 ```
+
+Every one of the 977 differs from ours by exactly the 5'-incomplete offset,
+1 or 2, and never in the other direction.
 
 The 224 that looked like a shift gap of ours are the same dup/ins pattern
 seen from the wrong angle: `c.269_270insCAG` against `c.267_269dup` is one
 event named two ways, and the coordinates differ only because a duplication
 names the duplicated bases while an insertion names the positions it falls
 between. There is no HGVSc shift gap of ours left in this corpus.
+
+### What the amino acids, the splice terms and the part-codons closed
+
+Five gaps of ours were closed after the reference landed, each measured on
+its own against the oracle and then against the full cohort.
+
+**`amino_acids` came from the named protein change, not the codons.** That
+change knows only the residue it renames, so a two-base substitution
+straddling a codon boundary read `R/C` where VEP reads `VR/VC` -- both
+codons, even though only the second residue moves. The codons field already
+covered the right span and already matched the oracle, so it is the
+authority now. One rule about part-codons had to be measured rather than
+assumed: a frameshift leaves a part-codon named X, except where the change
+translates to a stop and nothing else, where VEP writes `Y/*` and never
+`Y/*X`. It really is only that case -- `*L` with a part-codon after it is
+still `*LX`. Checked against 4,334 part-codon sides pulled from the oracle,
+the rule and the oracle disagree nowhere. This took `amino_acids` from 382
+differences to 0, and `aminoAcids`, `aminoAcidRef` and `aminoAcidAlt` in the
+annotation summary from 285 to 0.
+
+**A non-coding exon's splice site was never named.** A deletion running out
+of a non-coding exon and over the donor dinucleotide destroys that site; the
+non-coding path asked only whether an exon edge was touched and said
+`splice_region_variant`. `spanSpliceTerms` already enumerates the right
+terms for the coding path and contributes nothing for a non-coding
+transcript's exonic positions, so joining it with the exon term is the whole
+fix. An insertion is excluded: it sits between two bases and takes neither
+out.
+
+**A CDS that ends in a part-codon had no name for it.** VEP reports
+`incomplete_terminal_codon_variant` there and still gives the codons it has,
+`X` for the residue and the position as a terminator: MSH6 ENST00000455383
+c.346G>A is `Gt/At`, `X`, `p.Ter116=`. Reporting the codons is what restores
+the protein position as well, since a transcript consequence with no codons
+withholds one.
+
+**Coming the other way was the same gap.** A deletion starting inside an
+intron and running over the acceptor into a non-coding exon was reported as
+the bare site plus `non_coding_transcript_variant`, because `spanSpliceTerms`
+names an exonic base from its CDS position or its UTR and a non-coding
+transcript has neither. Saying so there also drops
+`splice_polypyrimidine_tract_variant`, which was already encoded -- the tract
+is suppressed whenever an exonic term is present, and the exonic term was the
+one missing. A last pairing went with it: `mature_miRNA_variant` already says
+the transcript codes for nothing, so VEP does not add the generic modifier
+beside it, and neither does vibe-vep now.
+
+**A 3'UTR insertion did not report how far it shifted.** The walk through
+the cached 3'UTR found the right name and threw the distance away, so
+`hgvs_offset` was absent where VEP reports it -- TCF7L2
+10:114925316_114925317insA is `c.*30dup` with an offset of 9. 109 of the
+110 missing offsets were this.
+
+Together these took differing fields from 4,498 (0.1760%) to 3,474
+(0.1359%), variants identical in every field from 18,319 to 18,627, and the
+full MAF from 98.5138% to 98.5203% against VEP 111. Every cell that moved
+in the MAF moved toward VEP: 35 better, none worse.
+
+### What is left in consequence_terms
+
+71 differences over 20,000 variants, across 27 shapes, the largest of them
+9. Eight are miRNA transcripts where the variant sits in the transcript but
+outside the mature product: VEP reports `non_coding_transcript_exon_variant`
+and vibe-vep reports `mature_miRNA_variant`, and the mature coordinates come
+from Ensembl's miRNA annotation, which the GENCODE GTF does not carry. The
+rest are one- and two-case shapes with no common cause yet.
 
 ### Comparing against a later release
 
