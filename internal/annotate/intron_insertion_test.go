@@ -287,3 +287,33 @@ func TestCodingBaseAtOnANonCodingTranscript(t *testing.T) {
 		t.Errorf("shift without a reference = %d, want 0", got)
 	}
 }
+
+// An insertion whose bases repeat the ones before it is a duplication, and
+// the fallback path names it as one on either strand.
+func TestInsertionAsDup(t *testing.T) {
+	tr := &cache.Transcript{
+		ID: "ENST_NC2", GeneName: "NC2", Chrom: "1", Strand: 1,
+		Start: 1000, End: 1019, Biotype: "lincRNA",
+		Exons: []cache.Exon{{Number: 1, Start: 1000, End: 1019}},
+	}
+	tr.BuildCDSIndex()
+	// 1000..1019 reads ACGTACGTACGTACGTACGT.
+	ref := fakeReference{chrom: "1", first: 1000, seq: "ACGTACGTACGTACGTACGT"}
+
+	// A G inserted after 1002, which is itself a G: n.3dup.
+	if got := insertionAsDup(1002, 1, "G", tr, "n.", ref); got != "n.3dup" {
+		t.Errorf("single base = %q, want n.3dup", got)
+	}
+	// CGT inserted after 1007 repeats 1005..1007: n.6_8dup.
+	if got := insertionAsDup(1007, 1, "CGT", tr, "n.", ref); got != "n.6_8dup" {
+		t.Errorf("three bases = %q, want n.6_8dup", got)
+	}
+	// AAA repeats nothing.
+	if got := insertionAsDup(1007, 1, "AAA", tr, "n.", ref); got != "" {
+		t.Errorf("no repeat = %q, want the empty string", got)
+	}
+	// Without a reference there is no sequence to test against.
+	if got := insertionAsDup(1002, 1, "G", tr, "n.", nil); got != "" {
+		t.Errorf("without a reference = %q, want the empty string", got)
+	}
+}

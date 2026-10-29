@@ -367,17 +367,51 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 	// c.1047+2_1047+3insTT where vibe-vep wrote c.1047+1_1047+2insTT, and
 	// c.1047+1_1047+2insTT.
 	//
-	// Calling the result a duplication where the shifted bases repeat what
-	// they now follow is left alone: it is HGVS-correct and VEP does it on
-	// the forward strand (RBM10 c.-71dup), but on the reverse strand VEP
-	// writes ins, and turning it on here adds 29 of those divergences --
-	// the same reverse-strand duplication question already settled for the
-	// coding sequence.
 	shifted, insAfterPos, k := genomicInsertionShift(insAfterPos, step, insertedSeq, t, ref)
 	result.HGVSOffset += k
+
+	// Inserted bases that repeat what they now follow are a duplication, and
+	// HGVS names them as one. VEP agrees wherever it shifts the same way, so
+	// this closes the cases it writes as dup and leaves the reverse-strand
+	// ones it writes as ins, which is the duplication question already
+	// settled for the coding sequence.
+	if dup := insertionAsDup(insAfterPos, step, shifted, t, prefix, ref); dup != "" {
+		return dup
+	}
+
 	afterStr := genomicToHGVScPos(insAfterPos, t)
 	beforeStr := genomicToHGVScPos(insAfterPos+step, t)
 	return prefix + afterStr + "_" + beforeStr + "ins" + shifted
+}
+
+// insertionAsDup names an insertion as a duplication where the bases it
+// inserts repeat the ones immediately before it in transcript order, or
+// returns the empty string where they do not.
+//
+// insAfter is the position the insertion follows and step the transcript's
+// direction, so the repeated run ends at insAfter and reaches back
+// len(seq)-1 bases against the step.
+func insertionAsDup(insAfter, step int64, seq string, t *cache.Transcript, prefix string, ref Reference) string {
+	if seq == "" {
+		return ""
+	}
+	ref = buffered(ref)
+	n := int64(len(seq))
+	dupStart := insAfter - (n-1)*step
+	for i := int64(0); i < n; i++ {
+		b, ok := codingBaseAt(dupStart+i*step, t, ref)
+		if !ok || b != seq[i] {
+			return ""
+		}
+	}
+	startStr, endStr := genomicToHGVScPos(dupStart, t), genomicToHGVScPos(insAfter, t)
+	if startStr == "" || endStr == "" {
+		return ""
+	}
+	if startStr == endStr {
+		return prefix + startStr + "dup"
+	}
+	return prefix + startStr + "_" + endStr + "dup"
 }
 
 // ProteinUndescribableHGVSc reports whether VEP declines to name a protein
