@@ -293,7 +293,10 @@ func peptideMD5(cds string) string {
 // upstream_gene_variant and downstream_gene_variant describe a position
 // relative to a gene rather than anything happening inside a transcript.
 // Nor is non_coding_transcript_variant added alongside
-// non_coding_transcript_exon_variant, which already says it.
+// non_coding_transcript_exon_variant or mature_miRNA_variant, each of which
+// already says the variant is in a transcript that codes for nothing. In a
+// VEP111 MSK-IMPACT MAF the pair mature_miRNA_variant,
+// non_coding_transcript_variant does not occur once, in any column.
 func withTranscriptModifier(consequence string, t *cache.Transcript) string {
 	terms := strings.Split(consequence, ",")
 	for _, term := range terms {
@@ -312,7 +315,7 @@ func withTranscriptModifier(consequence string, t *cache.Transcript) string {
 		return consequence
 	}
 	for _, term := range terms {
-		if term == ConsequenceNonCodingExon {
+		if term == ConsequenceNonCodingExon || term == ConsequenceMatureMiRNA {
 			return consequence
 		}
 	}

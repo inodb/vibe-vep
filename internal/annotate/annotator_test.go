@@ -409,3 +409,32 @@ func findTestVCF(t *testing.T, name string) string {
 	t.Fatalf("Test VCF file not found: %s", name)
 	return ""
 }
+
+// non_coding_transcript_variant says the variant is in a transcript that
+// codes for nothing, which is already said by the term naming what it hit.
+// VEP writes neither pair: in a VEP111 MSK-IMPACT MAF, mature_miRNA_variant
+// beside non_coding_transcript_variant does not occur once, in any column.
+func TestNonCodingModifierIsNotRepeated(t *testing.T) {
+	mirna := &cache.Transcript{Biotype: "miRNA"}
+	linc := &cache.Transcript{Biotype: "lincRNA"}
+
+	for _, tc := range []struct {
+		tr          *cache.Transcript
+		consequence string
+		want        string
+	}{
+		{mirna, ConsequenceMatureMiRNA, ConsequenceMatureMiRNA},
+		{linc, ConsequenceNonCodingExon, ConsequenceNonCodingExon},
+		// An intronic change names no exon, so the modifier is what says the
+		// transcript codes for nothing.
+		{linc, ConsequenceIntronVariant,
+			ConsequenceIntronVariant + ",non_coding_transcript_variant"},
+		// Outside the transcript there is nothing to modify.
+		{linc, ConsequenceUpstreamGene, ConsequenceUpstreamGene},
+	} {
+		if got := withTranscriptModifier(tc.consequence, tc.tr); got != tc.want {
+			t.Errorf("withTranscriptModifier(%q, %s) = %q, want %q",
+				tc.consequence, tc.tr.Biotype, got, tc.want)
+		}
+	}
+}
