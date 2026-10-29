@@ -237,6 +237,26 @@ type GNIntegerRange struct {
 	End   int64 `json:"end"`
 }
 
+// MarshalJSON writes an end VEP could not place as null rather than zero.
+// Protein positions count from one, so zero means "not known", and that is
+// how genome-nexus reports it: a deletion reaching in from the 5'UTR has no
+// start residue and its position reads {"start":null,"end":1}, which the
+// annotation pipeline renders ?-1/136.
+func (r GNIntegerRange) MarshalJSON() ([]byte, error) {
+	type wire struct {
+		Start *int64 `json:"start"`
+		End   *int64 `json:"end"`
+	}
+	w := wire{}
+	if r.Start != 0 {
+		w.Start = &r.Start
+	}
+	if r.End != 0 {
+		w.End = &r.End
+	}
+	return json.Marshal(w)
+}
+
 // GNTranscriptConsequence represents a transcript consequence from genome-nexus.
 // GNTranscriptConsequence is one transcript's view of a variant, in the shape
 // genome-nexus serves. The field set is its TranscriptConsequence model: VEP
@@ -306,7 +326,13 @@ func (tc GNTranscriptConsequence) MarshalJSON() ([]byte, error) {
 		w.ProteinEnd = last
 	}
 
-	if tc.Codons == "" {
+	// With no HGVSc there is nothing to read the coding ends off, so the
+	// rules below have no evidence either way and the annotator's own answer
+	// stands. It gives one where it knows the span ran off the end of the
+	// transcript, which is the one case that reaches here nameable and
+	// unnamed: TP53 ENST00000604348 17:7578478-7578491del is protein
+	// position 140 to VEP, with no c. name to derive it from.
+	if tc.Codons == "" && tc.HGVSc != "" {
 		switch {
 		case !startCoding && !endCoding:
 			// Wholly outside the coding sequence: no residue to name.

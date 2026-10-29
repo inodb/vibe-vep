@@ -160,6 +160,16 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 				result.HGVSp = FormatHGVSp(result)
 			}
 		}
+		// A span anchored outside the transcript lands here even when most
+		// of it is coding: a reverse-strand transcript ending on its last
+		// coding base puts v.Pos past the edge. VEP still names the codon
+		// the coding end falls in.
+		if t.IsProteinCoding() && spanRunsOffAnUnbufferedEnd(v, t) {
+			if pStart, pEnd := runOffProteinSpan(v, t); pEnd > 0 {
+				result.ProteinStart, result.ProteinEnd = pStart, pEnd
+				result.ProteinPosition = pStart
+			}
+		}
 		return result
 	}
 
@@ -277,7 +287,7 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 				return result
 			}
 			// Check if variant from 3'UTR spans into the stop codon
-			if utrConsequence == Consequence3PrimeUTR {
+			if utrConsequence == Consequence3PrimeUTR && cdsEndsInStop(t) {
 				var stopCodonStart, stopCodonEnd int64
 				if t.IsForwardStrand() {
 					stopCodonStart, stopCodonEnd = t.CDSEnd-2, t.CDSEnd
@@ -302,6 +312,27 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 		}
 		result.Impact = GetImpact(firstTerm(result.Consequence))
 		return result
+	}
+
+	// A span that runs off an end the annotation stops at has no protein
+	// consequence to name. VEP reports the regions it covers instead --
+	// coding_sequence_variant,3_prime_UTR_variant -- the same way it declines
+	// start_lost where the 5' end is missing (see startCodonPlaceable).
+	//
+	// The test is that the CDS reaches the transcript boundary the span
+	// crosses, which is what a cds_end_NF transcript looks like from the
+	// inside: no UTR between the last coding base and the end of what is
+	// annotated. Where a real UTR sits there the deletion crosses it and
+	// earns its terms honestly, so this does not fire.
+	if spanRunsOffAnUnbufferedEnd(v, t) {
+		if joined := joinConsequenceTerms(spanSpliceTerms(v, t)); joined != "" {
+			result.Consequence = joined
+			result.Impact = GetImpact(firstTerm(joined))
+			result.HGVSp = ""
+			result.ProteinStart, result.ProteinEnd = runOffProteinSpan(v, t)
+			result.ProteinPosition = result.ProteinStart
+			return result
+		}
 	}
 
 	// Variant is in CDS - calculate coding effect
@@ -706,7 +737,7 @@ func predictIndelConsequence(v *vcf.Variant, t *cache.Transcript, result *Conseq
 
 	// Check if the indel overlaps the stop codon
 	stopCodonCDSPos := int64(0)
-	if len(t.CDSSequence) >= 3 {
+	if cdsEndsInStop(t) {
 		stopCodonCDSPos = int64(len(t.CDSSequence)) - 2 // 1-based start of last codon
 	}
 
@@ -1688,6 +1719,65 @@ func firstTerm(consequence string) string {
 	return consequence
 }
 
+// runOffProteinSpan gives the protein range VEP reports for a span that runs
+// off the end of a transcript, which is lopsided: the end it ran off has no
+// codon to name.
+//
+// A span running off the 3' end keeps its start and repeats it as the end --
+// 10 and 10, not 10 and nothing. One running off the 5' end has no start at
+// all, and VEP writes the position as "?-11", which genome-nexus reads back
+// as a null start with the end intact.
+func runOffProteinSpan(v *vcf.Variant, t *cache.Transcript) (start, end int64) {
+	first, last := v.Pos, v.Pos+int64(len(v.Ref))-1
+	if last < first {
+		last = first
+	}
+	if t.IsReverseStrand() {
+		first, last = last, first
+	}
+	firstCDS, lastCDS := GenomicToCDS(first, t), GenomicToCDS(last, t)
+	switch {
+	case firstCDS >= 1:
+		start, _ = CDSToCodonPosition(firstCDS)
+		return start, start
+	case lastCDS >= 1:
+		end, _ = CDSToCodonPosition(lastCDS)
+		return 0, end
+	}
+	return 0, 0
+}
+
+// spanRunsOffAnUnbufferedEnd reports whether a variant reaches past an end of
+// the transcript that the coding sequence runs right up to. Such a transcript
+// has no UTR at that end -- GENCODE tags the 3' case cds_end_NF -- so the
+// bases beyond the edge are annotated as nothing at all.
+func spanRunsOffAnUnbufferedEnd(v *vcf.Variant, t *cache.Transcript) bool {
+	if len(v.Ref) == 0 {
+		return false // an insertion sits between two bases and covers none
+	}
+	spanEnd := v.Pos + int64(len(v.Ref)) - 1
+	if spanEnd > t.End && t.CDSEnd == t.End {
+		return true
+	}
+	return v.Pos < t.Start && t.CDSStart == t.Start
+}
+
+// cdsEndsInStop reports whether the coding sequence runs all the way to a
+// stop codon. GENCODE folds the stop_codon feature into the CDS, so a
+// complete one ends in a stop; a 3'-incomplete transcript -- tagged
+// cds_end_NF, where the annotation simply stops -- does not.
+//
+// Nothing there can be lost. VEP calls a deletion running off the end of such
+// a transcript coding_sequence_variant,3_prime_UTR_variant, never stop_lost,
+// because there is no terminator in the annotation to take away.
+func cdsEndsInStop(t *cache.Transcript) bool {
+	n := len(t.CDSSequence)
+	if n < 3 || n%3 != 0 {
+		return false
+	}
+	return TranslateCodon(t.CDSSequence[n-3:]) == '*'
+}
+
 // spliceSiteType returns the splice site consequence (splice_donor_variant or
 // splice_acceptor_variant) if the position is at ±1-2bp on the intron side of
 // an exon boundary, or empty string if not at a splice site.
@@ -1705,13 +1795,24 @@ func spliceSiteType(pos int64, t *cache.Transcript) string {
 			continue
 		}
 		exon := &t.Exons[i]
+		// A splice site needs an intron to sit in. Past the last exon and
+		// before the first there is none, however close the base is to the
+		// edge: a deletion running off the end of a cds_end_NF transcript
+		// was being called splice_donor_variant for the two bases after its
+		// final exon, where VEP names the 3'UTR it runs into instead.
 		if pos == exon.End+1 || pos == exon.End+2 {
+			if i+1 >= len(t.Exons) {
+				continue
+			}
 			if t.IsForwardStrand() {
 				return ConsequenceSpliceDonor
 			}
 			return ConsequenceSpliceAcceptor
 		}
 		if pos == exon.Start-1 || pos == exon.Start-2 {
+			if i == 0 {
+				continue
+			}
 			if t.IsForwardStrand() {
 				return ConsequenceSpliceAcceptor
 			}

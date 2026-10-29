@@ -91,6 +91,13 @@ func proteinRange(ann *annotate.Annotation) (start, end int64) {
 	// the position and the amino acid together, so dropping only the position
 	// left it rendering p.Rnullfs on 112 variants to recover 11.
 	if annotate.ProteinPositionWithheld(ann.Consequence) {
+		// A span that ran off the 5' end has no start codon to count from,
+		// and VEP writes the position as "?-11": no start, end intact. Only
+		// runOffProteinSpan produces an end without a start, so withholding
+		// still covers everything it covered before.
+		if ann.ProteinStart == 0 && ann.ProteinPosition == 0 && ann.ProteinEnd > 0 {
+			return 0, ann.ProteinEnd
+		}
 		return 0, 0
 	}
 	start = ann.ProteinStart

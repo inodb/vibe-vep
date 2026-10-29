@@ -150,9 +150,22 @@ func spanSpliceTerms(v *vcf.Variant, t *cache.Transcript) []string {
 	var terms []string
 	for pos := v.Pos; pos <= spanEnd; pos++ {
 		if !t.Contains(pos) {
-			// Outside the transcript there is nothing to name. Without this
-			// the nearest-exon lookup below answers with a large offset and
-			// the span picks up an intron_variant it has not earned.
+			// Past the end of the transcript there is no exon or intron to
+			// name -- the nearest-exon lookup would answer with a large
+			// offset and the span would pick up an intron_variant it has not
+			// earned -- but there is still an end, and VEP names the UTR
+			// that lies at it.
+			//
+			// That matters where the annotation stops at the coding
+			// sequence: a cds_end_NF transcript has no 3'UTR to run into, and
+			// one whose start codon sits on its first base has no 5'UTR, so
+			// the only bases to carry the term are the ones past the edge.
+			// TP53 ENST00000604348 ends at its last coding base, and VEP
+			// reports 17:7578478-7578491del as coding_sequence_variant,
+			// 3_prime_UTR_variant. Where a real UTR exists the deletion has
+			// already crossed it and earned the term anyway, so naming the
+			// outside bases costs nothing there.
+			terms = append(terms, utrTermAt(pos, t))
 			continue
 		}
 		if t.FindExon(pos) == nil {

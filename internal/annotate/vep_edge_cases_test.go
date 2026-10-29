@@ -513,3 +513,66 @@ func TestIncompleteTerminalCodon(t *testing.T) {
 	assert.NotContains(t, PredictConsequence(v, tr).Consequence,
 		ConsequenceIncompleteTerminalCodon)
 }
+
+// createTruncatedCDSTranscript is a transcript whose annotation stops at the
+// coding sequence: no 5'UTR before the start codon, no 3'UTR after the last
+// coding base. GENCODE tags the second kind cds_end_NF, and a transcript
+// whose start codon sits on its first base needs no tag to have the first.
+func createTruncatedCDSTranscript() *cache.Transcript {
+	return &cache.Transcript{
+		ID:       "ENST_EDGE_NF",
+		GeneID:   "ENSG_EDGE_NF",
+		GeneName: "EDGENF",
+		Chrom:    "1",
+		Start:    1000,
+		End:      2008,
+		Strand:   1,
+		Biotype:  "protein_coding",
+		CDSStart: 1000,
+		CDSEnd:   2008,
+		Exons: []cache.Exon{
+			{Number: 1, Start: 1000, End: 1010, CDSStart: 1000, CDSEnd: 1010, Frame: 0},
+			{Number: 2, Start: 2000, End: 2008, CDSStart: 2000, CDSEnd: 2008, Frame: 1},
+		},
+		CDSSequence: "ATGGCTAAAGAAGGGCCCG",
+	}
+}
+
+// A deletion that runs off the end of a transcript is still in the UTR at
+// that end, and VEP says so. Where the annotation stops at the coding
+// sequence there is no UTR inside the transcript to carry the term, so the
+// bases past the edge are the only ones that can.
+func TestDeletionPastTheTranscriptEdgeNamesTheUTR(t *testing.T) {
+	tr := createTruncatedCDSTranscript()
+
+	// Off the 3' end: 2008 is the last coding base, 2009 onwards is nothing
+	// the annotation describes. TP53 ENST00000604348 is the real case.
+	t.Run("past the 3' end", func(t *testing.T) {
+		v := &vcf.Variant{Chrom: "1", Pos: 2006, Ref: "AAAAA", Alt: "A"}
+		assert.Equal(t, "coding_sequence_variant,3_prime_UTR_variant",
+			PredictConsequence(v, tr).Consequence)
+	})
+
+	// And off the 5' end, where the start codon is the transcript's first
+	// base.
+	t.Run("past the 5' end", func(t *testing.T) {
+		v := &vcf.Variant{Chrom: "1", Pos: 997, Ref: "AAAAAA", Alt: "A"}
+		assert.Equal(t, "coding_sequence_variant,5_prime_UTR_variant",
+			PredictConsequence(v, tr).Consequence)
+	})
+
+	// A span that stays inside earns neither term.
+	t.Run("inside the coding sequence", func(t *testing.T) {
+		v := &vcf.Variant{Chrom: "1", Pos: 2002, Ref: "AAA", Alt: "A"}
+		assert.NotContains(t, PredictConsequence(v, tr).Consequence, "UTR")
+	})
+
+	// On a reverse-strand transcript the ends swap: past the low end is the
+	// 3' side.
+	t.Run("reverse strand, past the low end", func(t *testing.T) {
+		rev := createTruncatedCDSTranscript()
+		rev.Strand = -1
+		v := &vcf.Variant{Chrom: "1", Pos: 998, Ref: "AAAA", Alt: "A"}
+		assert.Contains(t, PredictConsequence(v, rev).Consequence, "3_prime_UTR_variant")
+	})
+}
