@@ -56,6 +56,16 @@ func TestAnnotationFieldParity(t *testing.T) {
 		len(variants), batchSize, oracleBase, vibeBase)
 
 	report := newParityReport()
+	if path := envOr("PARITY_DUMP", ""); path != "" {
+		f, err := os.Create(path)
+		if err != nil {
+			t.Fatalf("create dump: %v", err)
+		}
+		defer f.Close()
+		w := bufio.NewWriter(f)
+		defer w.Flush()
+		report.dump = w
+	}
 	start := time.Now()
 	for from := 0; from < len(variants); from += batchSize {
 		to := min(from+batchSize, len(variants))
@@ -105,6 +115,11 @@ type parityReport struct {
 
 	byField  map[string]int
 	examples map[string]string
+
+	// dump, when set, receives every differing field rather than only the
+	// first example of each. Categorising a group of twenty thousand needs
+	// all of them; the summary needs one.
+	dump io.Writer
 }
 
 func newParityReport() *parityReport {
@@ -219,6 +234,9 @@ func (r *parityReport) compareField(prefix, key string, want, got any, present b
 
 func (r *parityReport) note(field, example string) {
 	r.byField[field]++
+	if r.dump != nil {
+		fmt.Fprintf(r.dump, "%s\t%s\n", field, example)
+	}
 	if _, seen := r.examples[field]; !seen {
 		r.examples[field] = example
 	}
