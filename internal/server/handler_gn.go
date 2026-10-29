@@ -360,6 +360,7 @@ func (s *Server) parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions 
 			return meta.EntrezGeneID
 		},
 		Revue:         s.Revue(),
+		Genome:        s.genomeReference(r),
 		UniprotIDs:    s.uniprotLookup(r),
 		IncludePtms:   strings.Contains(fields, "ptms"),
 		PtmLookup:     s.ptmLookup(r),
@@ -393,6 +394,19 @@ func parseCommaGenomicLocation(s string) (input.GenomicLocation, error) {
 		ReferenceAllele: parts[3],
 		VariantAllele:   parts[4],
 	}, nil
+}
+
+// genomeReference returns the reference genome for the assembly a request
+// names, or nil where none was built. Without it hgvsg is not renormalised.
+func (s *Server) genomeReference(r *http.Request) output.GenomeSequence {
+	ctx := s.getAssembly(r.PathValue("assembly"))
+	if ctx == nil {
+		ctx = s.soleAssembly()
+	}
+	if ctx == nil || ctx.genomeRef == nil {
+		return nil
+	}
+	return ctx.genomeRef
 }
 
 // uniprotLookup returns the transcript-to-UniProt lookup for the assembly a

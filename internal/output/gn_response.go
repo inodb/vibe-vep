@@ -76,6 +76,11 @@ type GNMarshalOptions struct {
 	// MyVariantInfoData holds pre-fetched myvariant.info data to include in the response.
 	// The handler populates this before calling MarshalGNAnnotation.
 	MyVariantInfoData *GNMyVariantInfoAnnotation
+
+	// Genome supplies the reference bases hgvsg is renormalised against.
+	// Nil leaves hgvsg naming the change where the query put it, which is
+	// right only when the query already put it 3'-most.
+	Genome GenomeSequence
 }
 
 // MarshalGNAnnotation builds a GNAnnotation from a variant and its annotations,
@@ -89,15 +94,25 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 	// protein change the MAF reports.
 	anns = sortedByTranscriptID(anns)
 
+	var opt GNMarshalOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
 	ref, alt := alleleStrings(v)
 
 	start, end := mafCoordinates(v)
 
 	variant := formatHGVSg(v.Chrom, start, end, ref, alt)
-	// "variant" and "hgvsg" differ only in that hgvsg is renormalised, which
-	// can shift an insertion to a duplication. Neither restates the bases a
-	// change removes: VEP writes g.100_102del, not g.100_102delACG.
+	// "variant" and "hgvsg" differ only in that hgvsg is renormalised: it is
+	// the change written where HGVS requires, 3'-most along the reference
+	// and as a duplication where the inserted bases repeat what precedes
+	// them. Neither restates the bases a change removes: VEP writes
+	// g.100_102del, not g.100_102delACG.
 	hgvsg := variant
+	if renamed := normalizeHGVSg(v.Chrom, start, end, ref, alt, opt.Genome); renamed != "" {
+		hgvsg = renamed
+	}
 
 	// Ensembl names an insertion by the two bases it falls between, the later
 	// one first, so start is end+1 there and the span reads as empty. The
@@ -123,11 +138,6 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 		AlleleString:          ref + "/" + alt,
 		Strand:                1,
 		SuccessfullyAnnotated: true,
-	}
-
-	var opt GNMarshalOptions
-	if len(opts) > 0 {
-		opt = opts[0]
 	}
 
 	// Every annotation column below is read off one transcript, chosen the way
