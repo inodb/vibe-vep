@@ -465,6 +465,17 @@ func TestNonCodingDeletionReachesTheSpliceSite(t *testing.T) {
 		assert.Equal(t, "splice_region_variant,non_coding_transcript_exon_variant",
 			PredictConsequence(v, tr).Consequence)
 	})
+
+	// Coming the other way, from inside the intron over the acceptor and
+	// into exon 2, the exon is named too. This span starts outside any exon,
+	// so it is the intronic path that has to say so.
+	t.Run("in from the intron over the acceptor", func(t *testing.T) {
+		// 5498 and 5499 are the acceptor dinucleotide; 5500 starts exon 2.
+		v := &vcf.Variant{Chrom: "1", Pos: 5497, Ref: "AAAAA", Alt: "A"}
+		assert.Equal(t,
+			"splice_acceptor_variant,non_coding_transcript_exon_variant,intron_variant",
+			PredictConsequence(v, tr).Consequence)
+	})
 }
 
 // A CDS whose length is not a multiple of three ends in a part-codon. No

@@ -165,11 +165,7 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 
 	// Check if transcript is protein coding
 	if !t.IsProteinCoding() {
-		if t.Biotype == "miRNA" {
-			result.Consequence = ConsequenceMatureMiRNA
-		} else {
-			result.Consequence = ConsequenceNonCodingExon
-		}
+		result.Consequence = nonCodingExonTerm(t)
 		result.Impact = GetImpact(result.Consequence)
 		// An exon edge is an exon edge whether or not the transcript codes
 		// for anything, and so is the splice site past it. This path asked

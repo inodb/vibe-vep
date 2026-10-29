@@ -168,9 +168,26 @@ func spanSpliceTerms(v *vcf.Variant, t *cache.Transcript) []string {
 			terms = append(terms, ConsequenceCodingSequenceVariant)
 		} else if term := utrTermAt(pos, t); term != "" {
 			terms = append(terms, term)
+		} else if !t.IsProteinCoding() {
+			// A non-coding transcript has neither a CDS nor a UTR, but the
+			// base is in an exon all the same and VEP names it: a deletion
+			// reaching in from the intron is splice_acceptor_variant,
+			// non_coding_transcript_exon_variant, not the bare site with
+			// non_coding_transcript_variant stuck on the end.
+			terms = append(terms, nonCodingExonTerm(t))
 		}
 	}
 	return terms
+}
+
+// nonCodingExonTerm names an exonic base on a transcript that codes for
+// nothing. VEP reports the mature miRNA product where there is one and the
+// transcript exon otherwise, never both.
+func nonCodingExonTerm(t *cache.Transcript) string {
+	if t.Biotype == "miRNA" {
+		return ConsequenceMatureMiRNA
+	}
+	return ConsequenceNonCodingExon
 }
 
 // utrTermAt names the UTR an exonic non-coding position falls in.
