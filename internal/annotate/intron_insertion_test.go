@@ -96,7 +96,7 @@ func TestGenomicDeletionShiftAcrossAcceptor(t *testing.T) {
 	tr := intronFlankTranscript(1)
 	// Flank positions: 1090..1099 hold TTTTTTTCAG, so 1093 and 1094 are both T
 	// and the base past the end (1095) is T as well.
-	if got := genomicDeletionShift(1093, 1094, tr, nil); got != 2 {
+	if got := genomicDeletionShift(1093, 1094, tr, nil, nil); got != 2 {
 		t.Errorf("shift = %d, want 2 (the T run ends at 1096)", got)
 	}
 }
@@ -105,7 +105,7 @@ func TestGenomicDeletionShiftStopsWithoutSequence(t *testing.T) {
 	tr := intronFlankTranscript(1)
 	// 1050 is in the middle of the intron, past both flanks, so there is no
 	// sequence to compare and the deletion cannot be shifted.
-	if got := genomicDeletionShift(1050, 1052, tr, nil); got != 0 {
+	if got := genomicDeletionShift(1050, 1052, tr, nil, nil); got != 0 {
 		t.Errorf("shift = %d, want 0 beyond the cached flank", got)
 	}
 }
@@ -120,7 +120,7 @@ func TestGenomicDeletionShiftReverseStrand(t *testing.T) {
 	// (A) repeats just past its end (A). It stops there, because the next
 	// comparison is the G at 1012 against the T at CDS 14.
 	tr := intronFlankTranscript(-1)
-	if got := genomicDeletionShift(1012, 1013, tr, nil); got != 1 {
+	if got := genomicDeletionShift(1012, 1013, tr, nil, nil); got != 1 {
 		t.Errorf("shift = %d, want 1", got)
 	}
 }
@@ -156,7 +156,7 @@ func TestCodingBaseAtReadsBothUTRs(t *testing.T) {
 		1021: 'T', // *4
 	}
 	for pos, want := range cases {
-		got, ok := codingBaseAt(pos, tr)
+		got, ok := codingBaseAt(pos, tr, nil)
 		if !ok || got != want {
 			t.Errorf("codingBaseAt(%d) = %q (ok=%v), want %q", pos, got, ok, want)
 		}
@@ -170,7 +170,7 @@ func TestGenomicDeletionShiftIntoThe3PrimeUTR(t *testing.T) {
 	// *4. Without the UTR tail there is nothing to compare against and the
 	// deletion stays put, which is how CALR c.1216_*32del missed VEP's
 	// c.1219_*35del.
-	if got := genomicDeletionShift(1017, 1017, tr, nil); got != 3 {
+	if got := genomicDeletionShift(1017, 1017, tr, nil, nil); got != 3 {
 		t.Errorf("shift = %d, want 3", got)
 	}
 }
@@ -188,5 +188,102 @@ func TestJunctionInsertionStillGetsCodons(t *testing.T) {
 	// reference side is empty.
 	if want := "-/T"; result.CodonChange != want {
 		t.Errorf("Codons = %q, want %q (HGVSc %q)", result.CodonChange, want, result.HGVSc)
+	}
+}
+
+// fakeReference serves one stretch of one chromosome, so a shift can be shown
+// walking past the end of what the transcript cache holds.
+type fakeReference struct {
+	chrom string
+	first int64 // 1-based position of seq[0]
+	seq   string
+}
+
+func (f fakeReference) Range(chrom string, start, end int64) ([]byte, error) {
+	if chrom != f.chrom {
+		return nil, nil
+	}
+	last := f.first + int64(len(f.seq)) - 1
+	if start < f.first {
+		start = f.first
+	}
+	if end > last {
+		end = last
+	}
+	if start > end {
+		return nil, nil
+	}
+	return []byte(f.seq[start-f.first : end-f.first+1]), nil
+}
+
+// The same deletion as TestGenomicDeletionShiftStopsWithoutSequence, which
+// sits deeper in the intron than the cached flank reaches. With a reference
+// there is sequence to compare, and it shifts.
+func TestGenomicDeletionShiftReachesPastTheFlank(t *testing.T) {
+	tr := intronFlankTranscript(1)
+	// 1050..1055 is a run of six A's, so a deletion of the first three moves
+	// three bases along it and stops at the C.
+	ref := fakeReference{chrom: tr.Chrom, first: 1045, seq: "GGGGGAAAAAACCCCC"}
+
+	if got := genomicDeletionShift(1050, 1052, tr, nil, ref); got != 3 {
+		t.Errorf("shift with a reference = %d, want 3", got)
+	}
+	if got := genomicDeletionShift(1050, 1052, tr, nil, nil); got != 0 {
+		t.Errorf("shift without a reference = %d, want 0", got)
+	}
+}
+
+// A gap in the reference is not a repeat to walk through.
+func TestGenomicDeletionShiftStopsAtAGap(t *testing.T) {
+	tr := intronFlankTranscript(1)
+	ref := fakeReference{chrom: tr.Chrom, first: 1045, seq: "GGGGGAAANNNNNNNN"}
+	if got := genomicDeletionShift(1050, 1052, tr, nil, ref); got != 0 {
+		t.Errorf("shift into a gap = %d, want 0", got)
+	}
+}
+
+// On the reverse strand the reference is read in coding orientation.
+func TestCodingBaseAtComplementsTheReference(t *testing.T) {
+	fwd, rev := intronFlankTranscript(1), intronFlankTranscript(-1)
+	ref := fakeReference{chrom: fwd.Chrom, first: 1050, seq: "A"}
+
+	if b, ok := codingBaseAt(1050, fwd, ref); !ok || b != 'A' {
+		t.Errorf("forward strand = %q (%v), want 'A'", b, ok)
+	}
+	if b, ok := codingBaseAt(1050, rev, ref); !ok || b != 'T' {
+		t.Errorf("reverse strand = %q (%v), want 'T'", b, ok)
+	}
+	if _, ok := codingBaseAt(1050, fwd, nil); ok {
+		t.Error("without a reference the position should still have no base")
+	}
+}
+
+// A non-coding transcript has no CDS, no UTR tails and no intron flanks, so
+// the cache can answer nowhere on it and every shift stopped at zero. The
+// reference answers everywhere.
+func TestCodingBaseAtOnANonCodingTranscript(t *testing.T) {
+	tr := &cache.Transcript{
+		ID: "ENST_NC", GeneName: "NC", Chrom: "1", Strand: 1,
+		Start: 1000, End: 1199, Biotype: "lincRNA",
+		Exons: []cache.Exon{
+			{Number: 1, Start: 1000, End: 1019},
+			{Number: 2, Start: 1180, End: 1199},
+		},
+	}
+	tr.BuildCDSIndex()
+	ref := fakeReference{chrom: "1", first: 1000, seq: "ACGTAAAAAACCCCCCGGGG"}
+
+	if _, ok := cachedCodingBaseAt(1004, tr); ok {
+		t.Error("the cache should hold no base on a non-coding transcript")
+	}
+	if b, ok := codingBaseAt(1004, tr, ref); !ok || b != 'A' {
+		t.Errorf("codingBaseAt = %q (%v), want 'A' from the reference", b, ok)
+	}
+	// 1004..1009 is a run of six A's, so deleting the first three moves three.
+	if got := genomicDeletionShift(1004, 1006, tr, nil, ref); got != 3 {
+		t.Errorf("shift on a non-coding transcript = %d, want 3", got)
+	}
+	if got := genomicDeletionShift(1004, 1006, tr, nil, nil); got != 0 {
+		t.Errorf("shift without a reference = %d, want 0", got)
 	}
 }

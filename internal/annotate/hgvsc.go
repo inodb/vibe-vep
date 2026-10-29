@@ -13,7 +13,8 @@ import (
 //
 // The function is optimized for minimal allocations on CDS-based paths (SNV, deletion,
 // insertion) by using stack-allocated buffers and lazy computation of reverse complement.
-func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult) string {
+func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult, refs ...Reference) string {
+	ref := firstReference(refs)
 	if t == nil || v == nil || result == nil {
 		return ""
 	}
@@ -111,16 +112,16 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 	// alt begins with the ref, so it read that as inserting a single G and
 	// dropped the C>G substitution entirely. VEP calls it c.8067delinsGG.
 	if altLen > refLen && !isDelIns(v.Ref, v.Alt) {
-		return formatHGVScInsertion(v, t, prefix, refLen, altLen, result)
+		return formatHGVScInsertion(v, t, prefix, refLen, altLen, result, ref)
 	}
 
-	return formatHGVScDeletion(v, t, prefix, refLen, altLen, result)
+	return formatHGVScDeletion(v, t, prefix, refLen, altLen, result, ref)
 }
 
 // formatHGVScInsertion handles the insertion path of FormatHGVSc.
 // It computes the inserted sequence on the coding strand using a stack buffer
 // to avoid allocations from ReverseComplement.
-func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, refLen, altLen int, result *ConsequenceResult) string {
+func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, refLen, altLen int, result *ConsequenceResult, ref Reference) string {
 	insLen := altLen - refLen
 
 	// Compute inserted sequence on coding strand into a stack buffer.
@@ -372,7 +373,7 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 	// writes ins, and turning it on here adds 29 of those divergences --
 	// the same reverse-strand duplication question already settled for the
 	// coding sequence.
-	shifted, insAfterPos, k := genomicInsertionShift(insAfterPos, step, insertedSeq, t)
+	shifted, insAfterPos, k := genomicInsertionShift(insAfterPos, step, insertedSeq, t, ref)
 	result.HGVSOffset += k
 	afterStr := genomicToHGVScPos(insAfterPos, t)
 	beforeStr := genomicToHGVScPos(insAfterPos+step, t)
@@ -474,7 +475,7 @@ func isInversion(ref, alt string) bool {
 // formatHGVScDeletion handles the deletion (and delins) path of FormatHGVSc.
 // It avoids calling ReverseComplement for the ref/alt at the top since the
 // deletion CDS path only needs CDS positions and possibly RC of the extra alt bases.
-func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, refLen, altLen int, result *ConsequenceResult) string {
+func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, refLen, altLen int, result *ConsequenceResult, ref Reference) string {
 	// Compute actual shared prefix length on genomic strand
 	sharedLen := 0
 	for sharedLen < refLen && sharedLen < altLen && v.Ref[sharedLen] == v.Alt[sharedLen] {
@@ -579,7 +580,7 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 		// sequence this one cannot.
 		if sEnd == len(t.CDSSequence)-1 {
 			k := genomicDeletionShift(delStartGenomic, delEndGenomic, t,
-				func(pos int64) (byte, bool) { return refAlleleBase(pos, v, t) })
+				func(pos int64) (byte, bool) { return refAlleleBase(pos, v, t) }, ref)
 			if k > sStart-int(delStartCDS-1) {
 				d := int64(k)
 				if t.IsReverseStrand() {
@@ -636,7 +637,7 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 		// of the same rule; they answer only where the genomic one has no
 		// sequence to compare and returns nothing.
 		k := genomicDeletionShift(delStartGenomic, delEndGenomic, t,
-			func(pos int64) (byte, bool) { return refAlleleBase(pos, v, t) })
+			func(pos int64) (byte, bool) { return refAlleleBase(pos, v, t) }, ref)
 		if k == 0 {
 			k, _ = straddlingDeletionShift(v, t)
 		}

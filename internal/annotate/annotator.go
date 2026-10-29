@@ -33,6 +33,7 @@ type Annotator struct {
 	canonicalOnly bool
 	distance      int64
 	logger        *zap.Logger
+	reference     Reference
 }
 
 // NewAnnotator creates a new annotator with the given cache.
@@ -58,6 +59,13 @@ func (a *Annotator) SetDistance(distance int64) {
 		distance = 0
 	}
 	a.distance = distance
+}
+
+// SetReference supplies the reference genome the HGVS shifts fall back to
+// where the transcript cache holds no sequence. Without one they stop at the
+// edge of what the cache holds, which is how they have always behaved.
+func (a *Annotator) SetReference(ref Reference) {
+	a.reference = ref
 }
 
 // SetLogger sets the logger for warning and info messages.
@@ -95,7 +103,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 		}
 
 		result := PredictConsequence(v, t)
-		result.HGVSc = FormatHGVSc(v, t, result)
+		result.HGVSc = FormatHGVSc(v, t, result, a.reference)
 		// FormatHGVSc can discover that the variant shifts out of the exon,
 		// which is only knowable once the shift is done; the protein call is
 		// withdrawn here rather than re-derived.

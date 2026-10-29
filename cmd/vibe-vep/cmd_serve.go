@@ -193,9 +193,11 @@ func runServe(logger *zap.Logger, cfg runServeConfig) error {
 
 		// Load the reference genome, building it if prepare has not. Without
 		// it hgvsg names a change where the query put it rather than where
-		// HGVS requires, so it is worth the one-off build.
+		// HGVS requires, and the HGVS shifts stop at the edge of what the
+		// transcript cache holds.
 		if genome := loadGenomeReference(logger, normalized); genome != nil {
 			srv.SetGenomeReference(normalized, genome)
+			ann.SetReference(genome)
 		}
 
 		// Load UniProt mapping if available.
