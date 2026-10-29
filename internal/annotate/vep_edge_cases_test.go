@@ -427,3 +427,78 @@ func TestNonCodingExonEdgeIsASpliceRegion(t *testing.T) {
 		})
 	}
 }
+
+// A deletion that runs out of a non-coding exon and over the donor site
+// breaks that site, and VEP names every region the span crosses. This path
+// used to see only the exon edge and report splice_region_variant.
+func TestNonCodingDeletionReachesTheSpliceSite(t *testing.T) {
+	tr := createNonCodingTranscript() // exons 5000-5200 and 5500-5700
+
+	for _, tc := range []struct {
+		name  string
+		ref   string // from 5198, so the span is 5198..5198+len(ref)-1
+		terms string
+	}{
+		// 5201 and 5202 are the donor dinucleotide; 5205 is the 5th base,
+		// which VEP names instead of splice_donor_region_variant, and which
+		// brings intron_variant with it.
+		{"over the donor and the 5th base", "AAAAAAAA",
+			"splice_donor_variant,splice_donor_5th_base_variant," +
+				"non_coding_transcript_exon_variant,intron_variant"},
+		{"over the donor only", "AAAAA",
+			"splice_donor_variant,non_coding_transcript_exon_variant"},
+		// Stopping at the exon edge still only touches the splice region.
+		{"up to the exon edge", "AAA",
+			"splice_region_variant,non_coding_transcript_exon_variant"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := &vcf.Variant{Chrom: "1", Pos: 5198, Ref: tc.ref, Alt: tc.ref[:1]}
+			assert.Equal(t, tc.terms, PredictConsequence(v, tr).Consequence)
+		})
+	}
+
+	// An insertion covers no base, so it takes nothing out: inserting
+	// between the last exonic base and the first intronic one leaves the
+	// donor dinucleotide whole and VEP says only splice_region_variant.
+	t.Run("insertion at the junction", func(t *testing.T) {
+		v := &vcf.Variant{Chrom: "1", Pos: 5200, Ref: "", Alt: "A"}
+		assert.Equal(t, "splice_region_variant,non_coding_transcript_exon_variant",
+			PredictConsequence(v, tr).Consequence)
+	})
+}
+
+// A CDS whose length is not a multiple of three ends in a part-codon. No
+// amino acid can be read from it, so VEP names the change for what it is and
+// reports the bases it has: MSH6 ENST00000455383 c.346G>A is
+// incomplete_terminal_codon_variant,coding_sequence_variant with codons
+// Gt/At and p.Ter116=.
+func TestIncompleteTerminalCodon(t *testing.T) {
+	tr := createMultiExonForwardTranscript() // 32 CDS bases, so codon 11 is "TT"
+
+	// Genomic 3010 and 3011 are CDS 31 and 32, the two bases of that codon.
+	for _, tc := range []struct {
+		name          string
+		pos           int64
+		alt           string
+		codons, hgvsp string
+	}{
+		{"first base of the part-codon", 3010, "A", "Tt/At", "p.Ter11="},
+		{"second base of the part-codon", 3011, "G", "tT/tG", "p.Ter11="},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := &vcf.Variant{Chrom: "1", Pos: tc.pos, Ref: "T", Alt: tc.alt}
+			result := PredictConsequence(v, tr)
+			assert.Equal(t,
+				"incomplete_terminal_codon_variant,coding_sequence_variant",
+				result.Consequence)
+			assert.Equal(t, tc.codons, result.CodonChange)
+			assert.Equal(t, tc.hgvsp, result.HGVSp)
+			assert.Equal(t, int64(11), result.ProteinPosition)
+		})
+	}
+
+	// A complete codon in the same transcript is unaffected.
+	v := &vcf.Variant{Chrom: "1", Pos: 3000, Ref: "G", Alt: "T"}
+	assert.NotContains(t, PredictConsequence(v, tr).Consequence,
+		ConsequenceIncompleteTerminalCodon)
+}

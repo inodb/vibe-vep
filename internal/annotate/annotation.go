@@ -32,6 +32,11 @@ const (
 	ConsequenceStopRetained      = "stop_retained_variant"
 	ConsequenceStartRetained     = "start_retained_variant"
 
+	// A CDS whose length is not a multiple of three ends in a part-codon no
+	// amino acid can be read from. VEP names a change there for what it is
+	// rather than guessing a residue.
+	ConsequenceIncompleteTerminalCodon = "incomplete_terminal_codon_variant"
+
 	// LOW impact (generic coding)
 	ConsequenceCodingSequenceVariant = "coding_sequence_variant"
 
@@ -114,7 +119,8 @@ func GetImpact(consequence string) string {
 		case ConsequenceSynonymousVariant, ConsequenceSpliceRegion,
 			ConsequenceStopRetained, ConsequenceStartRetained,
 			ConsequenceCodingSequenceVariant, ConsequenceSpliceDonor5thBase,
-			ConsequenceSpliceDonorRegion, ConsequencePolypyrimidineTract:
+			ConsequenceSpliceDonorRegion, ConsequencePolypyrimidineTract,
+			ConsequenceIncompleteTerminalCodon:
 			impact = ImpactLow
 		default:
 			impact = ImpactModifier

@@ -2,6 +2,8 @@
 package annotate
 
 import (
+	"strconv"
+
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
@@ -170,12 +172,25 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 		}
 		result.Impact = GetImpact(result.Consequence)
 		// An exon edge is an exon edge whether or not the transcript codes
-		// for anything. VEP reports splice_region_variant alongside
-		// non_coding_transcript_exon_variant, and this path returned before
-		// ever asking. The impact is left as the exonic term's, the way the
-		// coding path leaves it when it appends the same term.
+		// for anything, and so is the splice site past it. This path asked
+		// only whether an edge was touched, so a deletion running out of the
+		// exon and over the donor dinucleotide was called splice_region --
+		// VEP calls it splice_donor_variant, and names every region the span
+		// crosses besides. The impact is left as the exonic term's, the way
+		// the coding path leaves it when it appends the same term.
+		var terms []string
+		if len(v.Ref) > 0 {
+			// Only a change that covers bases can take the site out. An
+			// insertion sits between two bases and leaves both, so VEP calls
+			// it splice_region even at the junction itself -- the same rule
+			// insertionSpliceTerms applies on the intronic path.
+			terms = spanSpliceTerms(v, t)
+		}
 		if spanTouchesSpliceRegion(v, t) {
-			result.Consequence = appendSpliceRegion(result.Consequence)
+			terms = append(terms, ConsequenceSpliceRegion)
+		}
+		if joined := joinConsequenceTerms(append(terms, result.Consequence)); joined != "" {
+			result.Consequence = joined
 		}
 		return result
 	}
@@ -477,8 +492,30 @@ func predictCodingConsequence(v *vcf.Variant, t *cache.Transcript, exon *cache.E
 	// Get reference codon
 	refCodon := GetCodon(t.CDSSequence, codonNum)
 	if len(refCodon) != 3 {
-		result.Consequence = ConsequenceCodingSequenceVariant
+		// The CDS ends in a part-codon, so there is no residue to read here.
+		// VEP says so -- incomplete_terminal_codon_variant -- and still
+		// reports the bases it does have, with X for the residue and the
+		// position named as the terminator it stands in for: MSH6
+		// ENST00000455383 c.346G>A is Gt/At, X, p.Ter116=.
+		result.Consequence = joinConsequenceTerms([]string{
+			ConsequenceIncompleteTerminalCodon, ConsequenceCodingSequenceVariant})
 		result.Impact = GetImpact(result.Consequence)
+		// GetCodon declines to return a codon it cannot complete, so the
+		// part-codon is read off the end of the CDS directly.
+		partial := ""
+		if start := (codonNum - 1) * 3; start >= 0 && start < int64(len(t.CDSSequence)) {
+			partial = t.CDSSequence[start:]
+		}
+		if partial != "" && len(v.Alt) == 1 && posInCodon < len(partial) {
+			altBase := v.Alt[0]
+			if t.IsReverseStrand() {
+				altBase = Complement(altBase)
+			}
+			result.RefCodon = partial
+			result.AltCodon = partial[:posInCodon] + string(altBase) + partial[posInCodon+1:]
+			result.CodonChange = formatPartialCodonChange(result.RefCodon, result.AltCodon, posInCodon)
+			result.HGVSp = "p.Ter" + strconv.FormatInt(codonNum, 10) + "="
+		}
 		return result
 	}
 	result.RefCodon = refCodon
@@ -2006,6 +2043,29 @@ func abs64(x int64) int64 {
 // codons are lowercased except the changed base, which is uppercased in the
 // reference codon as well as the alternate one (e.g. "gGt/gTt").
 // Uses byte arithmetic for case conversion to avoid allocations.
+// formatPartialCodonChange writes a codons field for a codon that is not
+// three bases long, which is what a CDS ending in a part-codon leaves at its
+// 3' end. formatCodonChange assumes three and would read past the string.
+func formatPartialCodonChange(refCodon, altCodon string, posInCodon int) string {
+	var b []byte
+	for i := 0; i < len(refCodon); i++ {
+		if i == posInCodon {
+			b = append(b, refCodon[i]&^0x20)
+		} else {
+			b = append(b, refCodon[i]|0x20)
+		}
+	}
+	b = append(b, '/')
+	for i := 0; i < len(altCodon); i++ {
+		if i == posInCodon {
+			b = append(b, altCodon[i]&^0x20)
+		} else {
+			b = append(b, altCodon[i]|0x20)
+		}
+	}
+	return string(b)
+}
+
 func formatCodonChange(refCodon, altCodon string, posInCodon int) string {
 	var buf [7]byte // 3 ref + '/' + 3 alt
 	for i := 0; i < 3; i++ {
