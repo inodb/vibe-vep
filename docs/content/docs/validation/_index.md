@@ -172,6 +172,36 @@ vibe-vep is consistent with itself and with the oracle's own exonic numbering
 here, so these differences are not a gap to close. They were briefly treated
 as one, which is why this is written down.
 
+### Genomic HGVS is renormalised; transcript-relative HGVS is not, yet
+
+`hgvsg` is the one field that is not transcript-relative, and it is named
+from the reference rather than from the query. HGVS puts a change at the
+3'-most position the reference allows and calls a repeat of the preceding
+bases a duplication, so `13:41134330 G>-` in a GGG run is `13:g.41134332del`
+and a G inserted after a G is `dup`, not `insG`.
+
+That needs reference bases at serve time, which the transcript cache cannot
+supply: the shift runs along the chromosome and the variant need not be in
+any transcript. `vibe-vep prepare` therefore builds
+`genome_reference.bin`, the assembled chromosomes two bits to a base, about
+740 MB, read a window at a time. `serve` builds it on first start if
+`prepare` has not. Without it `hgvsg` falls back to naming the change where
+the query put it, which is what every release before this one did.
+
+Over 20,000 variants this closed 21,581 of 29,067 differing fields.
+
+Two divergences remain, and in both of them VEP is the one not following
+HGVS. A 57-base insertion that exactly repeats 18:48591886-48591942 is a
+tandem duplication; VEP names it `48591936_48591937ins...`. This is the same
+shape as the reverse-strand `dup`/`ins` defect above and is not something to
+fix.
+
+The transcript-relative names are a separate matter. `hgvsc` is still shifted
+only where the change is exonic and the transcript codes for something, so
+deep intronic positions and non-coding transcripts keep the unshifted name.
+That is the largest remaining gap against VEP 111, and closing it means
+giving the annotator the reference too, which it has never had.
+
 ### Comparing against a later release
 
 **`www.genomenexus.org` is not a clean VEP 116 measurement.** It answers from
