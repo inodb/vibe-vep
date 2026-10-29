@@ -1,6 +1,10 @@
 package output
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/inodb/vibe-vep/internal/annotate"
+)
 
 // VEP writes amino_acids as the translation of the codons on either side of
 // the change. These are real values from vep111.genomenexus.org.
@@ -13,8 +17,17 @@ func TestAminoAcidsFromCodons(t *testing.T) {
 		{"gTg/gAg", "V/E"},                     // plain substitution
 		{"cGa/ca", "R/X"},                      // frameshift on the reverse strand
 		{"aAGGATCGGGCCCACAtc/atc", "KDRAHI/I"}, // in-frame deletion of five
-		{"", ""},                               // nothing to translate
-		{"-/-", ""},                            // neither side has codons
+		// A change straddling a codon boundary reports both codons, even
+		// where only one of the residues moves (HNF1A 12:121426810 CC>TT).
+		{"gtCCgc/gtTTgc", "VR/VC"},
+		{"gACAAa/ga", "DK/X"},            // two codons in, a part-codon out
+		{"gaGGACCACAGg/gag", "EDHR/E"},   // APC c.1951_1958+1del
+		{"GATGATGATGAAGAG/-", "DDDEE/-"}, // NPM1 c.511_524+1del
+		{"tac/tAac", "Y/*"},              // a stop and nothing else drops the X
+		{"tac/tGACTac", "Y/*LX"},         // but a stop with a residue after it keeps it
+		{"aac/aTATGac", "N/I*X"},         // and so does one with a residue before
+		{"", ""},                         // nothing to translate
+		{"-/-", ""},                      // neither side has codons
 	} {
 		if got := aminoAcidsFromCodons(c.codons); got != c.want {
 			t.Errorf("aminoAcidsFromCodons(%q) = %q, want %q", c.codons, got, c.want)
@@ -36,5 +49,25 @@ func TestSynonymousAminoAcidIsNamedOnce(t *testing.T) {
 	}
 	if ref, alt := splitAminoAcids("V/E"); ref != "V" || alt != "E" {
 		t.Errorf("splitAminoAcids(\"V/E\") = %q, %q, want \"V\", \"E\"", ref, alt)
+	}
+}
+
+// The codons cover every codon the change touches; the named protein change
+// knows only the residue it renames. Where both are present the codons win,
+// which is what makes a two-base change across a boundary read VR/VC.
+func TestAminoAcidsPreferTheCodons(t *testing.T) {
+	ann := &annotate.Annotation{
+		CodonChange:     "gtCCgc/gtTTgc",
+		AminoAcidChange: "R168C",
+	}
+	if got := vepAminoAcids(ann); got != "VR/VC" {
+		t.Errorf("vepAminoAcids = %q, want \"VR/VC\"", got)
+	}
+
+	// With no codons to read -- an intronic or non-coding change -- the
+	// named change is all there is.
+	ann = &annotate.Annotation{AminoAcidChange: "R168C"}
+	if got := vepAminoAcids(ann); got != "R/C" {
+		t.Errorf("vepAminoAcids = %q, want \"R/C\"", got)
 	}
 }
