@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/datasource/ensembltranscript"
+	"github.com/inodb/vibe-vep/internal/datasource/genomeref"
 	"github.com/inodb/vibe-vep/internal/datasource/mutationassessor"
 	"github.com/inodb/vibe-vep/internal/genomicindex"
 	"github.com/spf13/cobra"
@@ -78,6 +81,11 @@ index so subsequent annotate/compare runs start instantly.`,
 				return err
 			}
 
+			// Build the reference genome index, if the genomic FASTA is here.
+			if err := prepareGenomeReference(logger, cacheDir); err != nil {
+				return err
+			}
+
 			return nil
 		},
 	}
@@ -136,4 +144,47 @@ func prepareMutationAssessor(logger *zap.Logger, cacheDir string) error {
 	}
 	logger.Info("built Mutation Assessor index", zap.Duration("elapsed", time.Since(start)))
 	return nil
+}
+
+// prepareGenomeReference builds the reference index hgvsg is renormalised
+// against. The genomic FASTA is optional, as it is for the intron flanks, so
+// a missing one is not an error: hgvsg then names a change where the query
+// put it rather than where HGVS requires.
+func prepareGenomeReference(logger *zap.Logger, cacheDir string) error {
+	fasta := findGenomeFASTA(rawDirForCache(cacheDir))
+	if fasta == "" {
+		logger.Info("genomic FASTA not downloaded, skipping the reference index")
+		return nil
+	}
+	path := filepath.Join(cacheDir, genomeref.FileName)
+	if store, err := genomeref.Open(path); err == nil {
+		n := store.Chromosomes()
+		store.Close()
+		if n > 0 {
+			logger.Info("reference index already built", zap.Int("chromosomes", n))
+			return nil
+		}
+	}
+
+	logger.Info("building reference index...", zap.String("from", fasta))
+	start := time.Now()
+	if err := genomeref.Build(fasta, path, wantedChromosome, cache.StreamGenomeFASTA); err != nil {
+		return fmt.Errorf("build reference index: %w", err)
+	}
+	logger.Info("built reference index", zap.Duration("elapsed", time.Since(start)))
+	return nil
+}
+
+// wantedChromosome accepts the assembled chromosomes and turns away the
+// scaffolds and patches, which carry no annotation and would double the
+// index for nothing.
+func wantedChromosome(chrom string) bool {
+	switch chrom {
+	case "X", "Y", "M", "MT":
+		return true
+	}
+	if n, err := strconv.Atoi(chrom); err == nil {
+		return n >= 1 && n <= 22
+	}
+	return false
 }

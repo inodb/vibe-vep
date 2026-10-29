@@ -12,6 +12,7 @@ import (
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/datasource/ensembltranscript"
+	"github.com/inodb/vibe-vep/internal/datasource/genomeref"
 	"github.com/inodb/vibe-vep/internal/datasource/hotspots"
 	"github.com/inodb/vibe-vep/internal/datasource/mutationassessor"
 	"github.com/inodb/vibe-vep/internal/datasource/myvariantinfo"
@@ -36,6 +37,10 @@ type assemblyContext struct {
 	// report. They cannot be derived from the GENCODE cache, so without it
 	// those endpoints answer from the cache and omit what it cannot supply.
 	ensemblTx *ensembltranscript.Store
+	// genomeRef holds the reference bases hgvsg is renormalised against.
+	// Nothing else needs them, and without it hgvsg names a change where the
+	// query put it rather than where HGVS requires.
+	genomeRef *genomeref.Store
 	assembly  string // normalized: "GRCh38"
 }
 
@@ -100,6 +105,16 @@ func (s *Server) SetEnsemblTranscriptStore(assembly string, store *ensembltransc
 	defer s.mu.Unlock()
 	if ctx, ok := s.assemblies[strings.ToLower(assembly)]; ok {
 		ctx.ensemblTx = store
+	}
+}
+
+// SetGenomeReference records the reference genome for an assembly, which
+// hgvsg is renormalised against.
+func (s *Server) SetGenomeReference(assembly string, store *genomeref.Store) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ctx, ok := s.assemblies[strings.ToLower(assembly)]; ok {
+		ctx.genomeRef = store
 	}
 }
 

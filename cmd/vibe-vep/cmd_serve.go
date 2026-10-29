@@ -17,6 +17,7 @@ import (
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/datasource/ensembltranscript"
+	"github.com/inodb/vibe-vep/internal/datasource/genomeref"
 	"github.com/inodb/vibe-vep/internal/datasource/hotspots"
 	"github.com/inodb/vibe-vep/internal/datasource/mutationassessor"
 	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
@@ -188,6 +189,13 @@ func runServe(logger *zap.Logger, cfg runServeConfig) error {
 		// Load Mutation Assessor predictions if the index was built.
 		if maStore := loadMutationAssessorStore(logger, normalized); maStore != nil {
 			srv.SetMutationAssessorStore(normalized, maStore)
+		}
+
+		// Load the reference genome, building it if prepare has not. Without
+		// it hgvsg names a change where the query put it rather than where
+		// HGVS requires, so it is worth the one-off build.
+		if genome := loadGenomeReference(logger, normalized); genome != nil {
+			srv.SetGenomeReference(normalized, genome)
 		}
 
 		// Load UniProt mapping if available.
@@ -563,5 +571,42 @@ func loadMutationAssessorStore(logger *zap.Logger, assembly string) *mutationass
 		return nil
 	}
 	logger.Info("loaded Mutation Assessor predictions", zap.String("path", dbPath))
+	return store
+}
+
+// loadGenomeReference opens the reference index hgvsg is renormalised
+// against, building it first if the genomic FASTA is here and the index is
+// not. Neither being present is not an error: hgvsg then stays as the query
+// wrote it, which is what every release before this one did.
+func loadGenomeReference(logger *zap.Logger, assembly string) *genomeref.Store {
+	cacheDir := DefaultGENCODEPath(assembly)
+	if cacheDir == "" {
+		return nil
+	}
+	path := filepath.Join(cacheDir, genomeref.FileName)
+
+	store, err := genomeref.Open(path)
+	if err != nil {
+		fasta := findGenomeFASTA(rawDirForCache(cacheDir))
+		if fasta == "" {
+			logger.Info("no genomic FASTA and no reference index: hgvsg will not be renormalised",
+				zap.String("looked for", path))
+			return nil
+		}
+		logger.Info("building reference index (one off, a few minutes)", zap.String("from", fasta))
+		start := time.Now()
+		if err := genomeref.Build(fasta, path, wantedChromosome, cache.StreamGenomeFASTA); err != nil {
+			logger.Warn("could not build the reference index; hgvsg will not be renormalised",
+				zap.Error(err))
+			return nil
+		}
+		logger.Info("built reference index", zap.Duration("elapsed", time.Since(start)))
+		if store, err = genomeref.Open(path); err != nil {
+			logger.Warn("could not open the reference index just built", zap.Error(err))
+			return nil
+		}
+	}
+	logger.Info("loaded reference genome",
+		zap.String("path", path), zap.Int("chromosomes", store.Chromosomes()))
 	return store
 }
