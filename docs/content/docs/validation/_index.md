@@ -308,14 +308,91 @@ Together these took differing fields from 4,498 (0.1760%) to 3,474
 full MAF from 98.5138% to 98.5203% against VEP 111. Every cell that moved
 in the MAF moved toward VEP: 35 better, none worse.
 
+### Measuring the whole cohort, not a sample
+
+The numbers above are over the first 20,000 variants of the list. Running
+all **274,506 distinct variants** of the cohort takes 18 minutes and compares
+**34,519,155 fields**, and it says two useful things.
+
+The sample was honest: 0.1359% differing over 20,000 against **0.1449%** over
+everything, with 92.8% of variants identical in every field and still **zero
+missing transcripts** out of 1,973,100. And `hgvsc` keeps its shape at scale
+-- of 36,358 differences, 21,560 are the reverse-strand dup/ins of Ensembl
+\#1609 and 14,459 are `cds_start_NF` numbering, so **99.1% of them are the two
+declared oracle defects**.
+
+What the sample could not do is rank what is left. At 20,000 variants
+`consequence_terms` is 71 differences across 27 unrelated shapes; at 274,506
+it is 1,257, and more than a third of them turn out to be one thing.
+
+### Where the annotation stops
+
+A transcript GENCODE tags `cds_end_NF` ends at its last coding base: no stop
+codon, no 3'UTR, nothing annotated past it. One whose start codon sits on its
+first base has the same hole at the other end. A deletion running off such an
+edge was being described by what the annotation lacks rather than by what VEP
+reports there, and that single hole produced five different wrong answers:
+
+| what we said | what VEP says |
+|---|---|
+| nothing, for the bases past the edge | the UTR that lies at that end |
+| `splice_donor_variant`, two bases after the final exon | a splice site needs an intron to sit in |
+| `stop_lost`, reaching the last three coding bases | there is no terminator in the annotation to lose |
+| a protein consequence for the span | the regions it covers, the way it declines `start_lost` when the 5' end is missing |
+| a symmetric protein range | lopsided: `10,10` off the 3' end, `?-11` off the 5' |
+
+Two more came out of chasing those, both in the response rather than the
+prediction. `GNTranscriptConsequence.MarshalJSON` re-derives the protein range
+from the HGVSc and was reading "neither end is coding" out of an *empty*
+string, discarding a position the annotator had got right. And
+`GNIntegerRange` wrote an unknown start as `0` where genome-nexus writes
+`null` -- which is what the annotation pipeline renders as the `?-` in
+`?-15/136`.
+
+That last one is the reason both measurements are run. The response diff saw
+nothing wrong: our `transcript_consequences` entry already matched the oracle
+field for field. The MAF goes through the annotation pipeline, which reads
+`annotation_summary` instead, where it did not match. Either measurement alone
+would have shipped it.
+
+Together: **50,032 differing fields to 48,808** (0.1449% to 0.1414%), with
+`consequence_terms` 1,257 to 560, `protein_end` -227, `protein_start` -159 and
+`most_severe_consequence` 103 to 27. Variants identical in every field 254,806
+to 254,975. On the full MAF, 98.5203% to **98.5215%**, `Consequence` 55 to 47
+and `Variant_Classification` 9 to 8 -- 13 cells better, 1 neither, none worse.
+
 ### What is left in consequence_terms
 
-71 differences over 20,000 variants, across 27 shapes, the largest of them
-9. Eight are miRNA transcripts where the variant sits in the transcript but
-outside the mature product: VEP reports `non_coding_transcript_exon_variant`
-and vibe-vep reports `mature_miRNA_variant`, and the mature coordinates come
-from Ensembl's miRNA annotation, which the GENCODE GTF does not carry. The
-rest are one- and two-case shapes with no common cause yet.
+560 differences over the full cohort, of which 220 are too long to classify
+from the dump. Of the 340 that can be read, the largest group is 48 miRNA
+transcripts where the variant sits in the transcript but outside the mature
+product: VEP reports `non_coding_transcript_exon_variant` and vibe-vep reports
+`mature_miRNA_variant`, and the mature coordinates come from Ensembl's miRNA
+annotation, which the GENCODE GTF does not carry. After that the counts fall
+to 43, 40, 35 and below, with no shared cause -- the next one costs its own
+investigation.
+
+### hgnc_id, and why the gene id is the wrong key
+
+1,695 cells differ. GENCODE v19 carries no `hgnc_id` attribute at all, so on
+GRCh37 the identifier is looked up in the biomart HGNC export **by gene
+symbol**, while VEP reads it off the gene. Re-keying on the Ensembl gene id
+looks obviously right and was measured **10x worse**: 1,695 to 17,508 cells,
+whole-API 0.1449% to 0.1907%.
+
+The reason is vintage, but the oracle's. The HGNC export is *newer* than VEP
+111's gene-to-HGNC xrefs, so the gene id finds recent lncRNA assignments --
+HGNC 55495, 56033 -- on 127 clone-named transcripts (`RP11-770J1.3`,
+`AC002553.4`) that the oracle has nothing for. The symbol lookup fails on
+exactly those genes, because a clone name is not an HGNC symbol, so **its
+blind spot matches the oracle's**. Matching VEP here means not using the
+better data.
+
+The residue is four ways a symbol is not a key: one HGNC renamed (`MARCH9` to
+`MARCHF9`, whose `previous_symbols` cell is Excel-mangled to `9-Mar`), one two
+GENCODE loci share (`SNORA4`), one HGNC retired into another gene (`CASC7`
+into `AGO2`, which would lend a protein-coding gene's identifier to a
+lincRNA), and one real source disagreement (`CCND2-AS1` vs `CCND2-AS2`).
 
 ### Comparing against a later release
 
