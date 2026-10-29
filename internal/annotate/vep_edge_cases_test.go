@@ -396,3 +396,34 @@ func TestEdge_VeryShortIntron(t *testing.T) {
 	rAcceptor := PredictConsequence(vAcceptor, tr)
 	assert.Equal(t, ConsequenceSpliceAcceptor, rAcceptor.Consequence)
 }
+
+// A non-coding transcript's exon edge is still an exon edge. VEP reports
+// splice_region_variant,non_coding_transcript_exon_variant within three bases
+// of a junction, where vibe-vep used to return the exonic term alone.
+func TestNonCodingExonEdgeIsASpliceRegion(t *testing.T) {
+	tr := createNonCodingTranscript()
+
+	for _, tc := range []struct {
+		name  string
+		pos   int64
+		want  bool
+		terms string
+	}{
+		{"last base of exon 1", 5200, true, "splice_region_variant,non_coding_transcript_exon_variant"},
+		{"third base into exon 2", 5502, true, "splice_region_variant,non_coding_transcript_exon_variant"},
+		{"well inside exon 2", 5600, false, "non_coding_transcript_exon_variant"},
+		// Exon 1 starts the transcript, so its 5' edge borders no intron.
+		{"first base of exon 1", 5000, false, "non_coding_transcript_exon_variant"},
+		// Exon 2 ends the transcript, so its 3' edge borders no intron.
+		{"last base of exon 2", 5700, false, "non_coding_transcript_exon_variant"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := &vcf.Variant{Chrom: "1", Pos: tc.pos, Ref: "A", Alt: "G"}
+			result := PredictConsequence(v, tr)
+			assert.Equal(t, tc.terms, result.Consequence)
+			// The impact stays the exonic term's, as it does on the coding
+			// path when the same term is appended there.
+			assert.Equal(t, GetImpact(ConsequenceNonCodingExon), result.Impact)
+		})
+	}
+}

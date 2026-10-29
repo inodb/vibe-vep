@@ -169,6 +169,14 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 			result.Consequence = ConsequenceNonCodingExon
 		}
 		result.Impact = GetImpact(result.Consequence)
+		// An exon edge is an exon edge whether or not the transcript codes
+		// for anything. VEP reports splice_region_variant alongside
+		// non_coding_transcript_exon_variant, and this path returned before
+		// ever asking. The impact is left as the exonic term's, the way the
+		// coding path leaves it when it appends the same term.
+		if spanTouchesSpliceRegion(v, t) {
+			result.Consequence = appendSpliceRegion(result.Consequence)
+		}
 		return result
 	}
 
