@@ -328,7 +328,8 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 	// CDS coordinates, which a 3'UTR position does not have, so an insertion
 	// there was always written as one however plainly it duplicated its
 	// neighbour.
-	if name, ok := duplicationInUTR3(v, t, insertedSeq); ok {
+	if name, k, ok := duplicationInUTR3(v, t, insertedSeq); ok {
+		result.HGVSOffset += k
 		return prefix + name
 	}
 
@@ -1708,9 +1709,14 @@ func checkSpliceJunctionDup(v *vcf.Variant, t *cache.Transcript, insertedSeq str
 // anchor, so this cannot disagree with the position the notation is built
 // from. The cached 3'UTR runs to utr3ScanBases, and an insertion past that
 // is left as an insertion rather than guessed at.
-func duplicationInUTR3(v *vcf.Variant, t *cache.Transcript, insertedSeq string) (string, bool) {
+//
+// The second return is how far the 3' shift moved the name, which is what
+// VEP reports as hgvs_offset. TCF7L2 10:114925316_114925317insA is c.*30dup
+// with an offset of 9; this walk found the same name and reported no shift
+// at all.
+func duplicationInUTR3(v *vcf.Variant, t *cache.Transcript, insertedSeq string) (string, int, bool) {
 	if len(insertedSeq) == 0 || len(t.UTR3Sequence) == 0 {
-		return "", false
+		return "", 0, false
 	}
 
 	// The base the insertion follows, in transcript order.
@@ -1722,14 +1728,14 @@ func duplicationInUTR3(v *vcf.Variant, t *cache.Transcript, insertedSeq string) 
 	// after the stop codon, so "*a" is utr[a-1].
 	a, ok := utr3Offset(anchor, t)
 	if !ok {
-		return "", false
+		return "", 0, false
 	}
 	anchorOffset := a
 
 	n := len(insertedSeq)
 	utr := t.UTR3Sequence
 	if a > len(utr) {
-		return "", false
+		return "", 0, false
 	}
 
 	// 3'-shift first. An insertion can move downstream for as long as the
@@ -1744,19 +1750,20 @@ func duplicationInUTR3(v *vcf.Variant, t *cache.Transcript, insertedSeq string) 
 	}
 	moved := string(shifted)
 
+	shift := a - anchorOffset
 	// Duplicating the bases ending at the anchor: *(a-n+1) through *a.
 	if a-n >= 0 && a <= len(utr) && utr[a-n:a] == moved {
-		return utr3RangeStr(a-n+1, a), true
+		return utr3RangeStr(a-n+1, a), shift, true
 	}
 	// Duplicating the bases beginning after it: *(a+1) through *(a+n).
 	if a+n <= len(utr) && utr[a:a+n] == moved {
-		return utr3RangeStr(a+1, a+n), true
+		return utr3RangeStr(a+1, a+n), shift, true
 	}
 	// Not a duplication, but the shift still moved it.
 	if moved != insertedSeq || a != anchorOffset {
-		return "*" + strconv.Itoa(a) + "_*" + strconv.Itoa(a+1) + "ins" + moved, true
+		return "*" + strconv.Itoa(a) + "_*" + strconv.Itoa(a+1) + "ins" + moved, shift, true
 	}
-	return "", false
+	return "", 0, false
 }
 
 // utr3Offset gives the "*N" a genomic position is named by, reporting false
