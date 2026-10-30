@@ -117,6 +117,9 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 		// VEP distinguishes the donor 5th base, the donor region and the
 		// polypyrimidine tract, which a single splice_region_variant hides.
 		terms := spanSpliceTerms(v, t)
+		if spanStartsInAnIncompleteTerminalCodon(v, t) {
+			terms = append(terms, ConsequenceIncompleteTerminalCodon)
+		}
 		if insTerms, ok := insertionSpliceTerms(v, t); ok {
 			// An insertion covers no base, so the span enumeration would
 			// describe whichever of its two flanks v.Pos names.
@@ -176,6 +179,19 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 	// Check if transcript is protein coding
 	if !t.IsProteinCoding() {
 		result.Consequence = nonCodingExonTerm(t)
+		if !insertionIsWithinTheExon(v, t) {
+			// An insertion sits between two bases, and at the edge of an exon
+			// only one of them is exonic. VEP does not call that an exon
+			// variant on a transcript that codes for nothing: ENST00000465826
+			// n.234_234+1insT is splice_region_variant,
+			// non_coding_transcript_variant, with the bare modifier the
+			// annotator appends for want of any other term.
+			//
+			// The coding path differs, and measurably so -- there the same
+			// insertion is a frameshift, because it still changes the
+			// sequence the exon contributes. Only the exon term is withheld.
+			result.Consequence = ""
+		}
 		result.Impact = GetImpact(result.Consequence)
 		// An exon edge is an exon edge whether or not the transcript codes
 		// for anything, and so is the splice site past it. This path asked
@@ -325,7 +341,11 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 	// annotated. Where a real UTR sits there the deletion crosses it and
 	// earns its terms honestly, so this does not fire.
 	if spanRunsOffAnUnbufferedEnd(v, t) {
-		if joined := joinConsequenceTerms(spanSpliceTerms(v, t)); joined != "" {
+		runOff := spanSpliceTerms(v, t)
+		if spanStartsInAnIncompleteTerminalCodon(v, t) {
+			runOff = append(runOff, ConsequenceIncompleteTerminalCodon)
+		}
+		if joined := joinConsequenceTerms(runOff); joined != "" {
 			result.Consequence = joined
 			result.Impact = GetImpact(firstTerm(joined))
 			result.HGVSp = ""
@@ -366,7 +386,7 @@ func PredictConsequence(v *vcf.Variant, t *cache.Transcript) *ConsequenceResult 
 				return result
 			}
 		}
-		if indelEnd >= startCodonStart && v.Pos <= startCodonEnd {
+		if indelEnd >= startCodonStart && v.Pos <= startCodonEnd && cdsStartsAtAMet(t) {
 			result.Consequence = ConsequenceStartLost
 			// VEP names the residue the change actually lands on, which is Met1
 			// only when the variant sits in the first codon. c.7del is p.V3?,
@@ -565,7 +585,24 @@ func predictCodingConsequence(v *vcf.Variant, t *cache.Transcript, exon *cache.E
 	result.CodonChange = formatCodonChange(refCodon, altCodon, posInCodon)
 
 	// Determine consequence type
-	if result.RefAA == result.AltAA {
+	if result.RefAA == 'X' || result.AltAA == 'X' {
+		// A codon that does not translate names no residue, so there is
+		// nothing to call synonymous or missense. It happens at the first
+		// codon of a 5'-incomplete CDS, which is padded out to three bases
+		// with the one or two the annotation never recorded: PLP1
+		// ENST00000400866 c.2G>T reads NGG to NTG, and both sides translate
+		// to nothing. VEP says what the change touched and stops there.
+		result.Consequence = ConsequenceCodingSequenceVariant
+		result.Impact = GetImpact(result.Consequence)
+		// The protein name stands in for the residue it cannot give, the
+		// same way the incomplete terminal codon does at the other end:
+		// p.Ter1=, unchanged, because nothing nameable changed. All 38 such
+		// variants in the cohort read exactly that. Returning here keeps
+		// FormatHGVSp, which would name a residue off the amino acid change,
+		// from writing over it.
+		result.HGVSp = "p.Ter" + strconv.FormatInt(codonNum, 10) + "="
+		return result
+	} else if result.RefAA == result.AltAA {
 		if result.RefAA == '*' {
 			result.Consequence = ConsequenceStopRetained
 		} else {
@@ -1760,6 +1797,42 @@ func spanRunsOffAnUnbufferedEnd(v *vcf.Variant, t *cache.Transcript) bool {
 		return true
 	}
 	return v.Pos < t.Start && t.CDSStart == t.Start
+}
+
+// spanStartsInAnIncompleteTerminalCodon reports whether a span begins inside
+// the part-codon a coding sequence of non-multiple-of-three length ends on.
+//
+// Beginning there is the test, not merely reaching it. Every span that runs
+// off the 3' end covers the last coding base, but VEP names
+// incomplete_terminal_codon_variant only where the change starts in the
+// part-codon itself -- which is to say where the residue it would name is
+// the unreadable one. TP53 ENST00000514944 17:7577534-7577535del starts at
+// protein position 156 of 156 and carries the term; MAP2K6 ENST00000358156
+// 17:74732484-74732519del runs off the same kind of end but starts at 123 of
+// 134 and does not. Testing coverage rather than the start named 251 spans
+// that VEP leaves alone, against the 24 it should have found.
+func spanStartsInAnIncompleteTerminalCodon(v *vcf.Variant, t *cache.Transcript) bool {
+	n := int64(len(t.CDSSequence))
+	if n == 0 || n%3 == 0 {
+		return false
+	}
+	first := v.Pos
+	if t.IsReverseStrand() && len(v.Ref) > 0 {
+		first = v.Pos + int64(len(v.Ref)) - 1
+	}
+	cds := GenomicToCDS(first, t)
+	return cds >= 1 && cds > (n/3)*3
+}
+
+// cdsStartsAtAMet reports whether the coding sequence begins at a start
+// codon. A 5'-incomplete transcript -- GENCODE tags it cds_start_NF -- begins
+// wherever the annotation happens to pick the gene up, and its first codon
+// may be a part-codon padded out with the bases nobody recorded.
+//
+// There is no start codon there to lose. A frameshift over the first codon of
+// such a transcript is frameshift_variant to VEP and nothing more.
+func cdsStartsAtAMet(t *cache.Transcript) bool {
+	return len(t.CDSSequence) >= 3 && IsStartCodon(t.CDSSequence[:3])
 }
 
 // cdsEndsInStop reports whether the coding sequence runs all the way to a

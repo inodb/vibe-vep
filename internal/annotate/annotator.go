@@ -319,5 +319,10 @@ func withTranscriptModifier(consequence string, t *cache.Transcript) string {
 			return consequence
 		}
 	}
+	if consequence == "" {
+		// Nothing else to say about the variant, so the modifier stands
+		// alone. Concatenating would leave a leading comma.
+		return "non_coding_transcript_variant"
+	}
 	return consequence + ",non_coding_transcript_variant"
 }

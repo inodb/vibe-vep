@@ -366,10 +366,19 @@ func TestEdge_DeletionSpanningEntireCDS(t *testing.T) {
 	v := &vcf.Variant{Chrom: "1", Pos: 995, Ref: "AAAAAAAAAAAAAAAAAAAAA", Alt: "A"}
 	result := PredictConsequence(v, tr)
 
-	// Should detect start_lost (deletion spans start codon)
-	// The deletion starts upstream of the CDS, so VEP pairs the term with
+	// Should detect start_lost (deletion spans start codon). The deletion
+	// starts upstream of the CDS, so VEP pairs the term with
 	// 5_prime_UTR_variant; see TestDatahub_LargeDeletion5UTRSpanningStartCodon.
-	assert.Equal(t, ConsequenceStartLost5PrimeUTR, result.Consequence)
+	//
+	// It also runs past the stop codon, and a span that reaches both UTRs is
+	// named for both. This test used to assert only the 5' one, on the
+	// grounds that the two never appear together -- true of the VEP111
+	// MSK-IMPACT MAF, where 0 of 341 UTR-carrying rows have both, but the MAF
+	// shows one transcript per variant and a span that crosses a whole CDS is
+	// hardly ever the canonical one. Over every transcript of the cohort the
+	// oracle pairs them 54 times.
+	assert.Equal(t, "start_lost,5_prime_UTR_variant,3_prime_UTR_variant",
+		result.Consequence)
 }
 
 // --- Test 10: Adjacent exon boundaries (very short intron) ---
@@ -460,9 +469,24 @@ func TestNonCodingDeletionReachesTheSpliceSite(t *testing.T) {
 	// An insertion covers no base, so it takes nothing out: inserting
 	// between the last exonic base and the first intronic one leaves the
 	// donor dinucleotide whole and VEP says only splice_region_variant.
+	//
+	// It is not an exon variant either. Only one of the two bases it sits
+	// between is exonic, and on a transcript that codes for nothing VEP
+	// names no exon: ENST00000465826 n.234_234+1insT is
+	// splice_region_variant,non_coding_transcript_variant, the modifier
+	// coming from the annotator for want of any other term. Measured over
+	// the 35 such insertions in the cohort, every one agrees.
 	t.Run("insertion at the junction", func(t *testing.T) {
 		v := &vcf.Variant{Chrom: "1", Pos: 5200, Ref: "", Alt: "A"}
-		assert.Equal(t, "splice_region_variant,non_coding_transcript_exon_variant",
+		assert.Equal(t, "splice_region_variant",
+			PredictConsequence(v, tr).Consequence)
+	})
+
+	// Well inside the exon both flanking bases are exonic, and the exon is
+	// named as usual.
+	t.Run("insertion inside the exon", func(t *testing.T) {
+		v := &vcf.Variant{Chrom: "1", Pos: 5100, Ref: "", Alt: "A"}
+		assert.Equal(t, "non_coding_transcript_exon_variant",
 			PredictConsequence(v, tr).Consequence)
 	})
 
@@ -534,7 +558,9 @@ func createTruncatedCDSTranscript() *cache.Transcript {
 			{Number: 1, Start: 1000, End: 1010, CDSStart: 1000, CDSEnd: 1010, Frame: 0},
 			{Number: 2, Start: 2000, End: 2008, CDSStart: 2000, CDSEnd: 2008, Frame: 1},
 		},
-		CDSSequence: "ATGGCTAAAGAAGGGCCCG",
+		// 20 bases, matching the two CDS blocks: 11 + 9. The last two are a
+		// part-codon.
+		CDSSequence: "ATGGCTAAAGAAGGGCCCGA",
 	}
 }
 
@@ -547,10 +573,32 @@ func TestDeletionPastTheTranscriptEdgeNamesTheUTR(t *testing.T) {
 
 	// Off the 3' end: 2008 is the last coding base, 2009 onwards is nothing
 	// the annotation describes. TP53 ENST00000604348 is the real case.
+	//
+	// Starting at c.18, the last base of the last whole codon, the span runs
+	// over the part-codon but is not named for it.
 	t.Run("past the 3' end", func(t *testing.T) {
 		v := &vcf.Variant{Chrom: "1", Pos: 2006, Ref: "AAAAA", Alt: "A"}
 		assert.Equal(t, "coding_sequence_variant,3_prime_UTR_variant",
 			PredictConsequence(v, tr).Consequence)
+	})
+
+	// Starting inside the part-codon itself -- c.19, genomic 2007 -- VEP
+	// names it. TP53 ENST00000514944 17:7577534-7577535del is the real case,
+	// at protein position 156 of 156.
+	t.Run("starting in the part-codon", func(t *testing.T) {
+		v := &vcf.Variant{Chrom: "1", Pos: 2007, Ref: "AAAA", Alt: "A"}
+		assert.Equal(t,
+			"incomplete_terminal_codon_variant,coding_sequence_variant,3_prime_UTR_variant",
+			PredictConsequence(v, tr).Consequence)
+	})
+
+	// A CDS that ends on a whole codon has no part-codon to start in.
+	t.Run("past the 3' end of a whole CDS", func(t *testing.T) {
+		whole := createTruncatedCDSTranscript()
+		whole.CDSSequence = "ATGGCTAAAGAAGGGCCCGAA" // 21 bases
+		v := &vcf.Variant{Chrom: "1", Pos: 2007, Ref: "AAAA", Alt: "A"}
+		assert.Equal(t, "coding_sequence_variant,3_prime_UTR_variant",
+			PredictConsequence(v, whole).Consequence)
 	})
 
 	// And off the 5' end, where the start codon is the transcript's first
@@ -575,4 +623,63 @@ func TestDeletionPastTheTranscriptEdgeNamesTheUTR(t *testing.T) {
 		v := &vcf.Variant{Chrom: "1", Pos: 998, Ref: "AAAA", Alt: "A"}
 		assert.Contains(t, PredictConsequence(v, rev).Consequence, "3_prime_UTR_variant")
 	})
+}
+
+// createIncompleteStartTranscript is a 5'-incomplete transcript: GENCODE tags
+// it cds_start_NF, the annotation picks the gene up part-way through a codon,
+// and the loader pads that first codon out with the base nobody recorded.
+func createIncompleteStartTranscript() *cache.Transcript {
+	return &cache.Transcript{
+		ID:       "ENST_EDGE_NF5",
+		GeneID:   "ENSG_EDGE_NF5",
+		GeneName: "EDGENF5",
+		Chrom:    "1",
+		Start:    1000,
+		End:      1020,
+		Strand:   1,
+		Biotype:  "protein_coding",
+		CDSStart: 1000,
+		CDSEnd:   1020,
+		Exons: []cache.Exon{
+			{Number: 1, Start: 1000, End: 1020, CDSStart: 1000, CDSEnd: 1020, Frame: 2},
+		},
+		// Codon 1 is "NGG": one base of it was never annotated.
+		CDSSequence:    "NGGCTAAAGAAGGGCCCTAA",
+		CDSStartOffset: 1,
+	}
+}
+
+// A codon that does not translate names no residue, so a change in it is
+// neither synonymous nor missense. VEP reports what the change touched and
+// stops: PLP1 ENST00000400866 c.2G>T is coding_sequence_variant.
+func TestChangeInAnUntranslatableCodon(t *testing.T) {
+	tr := createIncompleteStartTranscript()
+
+	// c.2 is the first base the annotation actually has, inside the padded
+	// first codon. Both sides translate to nothing.
+	v := &vcf.Variant{Chrom: "1", Pos: 1001, Ref: "G", Alt: "T"}
+	assert.Equal(t, ConsequenceCodingSequenceVariant, PredictConsequence(v, tr).Consequence)
+
+	// A change in a codon that does translate is classified as usual. Codon 2
+	// is CTA at c.4_6; the offset puts c.6 at genomic 1004, and CTA to CTG is
+	// still Leu.
+	v = &vcf.Variant{Chrom: "1", Pos: 1004, Ref: "A", Alt: "G"}
+	assert.Equal(t, ConsequenceSynonymousVariant, PredictConsequence(v, tr).Consequence)
+}
+
+// A 5'-incomplete transcript has no start codon, so nothing can be start_lost.
+// All 24 such differences in the cohort are cds_start_NF transcripts where VEP
+// reports a plain frameshift_variant.
+func TestNoStartLostWithoutAStartCodon(t *testing.T) {
+	tr := createIncompleteStartTranscript()
+	v := &vcf.Variant{Chrom: "1", Pos: 1000, Ref: "NG", Alt: "N"}
+	assert.NotContains(t, PredictConsequence(v, tr).Consequence, ConsequenceStartLost)
+
+	// The same deletion on a transcript that does begin at a Met keeps it.
+	withMet := createIncompleteStartTranscript()
+	withMet.CDSSequence = "ATGCTAAAGAAGGGCCCTAA"
+	withMet.CDSStartOffset = 0
+	withMet.Exons[0].Frame = 0
+	v = &vcf.Variant{Chrom: "1", Pos: 1000, Ref: "AT", Alt: "A"}
+	assert.Contains(t, PredictConsequence(v, withMet).Consequence, ConsequenceStartLost)
 }

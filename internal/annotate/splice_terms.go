@@ -193,6 +193,16 @@ func spanSpliceTerms(v *vcf.Variant, t *cache.Transcript) []string {
 	return terms
 }
 
+// insertionIsWithinTheExon reports whether both bases an insertion sits
+// between are exonic. Anything that covers bases of its own is judged by
+// those, so only an insertion is asked.
+func insertionIsWithinTheExon(v *vcf.Variant, t *cache.Transcript) bool {
+	if len(v.Ref) > 0 {
+		return true
+	}
+	return t.FindExon(v.Pos) != nil && t.FindExon(v.Pos+1) != nil
+}
+
 // nonCodingExonTerm names an exonic base on a transcript that codes for
 // nothing. VEP reports the mature miRNA product where there is one and the
 // transcript exon otherwise, never both.
@@ -330,13 +340,6 @@ func joinConsequenceTerms(terms []string) string {
 		// only with splice, intron and UTR terms -- never with a term that
 		// names the protein change.
 		if hasNamedCoding && t == ConsequenceCodingSequenceVariant {
-			continue
-		}
-		// A span long enough to cover both UTRs still gets one UTR term:
-		// in a VEP111 MSK-IMPACT MAF the two never appear together. The 5'
-		// one wins, as it does for a deletion running from the 5'UTR through
-		// the whole CDS.
-		if seen[Consequence5PrimeUTR] && t == Consequence3PrimeUTR {
 			continue
 		}
 		out = append(out, t)
