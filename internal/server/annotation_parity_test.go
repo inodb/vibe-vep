@@ -145,7 +145,8 @@ func (r *parityReport) compareVariant(v, oracle, ours map[string]any) {
 		gtc, ok := ourTx[id]
 		if !ok {
 			missing++
-			r.note("transcript_consequences[] MISSING", v["location"].(string)+" "+id)
+			loc := v["location"].(string) + " " + id
+			r.note("transcript_consequences[] MISSING", loc, loc)
 			continue
 		}
 		pruneOracleGaps(otc, gtc)
@@ -210,7 +211,8 @@ func (r *parityReport) compareMaps(prefix string, oracle, ours map[string]any, w
 		if _, present := oracle[key]; !present {
 			r.comparedFields++
 			r.differingFields++
-			r.note(prefix+"."+key+" (extra in ours)", where)
+			r.note(prefix+"."+key+" (extra in ours)", where,
+				fmt.Sprintf("%s  ours=%v", where, renderFull(ours[key])))
 		}
 	}
 }
@@ -223,19 +225,25 @@ func (r *parityReport) compareField(prefix, key string, want, got any, present b
 	r.comparedFields++
 	if !present {
 		r.differingFields++
-		r.note(path+" (missing from ours)", where)
+		r.note(path+" (missing from ours)", where, where)
 		return
 	}
 	if !sameValue(want, got) {
 		r.differingFields++
-		r.note(path, fmt.Sprintf("%s  oracle=%v  ours=%v", where, render(want), render(got)))
+		r.note(path,
+			fmt.Sprintf("%s  oracle=%v  ours=%v", where, render(want), render(got)),
+			fmt.Sprintf("%s  oracle=%v  ours=%v", where, renderFull(want), renderFull(got)))
 	}
 }
 
-func (r *parityReport) note(field, example string) {
+// note records one differing field. The example is what the summary table
+// shows, shortened to stay readable; the full value goes to the dump, which
+// is read by scripts that classify a whole class and cannot do it from a
+// value cut off at 70 characters.
+func (r *parityReport) note(field, example, full string) {
 	r.byField[field]++
 	if r.dump != nil {
-		fmt.Fprintf(r.dump, "%s\t%s\n", field, example)
+		fmt.Fprintf(r.dump, "%s\t%s\n", field, full)
 	}
 	if _, seen := r.examples[field]; !seen {
 		r.examples[field] = example
@@ -315,6 +323,15 @@ func sameValue(a, b any) bool {
 	default:
 		return fmt.Sprint(a) == fmt.Sprint(b)
 	}
+}
+
+// renderFull is render without the length cap.
+func renderFull(v any) string {
+	encoded, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprint(v)
+	}
+	return string(encoded)
 }
 
 func render(v any) string {
