@@ -1,0 +1,341 @@
+status=200
+{
+  "exons": [
+    {
+      "exonEnd": 62290857,
+      "exonId": "ENSE00002817075",
+      "exonStart": 62290756,
+      "rank": 1,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62292849,
+      "exonId": "ENSE00003651800",
+      "exonStart": 62292651,
+      "rank": 2,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62293296,
+      "exonId": "ENSE00003503888",
+      "exonStart": 62293203,
+      "rank": 3,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62293980,
+      "exonId": "ENSE00003591944",
+      "exonStart": 62293899,
+      "rank": 4,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62294242,
+      "exonId": "ENSE00003645336",
+      "exonStart": 62294182,
+      "rank": 5,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62297432,
+      "exonId": "ENSE00003610049",
+      "exonStart": 62297357,
+      "rank": 6,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62298906,
+      "exonId": "ENSE00003577544",
+      "exonStart": 62298822,
+      "rank": 7,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62303974,
+      "exonId": "ENSE00003673304",
+      "exonStart": 62303909,
+      "rank": 8,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62305446,
+      "exonId": "ENSE00003666143",
+      "exonStart": 62305293,
+      "rank": 9,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62309536,
+      "exonId": "ENSE00003529110",
+      "exonStart": 62309498,
+      "rank": 10,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62309699,
+      "exonId": "ENSE00003629571",
+      "exonStart": 62309621,
+      "rank": 11,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62311299,
+      "exonId": "ENSE00003599103",
+      "exonStart": 62311202,
+      "rank": 12,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62312072,
+      "exonId": "ENSE00003683698",
+      "exonStart": 62312017,
+      "rank": 13,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62316950,
+      "exonId": "ENSE00003502945",
+      "exonStart": 62316876,
+      "rank": 14,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62317225,
+      "exonId": "ENSE00003584704",
+      "exonStart": 62317144,
+      "rank": 15,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62319123,
+      "exonId": "ENSE00003662324",
+      "exonStart": 62318991,
+      "rank": 16,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62319403,
+      "exonId": "ENSE00003512723",
+      "exonStart": 62319290,
+      "rank": 17,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62319532,
+      "exonId": "ENSE00003547987",
+      "exonStart": 62319492,
+      "rank": 18,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62319739,
+      "exonId": "ENSE00003619664",
+      "exonStart": 62319654,
+      "rank": 19,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62319958,
+      "exonId": "ENSE00003644165",
+      "exonStart": 62319881,
+      "rank": 20,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62320485,
+      "exonId": "ENSE00003607070",
+      "exonStart": 62320408,
+      "rank": 21,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62321001,
+      "exonId": "ENSE00003550427",
+      "exonStart": 62320855,
+      "rank": 22,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62321218,
+      "exonId": "ENSE00003471346",
+      "exonStart": 62321103,
+      "rank": 23,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62321563,
+      "exonId": "ENSE00003671387",
+      "exonStart": 62321440,
+      "rank": 24,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62321794,
+      "exonId": "ENSE00003631309",
+      "exonStart": 62321647,
+      "rank": 25,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62322300,
+      "exonId": "ENSE00003544973",
+      "exonStart": 62322158,
+      "rank": 26,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62323190,
+      "exonId": "ENSE00003662529",
+      "exonStart": 62323095,
+      "rank": 27,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62324356,
+      "exonId": "ENSE00003689639",
+      "exonStart": 62324158,
+      "rank": 28,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62324636,
+      "exonId": "ENSE00003608421",
+      "exonStart": 62324496,
+      "rank": 29,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62325841,
+      "exonId": "ENSE00003562624",
+      "exonStart": 62325725,
+      "rank": 30,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62326327,
+      "exonId": "ENSE00003606135",
+      "exonStart": 62326094,
+      "rank": 31,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62326574,
+      "exonId": "ENSE00003498251",
+      "exonStart": 62326419,
+      "rank": 32,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62327003,
+      "exonId": "ENSE00003679347",
+      "exonStart": 62326681,
+      "rank": 33,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62327207,
+      "exonId": "ENSE00003582149",
+      "exonStart": 62327131,
+      "rank": 34,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62328544,
+      "exonId": "ENSE00003649759",
+      "exonStart": 62328113,
+      "rank": 35,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62328875,
+      "exonId": "ENSE00003679715",
+      "exonStart": 62328681,
+      "rank": 36,
+      "strand": 1,
+      "version": 1
+    },
+    {
+      "exonEnd": 62330037,
+      "exonId": "ENSE00003479866",
+      "exonStart": 62329633,
+      "rank": 37,
+      "strand": 1,
+      "version": 1
+    }
+  ],
+  "geneId": "ENSG00000026036",
+  "hugoSymbols": [
+    "RTEL1-TNFRSF6B"
+  ],
+  "pfamDomains": [
+    {
+      "pfamDomainEnd": 272,
+      "pfamDomainId": "PF06733",
+      "pfamDomainStart": 111
+    },
+    {
+      "pfamDomainEnd": 731,
+      "pfamDomainId": "PF13307",
+      "pfamDomainStart": 546
+    }
+  ],
+  "proteinId": "ENSP00000457868",
+  "proteinLength": 1400,
+  "transcriptId": "ENST00000482936",
+  "transcriptIdVersion": "1",
+  "utrs": [
+    {
+      "end": 62328544,
+      "start": 62328417,
+      "strand": 1,
+      "type": "three_prime_UTR"
+    },
+    {
+      "end": 62328875,
+      "start": 62328681,
+      "strand": 1,
+      "type": "three_prime_UTR"
+    },
+    {
+      "end": 62330037,
+      "start": 62329633,
+      "strand": 1,
+      "type": "three_prime_UTR"
+    }
+  ]
+}

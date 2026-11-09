@@ -1,0 +1,16 @@
+status=200
+{
+  "entrezGeneId": "51750",
+  "geneId": "ENSG00000258366",
+  "hugoSymbol": "RTEL1",
+  "previousSymbols": [
+    "C20orf41"
+  ],
+  "synonyms": [
+    "bK3184A7.3",
+    "NHL",
+    "DKFZP434C013",
+    "KIAA1088",
+    "RTEL"
+  ]
+}

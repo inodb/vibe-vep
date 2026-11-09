@@ -41,7 +41,7 @@ func (s *Server) handleGNGenomicGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	opts := parseGNMarshalOptions(r)
+	opts := s.parseGNMarshalOptions(r)
 	s.enrichMyVariantInfo(&opts, v, ctx.assembly, anns)
 	data, err := output.MarshalGNAnnotation(inputLabel, v, anns, ctx.assembly, opts)
 	if err != nil {
@@ -72,7 +72,7 @@ func (s *Server) handleGNGenomicPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	baseOpts := parseGNMarshalOptions(r)
+	baseOpts := s.parseGNMarshalOptions(r)
 	results := make([]json.RawMessage, 0, len(locations))
 	for _, gl := range locations {
 		v := gl.ToVariant()
@@ -81,16 +81,16 @@ func (s *Server) handleGNGenomicPost(w http.ResponseWriter, r *http.Request) {
 		anns, err := s.annotateVariant(ctx, v)
 		if err != nil {
 			s.logger.Error("annotation error", zap.Error(err), zap.String("input", inputLabel))
-			writeError(w, http.StatusInternalServerError, "annotation failed: "+err.Error())
-			return
+			results = append(results, gnErrorEntry(inputLabel, ctx.assembly, "annotation failed: "+err.Error()))
+			continue
 		}
 
 		opts := baseOpts
 		s.enrichMyVariantInfo(&opts, v, ctx.assembly, anns)
 		data, err := output.MarshalGNAnnotation(inputLabel, v, anns, ctx.assembly, opts)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "marshal error: "+err.Error())
-			return
+			results = append(results, gnErrorEntry(inputLabel, ctx.assembly, "marshal error: "+err.Error()))
+			continue
 		}
 		results = append(results, data)
 	}
@@ -130,7 +130,7 @@ func (s *Server) handleGNHGVSGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	opts := parseGNMarshalOptions(r)
+	opts := s.parseGNMarshalOptions(r)
 	s.enrichMyVariantInfo(&opts, v, ctx.assembly, anns)
 	data, err := output.MarshalGNAnnotation(notation, v, anns, ctx.assembly, opts)
 	if err != nil {
@@ -161,29 +161,29 @@ func (s *Server) handleGNHGVSPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	baseOpts := parseGNMarshalOptions(r)
+	baseOpts := s.parseGNMarshalOptions(r)
 	results := make([]json.RawMessage, 0, len(notations))
 	for _, notation := range notations {
 		variants, err := s.resolveHGVS(ctx, notation)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("notation %q: %s", notation, err.Error()))
-			return
+			results = append(results, gnErrorEntry(notation, ctx.assembly, err.Error()))
+			continue
 		}
 
 		for _, v := range variants {
 			anns, err := s.annotateVariant(ctx, v)
 			if err != nil {
 				s.logger.Error("annotation error", zap.Error(err), zap.String("input", notation))
-				writeError(w, http.StatusInternalServerError, "annotation failed: "+err.Error())
-				return
+				results = append(results, gnErrorEntry(notation, ctx.assembly, "annotation failed: "+err.Error()))
+				continue
 			}
 
 			opts := baseOpts
 			s.enrichMyVariantInfo(&opts, v, ctx.assembly, anns)
 			data, err := output.MarshalGNAnnotation(notation, v, anns, ctx.assembly, opts)
 			if err != nil {
-				writeError(w, http.StatusInternalServerError, "marshal error: "+err.Error())
-				return
+				results = append(results, gnErrorEntry(notation, ctx.assembly, "marshal error: "+err.Error()))
+				continue
 			}
 			results = append(results, data)
 		}
@@ -336,14 +336,38 @@ func convertMyVariantInfo(src *myvariantinfo.MyVariantInfo) *output.GNMyVariantI
 
 // parseGNMarshalOptions extracts GN marshal options from query parameters.
 // Supports both comma-separated (?fields=a,b) and repeated (?fields=a&fields=b).
-func parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions {
+func (s *Server) parseGNMarshalOptions(r *http.Request) output.GNMarshalOptions {
 	fields := strings.Join(r.URL.Query()["fields"], ",")
+	source := r.URL.Query().Get("isoformOverrideSource")
+	cancer, curated := s.CancerGenes()
 	return output.GNMarshalOptions{
 		IncludeAnnotationSummary: strings.Contains(fields, "annotation_summary"),
 		IncludeClinVar:           strings.Contains(fields, "clinvar"),
 		IncludeHotspots:          strings.Contains(fields, "hotspots"),
 		IncludeSignal:            strings.Contains(fields, "signal"),
 		IncludeMyVariantInfo:     strings.Contains(fields, "my_variant_info"),
+		OverrideTranscripts:      s.OverrideTranscripts(source),
+		CancerGenes:              cancer,
+		CuratedGenes:             curated,
+		OfficialGeneSymbols:      s.OfficialGeneSymbols(),
+		GeneSymbols:              s.geneSymbolLookup(r),
+		HGNCIDs: func(symbol string) string {
+			meta, _ := s.GeneMetadata(symbol)
+			return meta.HGNCID
+		},
+		EntrezGeneIDs: func(symbol string) string {
+			meta, _ := s.GeneMetadata(symbol)
+			return meta.EntrezGeneID
+		},
+		Revue:         s.Revue(),
+		Genome:        s.genomeReference(r),
+		UniprotIDs:    s.uniprotLookup(r),
+		IncludePtms:   strings.Contains(fields, "ptms"),
+		PtmLookup:     s.ptmLookup(r),
+		HotspotLookup: s.hotspotLookup(r),
+		// genome-nexus is deployed with overwrite_by_confirmed_revue_only on,
+		// so an entry still under review does not displace a prediction.
+		RevueConfirmedOnly: true,
 	}
 }
 
@@ -364,11 +388,111 @@ func parseCommaGenomicLocation(s string) (input.GenomicLocation, error) {
 	}
 
 	return input.GenomicLocation{
-		Chromosome:     parts[0],
-		Start:          start,
-		End:            end,
+		Chromosome:      parts[0],
+		Start:           start,
+		End:             end,
 		ReferenceAllele: parts[3],
-		VariantAllele:  parts[4],
+		VariantAllele:   parts[4],
 	}, nil
 }
 
+// genomeReference returns the reference genome for the assembly a request
+// names, or nil where none was built. Without it hgvsg is not renormalised.
+func (s *Server) genomeReference(r *http.Request) output.GenomeSequence {
+	ctx := s.getAssembly(r.PathValue("assembly"))
+	if ctx == nil {
+		ctx = s.soleAssembly()
+	}
+	if ctx == nil || ctx.genomeRef == nil {
+		return nil
+	}
+	return ctx.genomeRef
+}
+
+// uniprotLookup returns the transcript-to-UniProt lookup for the assembly a
+// request names, or nil where no mapping is loaded.
+func (s *Server) uniprotLookup(r *http.Request) func(string) string {
+	ctx := s.getAssembly(r.PathValue("assembly"))
+	if ctx == nil {
+		ctx = s.soleAssembly()
+	}
+	if ctx == nil || ctx.uniprot == nil {
+		return nil
+	}
+	return ctx.uniprot.LookupByTranscript
+}
+
+// ptmLookup returns the post-translational modification lookup for the
+// assembly a request names, or nil where no PTM data is loaded.
+// geneSymbolLookup names a transcript's gene.
+//
+// Whatever the GENCODE release calls it stands, so long as HGNC knows that
+// name. Where it does not -- a clone-based name like AC005152.2, from a
+// release predating the HGNC assignment -- the Ensembl transcript records
+// have the approved symbol, which here is SOX9-AS1.
+//
+// The test is "does HGNC know this name", not "does it look like a clone
+// name", and it has to be that way round: Ensembl 92 and GENCODE v19 assign
+// some transcripts to different genes outright, and preferring the transcript
+// records everywhere renamed TCF3 to TCF7L1, ERF to ETF1 and TRAF2 to TANK
+// across 1,684 MAF rows.
+func (s *Server) geneSymbolLookup(r *http.Request) func(string, string) string {
+	ctx := s.getAssembly(r.PathValue("assembly"))
+	if ctx == nil {
+		ctx = s.soleAssembly()
+	}
+	if ctx == nil || ctx.ensemblTx == nil {
+		return nil
+	}
+	return func(transcriptID, gencodeName string) string {
+		if _, known := s.GeneMetadata(gencodeName); known {
+			return gencodeName
+		}
+		return ctx.ensemblTx.HugoSymbol(transcriptID)
+	}
+}
+
+// hotspotLookup answers the "hotspots" field of an annotation from the
+// hotspots table, so that a residue which is a hotspot more than once -- BRAF
+// V600 is both a single residue hotspot and a 3d one -- reports every record
+// with its counts, as genome-nexus does.
+func (s *Server) hotspotLookup(r *http.Request) func(*annotate.Annotation, string, bool) []output.GNHotspotEntry {
+	ctx := s.getAssembly(r.PathValue("assembly"))
+	if ctx == nil {
+		ctx = s.soleAssembly()
+	}
+	if ctx == nil || ctx.hotspots == nil {
+		return nil
+	}
+	// An annotation names no hotspots release, and v3 accepts every row.
+	const version = "v3"
+	return func(ann *annotate.Annotation, variantType string, inframe bool) []output.GNHotspotEntry {
+		return hotspotsForAnnotation(ctx, ann, variantType, inframe, version)
+	}
+}
+
+func (s *Server) ptmLookup(r *http.Request) func(string) []output.GNPtmEntry {
+	ctx := s.getAssembly(r.PathValue("assembly"))
+	if ctx == nil {
+		ctx = s.soleAssembly()
+	}
+	if ctx == nil || ctx.ptm == nil {
+		return nil
+	}
+	return func(transcriptID string) []output.GNPtmEntry {
+		sites := ctx.ptm.LookupByTranscript(transcriptID)
+		entries := make([]output.GNPtmEntry, 0, len(sites))
+		for _, p := range sites {
+			entries = append(entries, output.GNPtmEntry{
+				UniprotEntry:         p.UniprotEntry,
+				UniprotAccession:     p.UniprotAccession,
+				EnsemblTranscriptIds: p.EnsemblTranscriptIds,
+				Position:             p.Position,
+				Type:                 p.Type,
+				PubmedIds:            p.PubmedIds,
+				Sequence:             p.Sequence,
+			})
+		}
+		return entries
+	}
+}

@@ -2,12 +2,12 @@ package output
 
 import (
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
+	"github.com/inodb/vibe-vep/internal/datasource/revue"
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
 
@@ -19,77 +19,157 @@ type GNMarshalOptions struct {
 	IncludeSignal            bool
 	IncludeMyVariantInfo     bool
 
+	// OverrideTranscripts is the set of transcript ids the isoform override
+	// source names canonical, across all genes. Empty leaves the annotations'
+	// own canonical flags alone.
+	OverrideTranscripts map[string]bool
+
+	// CuratedGenes and CancerGenes are the OncoKB curated genes and the whole
+	// cancer gene list. They decide which gene a variant falling in two of
+	// them is reported against.
+	CuratedGenes map[string]bool
+	CancerGenes  map[string]bool
+
+	// OfficialGeneSymbols maps a retired gene symbol to the approved one.
+	// The MAF names the gene by its approved symbol even where the GENCODE
+	// release the annotation came from still uses the old one.
+	OfficialGeneSymbols map[string]string
+
+	// UniprotIDs maps a transcript to the protein entry it translates to.
+	UniprotIDs func(transcriptID string) string
+
+	// GeneSymbols names a transcript's gene, given what the GENCODE release
+	// called it. Most of the time that name stands; where GENCODE predates an
+	// HGNC assignment and carries a clone-based name instead, the Ensembl
+	// transcript records know the approved symbol.
+	GeneSymbols func(transcriptID, gencodeName string) string
+
+	// HGNCIDs gives a gene's HGNC identifier by symbol, which VEP reports on
+	// every transcript consequence. The GENCODE GTF has no such attribute,
+	// so it comes from the biomart HGNC table instead.
+	HGNCIDs func(symbol string) string
+
+	// EntrezGeneIDs gives a gene's NCBI identifier by approved symbol, for
+	// the genes whose symbol the annotation's own copy was joined on before
+	// it was retired.
+	EntrezGeneIDs func(symbol string) string
+
+	// IncludePtms adds the post-translational modification sites on each
+	// transcript, and PtmLookup supplies them.
+	IncludePtms bool
+	PtmLookup   func(transcriptID string) []GNPtmEntry
+
+	// HotspotLookup reports the hotspots one transcript's view of a variant
+	// could be. The hotspots table is the server's, and deciding which rows a
+	// variant matches needs its consequence terms, so the server supplies the
+	// whole answer rather than the table.
+	HotspotLookup func(ann *annotate.Annotation, variantType string, inframe bool) []GNHotspotEntry
+
+	// Revue is the catalogue of variants whose published protein effect is
+	// not the one the sequence predicts. Nil leaves every prediction alone.
+	Revue *revue.Store
+
+	// RevueConfirmedOnly restricts those replacements to the entries
+	// published evidence supports, leaving the ones still under review out.
+	RevueConfirmedOnly bool
+
 	// MyVariantInfoData holds pre-fetched myvariant.info data to include in the response.
 	// The handler populates this before calling MarshalGNAnnotation.
 	MyVariantInfoData *GNMyVariantInfoAnnotation
+
+	// Genome supplies the reference bases hgvsg is renormalised against.
+	// Nil leaves hgvsg naming the change where the query put it, which is
+	// right only when the query already put it 3'-most.
+	Genome GenomeSequence
 }
 
 // MarshalGNAnnotation builds a GNAnnotation from a variant and its annotations,
 // then marshals it to JSON. This produces a genome-nexus compatible response.
 func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotation, assembly string, opts ...GNMarshalOptions) ([]byte, error) {
+	// Order the annotations the way VEP orders transcript consequences,
+	// because the choice of canonical transcript reads back to it: where two
+	// candidates are equally severe, the first one listed wins. CDKN2A
+	// 9:21971036 reaches both ENST00000304494 and ENST00000579755 as
+	// missense, both are MSKCC canonical, and the order alone decides which
+	// protein change the MAF reports.
+	anns = sortedByTranscriptID(anns)
+
+	var opt GNMarshalOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
 	ref, alt := alleleStrings(v)
 
 	start, end := mafCoordinates(v)
 
-	// Build HGVSg-style variant notation for the "variant" field.
-	variant := fmt.Sprintf("%s:g.%d%s>%s", v.Chrom, v.Pos, ref, alt)
+	variant := formatHGVSg(v.Chrom, start, end, ref, alt)
+	// "variant" and "hgvsg" differ only in that hgvsg is renormalised: it is
+	// the change written where HGVS requires, 3'-most along the reference
+	// and as a duplication where the inserted bases repeat what precedes
+	// them. Neither restates the bases a change removes: VEP writes
+	// g.100_102del, not g.100_102delACG.
+	hgvsg := variant
+	if renamed := normalizeHGVSg(v.Chrom, start, end, ref, alt, opt.Genome); renamed != "" {
+		hgvsg = renamed
+	}
+
+	// Ensembl names an insertion by the two bases it falls between, the later
+	// one first, so start is end+1 there and the span reads as empty. The
+	// summary's genomicLocation keeps the query's own coordinates instead,
+	// which is what the annotation pipeline reads.
+	reportedStart, reportedEnd := start, end
+	if isEmptyAllele(ref) {
+		reportedStart, reportedEnd = end, start
+	}
 
 	result := GNAnnotation{
-		Variant:               variant,
-		OriginalVariantQuery:  input,
-		HGVSg:                 variant,
-		ID:                    annotate.FormatVariantID(v.Chrom, v.Pos, v.Ref, v.Alt),
+		Variant:              variant,
+		OriginalVariantQuery: input,
+		HGVSg:                hgvsg,
+		// genome-nexus reports as "id" whatever it asked VEP about, which is
+		// the variant in genomic HGVS -- not the renormalised "hgvsg", which
+		// may shift an insertion to a duplication.
+		ID:                    variant,
 		AssemblyName:          assembly,
 		SeqRegionName:         v.Chrom,
-		Start:                 start,
-		End:                   end,
+		Start:                 reportedStart,
+		End:                   reportedEnd,
 		AlleleString:          ref + "/" + alt,
 		Strand:                1,
 		SuccessfullyAnnotated: true,
 	}
 
-	// Find most severe consequence and best canonical transcript.
-	// When multiple genes overlap (e.g. EGFR + EGFR-AS1), pick the canonical
-	// with highest impact (protein-coding missense > non-coding).
+	// Every annotation column below is read off one transcript, chosen the way
+	// genome-nexus chooses it: the isoform override table names the candidates,
+	// and the variant's most severe consequence breaks a tie between them.
 	result.MostSevereConsequence = mostSevereConsequence(anns)
-	var canonicalAnn *annotate.Annotation
-	canonicalImpact := -1
-	for _, ann := range anns {
-		impact := annotate.ImpactRank(ann.Impact)
-		if ann.IsCanonicalEnsembl && impact > canonicalImpact {
-			canonicalAnn = ann
-			canonicalImpact = impact
-		}
-	}
+	canonicalAnn, canonicalIDs := resolveCanonical(anns, opt, result.MostSevereConsequence)
 
 	for _, ann := range anns {
 		canonical := ""
-		if ann.IsCanonicalEnsembl {
+		if canonicalIDs[ann.TranscriptID] {
 			canonical = "1"
 		}
 
 		pStart, pEnd := proteinRange(ann)
 		tc := GNTranscriptConsequence{
 			TranscriptID:        stripVersion(ann.TranscriptID),
-			GeneSymbol:          ann.GeneName,
+			GeneSymbol:          geneSymbol(opt, ann),
 			GeneID:              ann.GeneID,
-			HGNCId:              ann.HGNCId,
+			HGNCId:              hgncID(opt, ann),
 			ProteinID:           ann.ProteinID,
 			ConsequenceTerms:    splitConsequence(ann.Consequence),
 			Impact:              ann.Impact,
-			VariantAllele:       ann.Allele,
-			AminoAcids:          aminoAcidsField(ann),
+			VariantAllele:       dashIfEmpty(ann.Allele),
+			AminoAcids:          vepAminoAcids(ann),
 			Codons:              ann.CodonChange,
 			ProteinStart:        pStart,
 			ProteinEnd:          pEnd,
-			CDSStart:            ann.CDSPosition,
-			CDSEnd:              ann.CDSPosition,
-			CDNAStart:           ann.CDNAPosition,
-			CDNAEnd:             ann.CDNAPosition,
-			HGVSp:               ann.HGVSp,
-			HGVSc:               ann.HGVSc,
+			HGVSp:               prefixProtein(ann.ProteinID, ann.ProteinIDVersion, ann.HGVSp),
+			HGVSc:               prefixTranscript(ann.TranscriptID, ann.HGVSc),
+			HGVSg:               hgvsg,
 			Exon:                ann.ExonNumber,
-			Intron:              ann.IntronNumber,
 			Biotype:             ann.Biotype,
 			Canonical:           canonical,
 			RefseqTranscriptIds: ann.RefSeqIDs,
@@ -109,21 +189,34 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 			}
 		}
 		tc.PolyPhenPrediction = ann.GetExtraKey("polyphen.prediction")
+		tc.AlphaMissense = alphaMissenseFrom(ann)
 
 		result.TranscriptConsequences = append(result.TranscriptConsequences, tc)
 	}
 
+	if opt.IncludeAnnotationSummary {
+		result.AnnotationSummary = buildAnnotationSummary(&result, start, end, anns, canonicalAnn, assembly, opt)
+	}
+
+	// PTM sites, one list per transcript consequence in the same order.
+	if opt.IncludePtms && opt.PtmLookup != nil {
+		sites := make([][]GNPtmEntry, 0, len(result.TranscriptConsequences))
+		for _, tc := range result.TranscriptConsequences {
+			found := opt.PtmLookup(tc.TranscriptID)
+			if found == nil {
+				found = []GNPtmEntry{}
+			}
+			sites = append(sites, found)
+		}
+		result.Ptms = &GNPtms{
+			// dbPTM, the source genome-nexus-importer builds ptm.json.gz from.
+			License:    "https://www.ncbi.nlm.nih.gov/pubmed/26578568",
+			Annotation: sites,
+		}
+	}
+
 	// Sort transcript consequences: canonical first (genome-nexus convention).
 	sortCanonicalFirst(result.TranscriptConsequences)
-
-	// Build optional enrichments.
-	var opt GNMarshalOptions
-	if len(opts) > 0 {
-		opt = opts[0]
-	}
-	if opt.IncludeAnnotationSummary {
-		result.AnnotationSummary = buildAnnotationSummary(variant, v, anns, canonicalAnn, assembly)
-	}
 
 	// Source fields are populated from annotation extras (same for all transcripts).
 	src := firstAnnotationWithExtras(anns)
@@ -161,20 +254,30 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 		}
 	}
 
-	// Hotspots — build per-transcript arrays matching genome-nexus format.
+	// Hotspots -- one array per transcript consequence, in the same order.
+	//
+	// A residue can be a hotspot more than once: BRAF V600 is both a single
+	// residue hotspot and a 3d one, and genome-nexus reports both. Asking the
+	// table directly is what gives all of them, with their counts; the
+	// annotation's own extras record only that the residue was a hotspot.
 	if opt.IncludeHotspots {
 		hotspotAnnotation := make([][]GNHotspotEntry, 0, len(anns))
 		for _, ann := range anns {
-			if ann.GetExtraKey("hotspots.hotspot") == "Y" {
-				hotspotAnnotation = append(hotspotAnnotation, []GNHotspotEntry{{
+			var found []GNHotspotEntry
+			if opt.HotspotLookup != nil {
+				found = opt.HotspotLookup(ann, GNVariantType(ref, alt), GNIsInframe(ref, alt))
+			} else if ann.GetExtraKey("hotspots.hotspot") == "Y" {
+				found = []GNHotspotEntry{{
 					HugoSymbol:   ann.GeneName,
 					TranscriptID: stripVersion(ann.TranscriptID),
 					Residue:      formatResidue(ann.AminoAcidChange, ann.ProteinPosition),
 					Type:         ann.GetExtraKey("hotspots.type"),
-				}})
-			} else {
-				hotspotAnnotation = append(hotspotAnnotation, []GNHotspotEntry{})
+				}}
 			}
+			if found == nil {
+				found = []GNHotspotEntry{}
+			}
+			hotspotAnnotation = append(hotspotAnnotation, found)
 		}
 		result.Hotspots = &GNHotspots{
 			License:    "https://opendatacommons.org/licenses/odbl/1.0/",
@@ -219,22 +322,29 @@ func MarshalGNAnnotation(input string, v *vcf.Variant, anns []*annotate.Annotati
 	return json.Marshal(result)
 }
 
-// buildAnnotationSummary constructs the annotation_summary enrichment.
-func buildAnnotationSummary(variant string, v *vcf.Variant, anns []*annotate.Annotation, canonical *annotate.Annotation, assembly string) *GNAnnotationSummary {
-	ref, alt := alleleStrings(v)
-	start, end := mafCoordinates(v)
+// buildAnnotationSummary takes the variant's own coordinates separately from
+// the response, because the response carries Ensembl's reversed span for an
+// insertion and the summary reports the query's coordinates instead.
+func buildAnnotationSummary(result *GNAnnotation, genomicStart, genomicEnd int64, anns []*annotate.Annotation, canonical *annotate.Annotation, assembly string, opt GNMarshalOptions) *GNAnnotationSummary {
+	ref, alt := splitAlleleString(result.AlleleString)
+	variantType := gnVariantType(ref, alt)
+	inframe := gnIsInframe(ref, alt)
 
 	summary := &GNAnnotationSummary{
-		Variant: variant,
+		Variant: result.Variant,
 		GenomicLocation: GNGenomicLocation{
-			Chromosome:      v.Chrom,
-			Start:           start,
-			End:             end,
+			Chromosome: result.SeqRegionName,
+			// The query's own coordinates, not the top-level start and end,
+			// which carry Ensembl's reversed span for an insertion. The
+			// annotation pipeline reads these and writes them to the MAF's
+			// Start_Position and End_Position.
+			Start:           genomicStart,
+			End:             genomicEnd,
 			ReferenceAllele: ref,
 			VariantAllele:   alt,
 		},
 		StrandSign:   "+",
-		VariantType:  resolveVariantType(ref, alt),
+		VariantType:  variantType,
 		AssemblyName: assembly,
 	}
 
@@ -242,14 +352,31 @@ func buildAnnotationSummary(variant string, v *vcf.Variant, anns []*annotate.Ann
 		summary.CanonicalTranscriptID = stripVersion(canonical.TranscriptID)
 	}
 
-	// Build transcript consequence summaries for all transcripts.
-	summaries := make([]GNTranscriptConsequenceSummary, 0, len(anns))
+	// result.TranscriptConsequences and anns are still index-aligned here: the
+	// list is only reordered for display after the summary is built. The
+	// pairing is what lets the Entrez gene id, which VEP does not report and
+	// genome-nexus looks up for itself, reach the summary.
+	// The reVUE catalogue is keyed by this, and it is the same for every
+	// transcript the variant reaches.
+	revueKey := ""
+	if opt.Revue != nil {
+		revueKey = genomicLocationKey(summary.GenomicLocation)
+	}
+
+	summaries := make([]GNTranscriptConsequenceSummary, 0, len(result.TranscriptConsequences))
 	var canonicalSummary *GNTranscriptConsequenceSummary
-	for _, ann := range anns {
-		tcs := buildTranscriptConsequenceSummary(ann, v)
+	for i := range result.TranscriptConsequences {
+		tc := &result.TranscriptConsequences[i]
+		var ann *annotate.Annotation
+		if i < len(anns) {
+			ann = anns[i]
+		}
+		tcs := buildTranscriptConsequenceSummary(tc, ann, variantType, inframe, opt)
+		if revueKey != "" {
+			applyRevisedEffect(&tcs, revueKey, opt)
+		}
 		summaries = append(summaries, tcs)
-		// Use the same canonical annotation selected by impact in the caller.
-		if canonical != nil && ann.TranscriptID == canonical.TranscriptID && canonicalSummary == nil {
+		if canonical != nil && ann != nil && ann.TranscriptID == canonical.TranscriptID && canonicalSummary == nil {
 			cp := tcs
 			canonicalSummary = &cp
 		}
@@ -261,6 +388,9 @@ func buildAnnotationSummary(variant string, v *vcf.Variant, anns []*annotate.Ann
 	})
 	summary.TranscriptConsequenceSummaries = summaries
 	summary.TranscriptConsequenceSummary = canonicalSummary
+	if canonicalSummary != nil {
+		summary.AlphaMissense = canonicalSummary.AlphaMissense
+	}
 	// Deprecated field: only canonical transcript.
 	if canonicalSummary != nil {
 		summary.TranscriptConsequences = []GNTranscriptConsequenceSummary{*canonicalSummary}
@@ -269,57 +399,72 @@ func buildAnnotationSummary(variant string, v *vcf.Variant, anns []*annotate.Ann
 	return summary
 }
 
-// buildTranscriptConsequenceSummary builds a single transcript consequence summary.
-func buildTranscriptConsequenceSummary(ann *annotate.Annotation, v *vcf.Variant) GNTranscriptConsequenceSummary {
-	aminoAcids := formatAminoAcidsVEP(ann.AminoAcidChange)
-	aaRef, aaAlt := splitAminoAcids(aminoAcids)
+// splitAlleleString splits the "ref/alt" form genome-nexus reads the variant's
+// alleles back out of.
+func splitAlleleString(alleleString string) (ref, alt string) {
+	parts := strings.SplitN(alleleString, "/", 2)
+	if len(parts) != 2 {
+		return "", ""
+	}
+	return parts[0], parts[1]
+}
+
+func buildTranscriptConsequenceSummary(tc *GNTranscriptConsequence, ann *annotate.Annotation, variantType string, inframe bool, opt GNMarshalOptions) GNTranscriptConsequenceSummary {
+	aaRef, aaAlt := splitAminoAcids(tc.AminoAcids)
+
+	// A splice site past the stop codon is named for the last residue of the
+	// protein it sits beyond, so the length has to come from the transcript.
+	proteinLength := 0
+	if ann != nil {
+		proteinLength = ann.ProteinLength
+	}
+	hgvspShort := gnResolveHgvspShort(tc, proteinLength, variantType, inframe)
 
 	tcs := GNTranscriptConsequenceSummary{
-		TranscriptID:          stripVersion(ann.TranscriptID),
-		CodonChange:           ann.CodonChange,
-		AminoAcids:            aminoAcids,
-		AminoAcidRef:          aaRef,
-		AminoAcidAlt:          aaAlt,
-		EntrezGeneID:          ann.EntrezGeneID,
-		HugoGeneSymbol:        ann.GeneName,
-		HGVSpShort:            hgvspToShort(ann.HGVSp),
-		HGVSp:                 hgvspStripTranscript(ann.HGVSp),
-		HGVSc:                 prefixTranscript(ann.TranscriptID, ann.HGVSc),
-		ConsequenceTerms:      firstConsequence(ann.Consequence),
-		VariantClassification: SOToMAFClassification(ann.Consequence, v),
-		Exon:                  ann.ExonNumber,
+		TranscriptID:   tc.TranscriptID,
+		CodonChange:    tc.Codons,
+		AminoAcids:     tc.AminoAcids,
+		AminoAcidRef:   aaRef,
+		AminoAcidAlt:   aaAlt,
+		HugoGeneSymbol: OfficialGeneSymbol(tc.GeneSymbol, opt.OfficialGeneSymbols),
+		HGVSpShort:     hgvspShort,
+		HGVSp:          gnResolveHgvsp(tc),
+		HGVSc:          tc.HGVSc,
+		// Every term, comma-joined: this is the MAF Consequence column, which
+		// names all of them and not just the most severe.
+		ConsequenceTerms:      strings.Join(tc.ConsequenceTerms, ","),
+		VariantClassification: gnVariantClassification(pickHighestPriorityConsequence(tc.ConsequenceTerms), variantType, inframe),
+		Exon:                  tc.Exon,
+		ProteinPosition:       gnResolveProteinPosition(tc, hgvspShort),
+		SIFTScore:             tc.SIFTScore,
+		SIFTPrediction:        tc.SIFTPrediction,
+		PolyphenScore:         tc.PolyPhenScore,
+		PolyphenPrediction:    tc.PolyPhenPrediction,
+		AlphaMissense:         tc.AlphaMissense,
 	}
 
 	// genome-nexus's RefSeqResolver reports the first RefSeq accession only.
-	if len(ann.RefSeqIDs) > 0 {
-		tcs.RefSeq = ann.RefSeqIDs[0]
+	if len(tc.RefseqTranscriptIds) > 0 {
+		tcs.RefSeq = tc.RefseqTranscriptIds[0]
 	}
 
-	if ann.ProteinPosition > 0 {
-		tcs.ProteinPosition = &GNIntegerRange{
-			Start: ann.ProteinPosition,
-			End:   ann.ProteinPosition,
+	// The Entrez gene id has no VEP-level field to come from; genome-nexus
+	// looks it up by gene, and vibe-vep carries it on the annotation.
+	if ann != nil {
+		tcs.EntrezGeneID = ann.EntrezGeneID
+		if tcs.EntrezGeneID == "" && opt.EntrezGeneIDs != nil {
+			tcs.EntrezGeneID = opt.EntrezGeneIDs(
+				OfficialGeneSymbol(ann.GeneName, opt.OfficialGeneSymbols))
 		}
 	}
 
-	// SIFT/PolyPhen
-	if s := ann.GetExtraKey("sift.score"); s != "" {
-		if f, err := strconv.ParseFloat(s, 64); err == nil {
-			tcs.SIFTScore = &f
-		}
+	if opt.UniprotIDs != nil {
+		tcs.UniprotID = opt.UniprotIDs(tc.TranscriptID)
 	}
-	tcs.SIFTPrediction = ann.GetExtraKey("sift.prediction")
-	if s := ann.GetExtraKey("polyphen.score"); s != "" {
-		if f, err := strconv.ParseFloat(s, 64); err == nil {
-			tcs.PolyphenScore = &f
-		}
-	}
-	tcs.PolyphenPrediction = ann.GetExtraKey("polyphen.prediction")
 
 	return tcs
 }
 
-// resolveVariantType determines the variant type from ref/alt alleles.
 func resolveVariantType(ref, alt string) string {
 	refLen := len(ref)
 	altLen := len(alt)
@@ -385,6 +530,22 @@ func formatResidue(aaChange string, proteinPos int64) string {
 
 // prefixTranscript prepends the transcript ID to an HGVSc/HGVSp notation
 // (e.g. "c.2369C>T" → "ENST00000275493.7:c.2369C>T").
+// prefixProtein names the protein an HGVS p. notation describes, as VEP does:
+// the versioned Ensembl protein id, then the change. The summary reports the
+// bare change instead, so this applies only to transcript consequences.
+func prefixProtein(proteinID, version, notation string) string {
+	if notation == "" || proteinID == "" {
+		return notation
+	}
+	if strings.Contains(notation, ":") {
+		return notation
+	}
+	if version != "" {
+		proteinID += "." + version
+	}
+	return proteinID + ":" + notation
+}
+
 func prefixTranscript(txID, notation string) string {
 	if notation == "" || txID == "" {
 		return notation
@@ -436,11 +597,218 @@ func sortCanonicalFirst(tcs []GNTranscriptConsequence) {
 	})
 }
 
-// splitAminoAcids splits "V/E" into ref "V" and alt "E".
+// splitAminoAcids splits "V/E" into ref "V" and alt "E". A synonymous change
+// is written once -- "T" -- and means the amino acid is unchanged, so both
+// sides are that one.
 func splitAminoAcids(aa string) (ref, alt string) {
-	parts := strings.SplitN(aa, "/", 2)
-	if len(parts) == 2 {
-		return parts[0], parts[1]
+	ref, alt, ok := strings.Cut(aa, "/")
+	if !ok {
+		return ref, ref
 	}
-	return aa, ""
+	return ref, alt
+}
+
+// geneSymbol names an annotation's gene the way Ensembl does, preferring the
+// HGNC symbol the transcript is recorded under over whatever the GENCODE
+// release called it.
+func geneSymbol(opt GNMarshalOptions, ann *annotate.Annotation) string {
+	if opt.GeneSymbols != nil {
+		if symbol := opt.GeneSymbols(ann.TranscriptID, ann.GeneName); symbol != "" {
+			return symbol
+		}
+	}
+	return ann.GeneName
+}
+
+// hgncID reports the HGNC identifier for an annotation's gene. GENCODE
+// supplies it on some assemblies; where it does not, the biomart HGNC table
+// does, looked up by the gene's approved symbol.
+func hgncID(opt GNMarshalOptions, ann *annotate.Annotation) string {
+	if ann.HGNCId != "" {
+		return strings.TrimPrefix(ann.HGNCId, "HGNC:")
+	}
+	if opt.HGNCIDs == nil {
+		return ""
+	}
+	return opt.HGNCIDs(OfficialGeneSymbol(geneSymbol(opt, ann), opt.OfficialGeneSymbols))
+}
+
+// OfficialGeneSymbol reports a gene by its approved symbol. A symbol with no
+// known replacement, which is nearly all of them, is returned unchanged.
+func OfficialGeneSymbol(symbol string, officialGeneSymbols map[string]string) string {
+	if official, ok := officialGeneSymbols[symbol]; ok {
+		return official
+	}
+	return symbol
+}
+
+// sortedByTranscriptID returns the annotations in ascending transcript ID
+// order, which is the order Ensembl VEP emits them in. The input is left
+// alone.
+func sortedByTranscriptID(anns []*annotate.Annotation) []*annotate.Annotation {
+	sorted := make([]*annotate.Annotation, len(anns))
+	copy(sorted, anns)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].TranscriptID < sorted[j].TranscriptID
+	})
+	return sorted
+}
+
+// genomicLocationKey spells a variant the way the reVUE catalogue spells it.
+func genomicLocationKey(loc GNGenomicLocation) string {
+	return strings.Join([]string{
+		loc.Chromosome,
+		strconv.FormatInt(loc.Start, 10),
+		strconv.FormatInt(loc.End, 10),
+		loc.ReferenceAllele,
+		loc.VariantAllele,
+	}, ",")
+}
+
+// applyRevisedEffect replaces a predicted protein change with the published
+// one where reVUE has an entry for this variant on this transcript. The
+// position is read back out of the revised name, since that is now the only
+// place it is recorded.
+func applyRevisedEffect(tcs *GNTranscriptConsequenceSummary, genomicLocation string, opt GNMarshalOptions) {
+	entry, ok := opt.Revue.Lookup(tcs.TranscriptID, genomicLocation)
+	if !ok || (opt.RevueConfirmedOnly && !entry.Confirmed) {
+		return
+	}
+	tcs.VariantClassification = entry.VariantClassification
+	tcs.HGVSpShort = entry.ProteinEffect
+	tcs.ProteinPosition = extractProteinPos(entry.ProteinEffect)
+	tcs.IsVue = true
+}
+
+// FormatGenomicHGVS names a variant in genomic HGVS, the way an annotation's
+// "variant" field reports it.
+func FormatGenomicHGVS(v *vcf.Variant) string {
+	ref, alt := alleleStrings(v)
+	start, end := mafCoordinates(v)
+	return formatHGVSg(v.Chrom, start, end, ref, alt)
+}
+
+// vepAminoAcids reports the amino_acids field the way VEP does: the
+// translation of the codons on either side of the change.
+//
+// The codons are the authority, not the protein change. They cover every
+// codon the variant touches, so a two-base change straddling a boundary
+// reports both -- VR/VC, not R/C -- and a change that leaves a part-codon
+// behind reports what VEP reports there, K/X. The named protein change knows
+// only the one residue it renames, so it serves only where there are no
+// codons to read.
+func vepAminoAcids(ann *annotate.Annotation) string {
+	if aa := aminoAcidsFromCodons(ann.CodonChange); aa != "" {
+		return collapseUnchangedAminoAcid(aa)
+	}
+	return collapseUnchangedAminoAcid(aminoAcidsField(ann))
+}
+
+// collapseUnchangedAminoAcid writes a synonymous change the way VEP does.
+// Where the codon changes but the amino acid does not, VEP names it once --
+// "T", not "T/T".
+func collapseUnchangedAminoAcid(aa string) string {
+	ref, alt, ok := strings.Cut(aa, "/")
+	if ok && ref == alt {
+		return ref
+	}
+	return aa
+}
+
+// aminoAcidsFromCodons translates both sides of a codons field.
+func aminoAcidsFromCodons(codons string) string {
+	ref, alt, ok := strings.Cut(codons, "/")
+	if !ok {
+		return ""
+	}
+	refAA, altAA := translateCodonSide(ref), translateCodonSide(alt)
+	if refAA == "-" && altAA == "-" {
+		return ""
+	}
+	return refAA + "/" + altAA
+}
+
+// translateCodonSide translates one side of a codons field. The codons are
+// written with the changed bases in upper case and their context in lower,
+// so they are folded before translation. A trailing part-codon, which is what
+// a frameshift leaves behind, becomes X.
+//
+// The one exception is a change that translates to a stop and nothing else:
+// VEP writes Y/* there, never Y/*X. It really is only that case -- "*L" with
+// a part-codon after it is still "*LX", and so is every single residue that
+// is not a stop. Measured against 4,334 part-codon sides from
+// vep111.genomenexus.org, this rule and the oracle disagree nowhere.
+func translateCodonSide(seq string) string {
+	if seq == "" || seq == "-" {
+		return "-"
+	}
+	upper := strings.ToUpper(seq)
+	aa := annotate.TranslateSequence(upper)
+	if len(upper)%3 != 0 && aa != "*" {
+		aa += "X"
+	}
+	if aa == "" {
+		return "-"
+	}
+	return aa
+}
+
+// dashIfEmpty writes an absent allele the way VEP does. A deletion removes
+// bases and puts none back, and that is reported as "-" rather than as an
+// empty string.
+func dashIfEmpty(allele string) string {
+	if isEmptyAllele(allele) {
+		return "-"
+	}
+	return allele
+}
+
+// formatHGVSg names a variant in genomic HGVS. This is the "variant" field,
+// which names the change without restating the bases it removes: a deletion
+// is g.100_102del rather than g.100_102delACG.
+func formatHGVSg(chrom string, start, end int64, ref, alt string) string {
+	prefix := chrom + ":g."
+	switch {
+	case start < 1:
+		// Ensembl counts from one, so there is nothing to name here.
+		return ""
+	case isEmptyAllele(ref):
+		return prefix + strconv.FormatInt(start, 10) + "_" + strconv.FormatInt(start+1, 10) + "ins" + alt
+	case isEmptyAllele(alt):
+		if len(ref) == 1 {
+			return prefix + strconv.FormatInt(start, 10) + "del"
+		}
+		return prefix + strconv.FormatInt(start, 10) + "_" + strconv.FormatInt(end, 10) + "del"
+	case len(ref) > 1:
+		return prefix + strconv.FormatInt(start, 10) + "_" + strconv.FormatInt(end, 10) + "delins" + alt
+	case len(alt) > 1:
+		return prefix + strconv.FormatInt(start, 10) + "delins" + alt
+	default:
+		return prefix + strconv.FormatInt(start, 10) + ref + ">" + alt
+	}
+}
+
+// isEmptyAllele reports whether a MAF allele stands for no sequence at all.
+func isEmptyAllele(allele string) bool {
+	switch allele {
+	case "", "-", "NA":
+		return true
+	}
+	return strings.Contains(allele, "--")
+}
+
+// alphaMissenseFrom reads AlphaMissense's call off an annotation, or nothing
+// where the variant is not a missense substitution it scores.
+func alphaMissenseFrom(ann *annotate.Annotation) *GNAlphaMissense {
+	class := ann.GetExtraKey("alphamissense.class")
+	raw := ann.GetExtraKey("alphamissense.score")
+	if class == "" && raw == "" {
+		return nil
+	}
+
+	am := &GNAlphaMissense{Pathogenicity: class}
+	if score, err := strconv.ParseFloat(raw, 64); err == nil {
+		am.Score = &score
+	}
+	return am
 }

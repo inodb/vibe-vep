@@ -1,0 +1,226 @@
+status=200
+{
+  "allele_string": "A/T",
+  "annotation_summary": {
+    "assemblyName": "GRCh37",
+    "canonicalTranscriptId": "ENST00000288602",
+    "genomicLocation": {
+      "chromosome": "7",
+      "end": 140453136,
+      "referenceAllele": "A",
+      "start": 140453136,
+      "variantAllele": "T"
+    },
+    "strandSign": "+",
+    "transcriptConsequenceSummaries": [
+      {
+        "aminoAcidAlt": "E",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/E",
+        "codonChange": "gTg/gAg",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "673",
+        "exon": "15/18",
+        "hgvsc": "ENST00000288602.6:c.1799T\u003eA",
+        "hgvsp": "p.Val600Glu",
+        "hgvspShort": "p.V600E",
+        "hugoGeneSymbol": "BRAF",
+        "proteinPosition": {
+          "end": 600,
+          "start": 600
+        },
+        "refSeq": "NM_004333.4",
+        "transcriptId": "ENST00000288602",
+        "uniprotId": "P15056",
+        "variantClassification": "Missense_Mutation"
+      },
+      {
+        "aminoAcidAlt": "E",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/E",
+        "codonChange": "gTg/gAg",
+        "consequenceTerms": "missense_variant,NMD_transcript_variant",
+        "entrezGeneId": "673",
+        "exon": "2/6",
+        "hgvsc": "ENST00000479537.1:c.83T\u003eA",
+        "hgvsp": "p.Val28Glu",
+        "hgvspShort": "p.V28E",
+        "hugoGeneSymbol": "BRAF",
+        "proteinPosition": {
+          "end": 28,
+          "start": 28
+        },
+        "transcriptId": "ENST00000479537",
+        "variantClassification": "Missense_Mutation"
+      },
+      {
+        "aminoAcidAlt": "E",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/E",
+        "codonChange": "gTg/gAg",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "673",
+        "exon": "6/10",
+        "hgvsc": "ENST00000496384.2:c.623T\u003eA",
+        "hgvsp": "p.Val208Glu",
+        "hgvspShort": "p.V208E",
+        "hugoGeneSymbol": "BRAF",
+        "proteinPosition": {
+          "end": 208,
+          "start": 208
+        },
+        "transcriptId": "ENST00000496384",
+        "variantClassification": "Missense_Mutation"
+      },
+      {
+        "consequenceTerms": "3_prime_UTR_variant,NMD_transcript_variant",
+        "entrezGeneId": "673",
+        "exon": "16/19",
+        "hgvsc": "ENST00000497784.1:c.*1249T\u003eA",
+        "hugoGeneSymbol": "BRAF",
+        "transcriptId": "ENST00000497784",
+        "variantClassification": "3'UTR"
+      }
+    ],
+    "transcriptConsequenceSummary": {
+      "aminoAcidAlt": "E",
+      "aminoAcidRef": "V",
+      "aminoAcids": "V/E",
+      "codonChange": "gTg/gAg",
+      "consequenceTerms": "missense_variant",
+      "entrezGeneId": "673",
+      "exon": "15/18",
+      "hgvsc": "ENST00000288602.6:c.1799T\u003eA",
+      "hgvsp": "p.Val600Glu",
+      "hgvspShort": "p.V600E",
+      "hugoGeneSymbol": "BRAF",
+      "proteinPosition": {
+        "end": 600,
+        "start": 600
+      },
+      "refSeq": "NM_004333.4",
+      "transcriptId": "ENST00000288602",
+      "uniprotId": "P15056",
+      "variantClassification": "Missense_Mutation"
+    },
+    "transcriptConsequences": [
+      {
+        "aminoAcidAlt": "E",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/E",
+        "codonChange": "gTg/gAg",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "673",
+        "exon": "15/18",
+        "hgvsc": "ENST00000288602.6:c.1799T\u003eA",
+        "hgvsp": "p.Val600Glu",
+        "hgvspShort": "p.V600E",
+        "hugoGeneSymbol": "BRAF",
+        "proteinPosition": {
+          "end": 600,
+          "start": 600
+        },
+        "refSeq": "NM_004333.4",
+        "transcriptId": "ENST00000288602",
+        "uniprotId": "P15056",
+        "variantClassification": "Missense_Mutation"
+      }
+    ],
+    "variant": "7:g.140453136A\u003eT",
+    "variantType": "SNP"
+  },
+  "assembly_name": "GRCh37",
+  "end": 140453136,
+  "hgvsg": "7:g.140453136A\u003eT",
+  "id": "7:g.140453136A\u003eT",
+  "most_severe_consequence": "missense_variant",
+  "originalVariantQuery": "7,140453136,140453136,A,T",
+  "seq_region_name": "7",
+  "start": 140453136,
+  "strand": 1,
+  "successfully_annotated": true,
+  "transcript_consequences": [
+    {
+      "amino_acids": "V/E",
+      "biotype": "protein_coding",
+      "canonical": "1",
+      "codons": "gTg/gAg",
+      "consequence_terms": [
+        "missense_variant"
+      ],
+      "exon": "15/18",
+      "gene_id": "ENSG00000157764",
+      "gene_symbol": "BRAF",
+      "hgnc_id": "1097",
+      "hgvsc": "ENST00000288602.6:c.1799T\u003eA",
+      "hgvsg": "7:g.140453136A\u003eT",
+      "hgvsp": "ENSP00000288602.6:p.Val600Glu",
+      "protein_end": 600,
+      "protein_id": "ENSP00000288602",
+      "protein_start": 600,
+      "refseq_transcript_ids": [
+        "NM_004333.4"
+      ],
+      "transcript_id": "ENST00000288602",
+      "variant_allele": "T"
+    },
+    {
+      "amino_acids": "V/E",
+      "biotype": "nonsense_mediated_decay",
+      "codons": "gTg/gAg",
+      "consequence_terms": [
+        "missense_variant",
+        "NMD_transcript_variant"
+      ],
+      "exon": "2/6",
+      "gene_id": "ENSG00000157764",
+      "gene_symbol": "BRAF",
+      "hgnc_id": "1097",
+      "hgvsc": "ENST00000479537.1:c.83T\u003eA",
+      "hgvsg": "7:g.140453136A\u003eT",
+      "hgvsp": "ENSP00000418033.1:p.Val28Glu",
+      "protein_end": 28,
+      "protein_id": "ENSP00000418033",
+      "protein_start": 28,
+      "transcript_id": "ENST00000479537",
+      "variant_allele": "T"
+    },
+    {
+      "amino_acids": "V/E",
+      "biotype": "protein_coding",
+      "codons": "gTg/gAg",
+      "consequence_terms": [
+        "missense_variant"
+      ],
+      "exon": "6/10",
+      "gene_id": "ENSG00000157764",
+      "gene_symbol": "BRAF",
+      "hgnc_id": "1097",
+      "hgvsc": "ENST00000496384.2:c.623T\u003eA",
+      "hgvsg": "7:g.140453136A\u003eT",
+      "hgvsp": "ENSP00000419060.1:p.Val208Glu",
+      "protein_end": 208,
+      "protein_id": "ENSP00000419060",
+      "protein_start": 208,
+      "transcript_id": "ENST00000496384",
+      "variant_allele": "T"
+    },
+    {
+      "biotype": "nonsense_mediated_decay",
+      "consequence_terms": [
+        "3_prime_UTR_variant",
+        "NMD_transcript_variant"
+      ],
+      "exon": "16/19",
+      "gene_id": "ENSG00000157764",
+      "gene_symbol": "BRAF",
+      "hgnc_id": "1097",
+      "hgvsc": "ENST00000497784.1:c.*1249T\u003eA",
+      "hgvsg": "7:g.140453136A\u003eT",
+      "protein_id": "ENSP00000420119",
+      "transcript_id": "ENST00000497784",
+      "variant_allele": "T"
+    }
+  ],
+  "variant": "7:g.140453136A\u003eT"
+}

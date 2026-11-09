@@ -51,10 +51,16 @@ type GeneEntrezMap map[string]string
 
 // Biomart TSV column indices (0-indexed).
 const (
-	biomartGeneCol    = 0
-	biomartEnsemblCol = 2  // ensembl_canonical_transcript
-	biomartMSKCol     = 11 // mskcc_canonical_transcript
-	biomartEntrezCol  = 31 // entrez_gene_id
+	biomartGeneCol        = 0
+	biomartEnsemblCol     = 2  // ensembl_canonical_transcript
+	biomartGenomeNexusCol = 5  // genome_nexus_canonical_transcript
+	biomartUniprotCol     = 8  // uniprot_canonical_transcript
+	biomartMSKCol         = 11 // mskcc_canonical_transcript
+	biomartEntrezCol      = 31 // entrez_gene_id
+
+	// biomartPrevSymbolsCol lists, comma separated, the symbols a gene used
+	// to be called.
+	biomartPrevSymbolsCol = 23 // previous_symbols
 )
 
 // parseBiomartCanonicals parses a Genome Nexus biomart TSV, extracting
@@ -197,4 +203,251 @@ func DownloadCanonicalOverrides(assembly, destPath string) error {
 	}
 
 	return nil
+}
+
+// LoadPreviousGeneSymbols maps a retired gene symbol to the approved one, so
+// that a GENCODE release naming a gene WHSC1 can still be reported as NSD2.
+//
+// A retired symbol that some other gene has since taken as its own approved
+// name is left alone -- ERF is now a gene in its own right even though it was
+// once ETF1 -- and so is one that two genes both claim, since there would be
+// no way to say which was meant.
+func LoadPreviousGeneSymbols(path string) (map[string]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open biomart canonicals: %w", err)
+	}
+	defer f.Close()
+	return parsePreviousGeneSymbols(f)
+}
+
+func parsePreviousGeneSymbols(reader io.Reader) (map[string]string, error) {
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+
+	// Header.
+	if !scanner.Scan() {
+		return map[string]string{}, nil
+	}
+
+	type row struct {
+		official string
+		previous []string
+	}
+	var rows []row
+	approved := make(map[string]bool)
+
+	for scanner.Scan() {
+		fields := strings.Split(scanner.Text(), "\t")
+		if len(fields) <= biomartPrevSymbolsCol {
+			continue
+		}
+		official := strings.TrimSpace(fields[biomartGeneCol])
+		if official == "" {
+			continue
+		}
+		approved[official] = true
+
+		var previous []string
+		for _, p := range strings.Split(fields[biomartPrevSymbolsCol], ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				previous = append(previous, p)
+			}
+		}
+		if len(previous) > 0 {
+			rows = append(rows, row{official: official, previous: previous})
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan biomart canonicals: %w", err)
+	}
+
+	candidates := make(map[string]map[string]bool)
+	for _, r := range rows {
+		for _, prev := range r.previous {
+			if approved[prev] {
+				continue
+			}
+			if candidates[prev] == nil {
+				candidates[prev] = make(map[string]bool)
+			}
+			candidates[prev][r.official] = true
+		}
+	}
+
+	symbols := make(map[string]string, len(candidates))
+	for prev, official := range candidates {
+		if len(official) != 1 {
+			continue
+		}
+		for name := range official {
+			symbols[prev] = name
+		}
+	}
+	return symbols, nil
+}
+
+// canonicalSourceCols names the isoform override tables the biomart file
+// carries, by the name the API asks for them by.
+var canonicalSourceCols = map[string]int{
+	IsoformSourceEnsembl:     biomartEnsemblCol,
+	IsoformSourceGenomeNexus: biomartGenomeNexusCol,
+	IsoformSourceUniprot:     biomartUniprotCol,
+	IsoformSourceMSKCC:       biomartMSKCol,
+}
+
+// The isoform override sources the API recognises.
+const (
+	IsoformSourceEnsembl     = "ensembl"
+	IsoformSourceGenomeNexus = "genome_nexus"
+	IsoformSourceUniprot     = "uniprot"
+	IsoformSourceMSKCC       = "mskcc"
+)
+
+// NormalizeIsoformSource resolves what an API caller asked for to a table
+// that exists. An unnamed source, and anything not recognised, means MSKCC.
+func NormalizeIsoformSource(source string) string {
+	normalized := strings.ToLower(strings.TrimSpace(source))
+	switch normalized {
+	case IsoformSourceEnsembl, IsoformSourceGenomeNexus, IsoformSourceUniprot:
+		return normalized
+	default:
+		return IsoformSourceMSKCC
+	}
+}
+
+// LoadCanonicalOverridesBySource reads every isoform override table the
+// biomart file carries, keyed by source name, so that a request naming one of
+// them gets that table rather than a silent fallback to another.
+func LoadCanonicalOverridesBySource(path string) (map[string]CanonicalOverrides, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open biomart canonicals: %w", err)
+	}
+	defer f.Close()
+	return parseCanonicalOverridesBySource(f)
+}
+
+func parseCanonicalOverridesBySource(reader io.Reader) (map[string]CanonicalOverrides, error) {
+	bySource := make(map[string]CanonicalOverrides, len(canonicalSourceCols))
+	widest := 0
+	for source, col := range canonicalSourceCols {
+		bySource[source] = make(CanonicalOverrides)
+		if col > widest {
+			widest = col
+		}
+	}
+
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+
+	// Header.
+	if !scanner.Scan() {
+		return bySource, nil
+	}
+
+	for scanner.Scan() {
+		fields := strings.Split(scanner.Text(), "\t")
+		if len(fields) <= widest {
+			continue
+		}
+		gene := strings.TrimSpace(fields[biomartGeneCol])
+		if gene == "" {
+			continue
+		}
+		for source, col := range canonicalSourceCols {
+			txID := strings.TrimSpace(fields[col])
+			if txID == "" || txID == "nan" {
+				continue
+			}
+			bySource[source][gene] = stripVersion(txID)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan biomart canonicals: %w", err)
+	}
+	return bySource, nil
+}
+
+// GeneMetadata is what the biomart HGNC table says about a gene beyond its
+// canonical transcript: the identifiers and alternative names the /ensembl
+// gene endpoints and VEP's hgnc_id field report.
+type GeneMetadata struct {
+	// HGNCID is the numeric part of the HGNC identifier. The table writes it
+	// as "HGNC:1097"; VEP reports it, and so genome-nexus does, as "1097".
+	HGNCID string
+
+	// Synonyms and PreviousSymbols are the other names a gene answers to,
+	// in the order the table lists them.
+	Synonyms        []string
+	PreviousSymbols []string
+
+	// EntrezGeneID is NCBI's identifier for the gene. The transcript cache
+	// carries one too, but joined on the symbol GENCODE uses, which misses
+	// wherever that symbol has since been retired.
+	EntrezGeneID string
+}
+
+const (
+	biomartHGNCIDCol   = 14 // hgnc_id
+	biomartSynonymsCol = 21 // synonyms
+)
+
+// LoadGeneMetadata reads the biomart HGNC table, keyed by approved symbol.
+func LoadGeneMetadata(path string) (map[string]GeneMetadata, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open biomart canonicals: %w", err)
+	}
+	defer f.Close()
+	return parseGeneMetadata(f)
+}
+
+// splitNameList reads one of the table's comma-separated name lists.
+func splitNameList(s string) []string {
+	var out []string
+	for _, name := range strings.Split(s, ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func parseGeneMetadata(reader io.Reader) (map[string]GeneMetadata, error) {
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+
+	// Header.
+	if !scanner.Scan() {
+		return map[string]GeneMetadata{}, nil
+	}
+
+	meta := make(map[string]GeneMetadata)
+	for scanner.Scan() {
+		fields := strings.Split(scanner.Text(), "\t")
+		if len(fields) <= biomartPrevSymbolsCol {
+			continue
+		}
+		symbol := strings.TrimSpace(fields[biomartGeneCol])
+		if symbol == "" {
+			continue
+		}
+		entrez := ""
+		if len(fields) > biomartEntrezCol {
+			if id := strings.TrimSpace(fields[biomartEntrezCol]); id != "nan" {
+				entrez = id
+			}
+		}
+		meta[symbol] = GeneMetadata{
+			HGNCID:          strings.TrimPrefix(strings.TrimSpace(fields[biomartHGNCIDCol]), "HGNC:"),
+			Synonyms:        splitNameList(fields[biomartSynonymsCol]),
+			PreviousSymbols: splitNameList(fields[biomartPrevSymbolsCol]),
+			EntrezGeneID:    entrez,
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan biomart canonicals: %w", err)
+	}
+	return meta, nil
 }

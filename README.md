@@ -30,6 +30,9 @@ vibe-vep convert vcf2maf input.vcf
 
 # Validate MAF annotations
 vibe-vep compare data_mutations.txt
+
+# Serve the Genome Nexus API (no Genome Nexus service, no MongoDB)
+vibe-vep serve --assembly GRCh37 --port 38080
 ```
 
 ## Features
@@ -38,6 +41,7 @@ vibe-vep compare data_mutations.txt
 - **Consequence Prediction** — Sequence Ontology terms ([details](https://inodb.github.io/vibe-vep/docs/consequence-prediction/))
 - **Annotation Sources** — AlphaMissense, ClinVar, Cancer Hotspots, SIGNAL, OncoKB ([details](https://inodb.github.io/vibe-vep/docs/annotation-sources/))
 - **Validation** — 99.8% consequence match across 1M+ TCGA variants ([details](https://inodb.github.io/vibe-vep/docs/validation/))
+- **Genome Nexus API** — `vibe-vep serve` answers it directly, so the annotation pipeline and other clients can be pointed at it by base URL alone ([details](https://inodb.github.io/vibe-vep/docs/annotation-server/))
 - **Fast** — ~14,000 variants/sec parallel, ~5,000 single-threaded
 
 ## Documentation
@@ -47,6 +51,7 @@ Full documentation is available at **[inodb.github.io/vibe-vep](https://inodb.gi
 - [Getting Started](https://inodb.github.io/vibe-vep/docs/getting-started/) — Installation, usage, configuration
 - [Consequence Prediction](https://inodb.github.io/vibe-vep/docs/consequence-prediction/) — Supported consequences and how they work
 - [Annotation Sources](https://inodb.github.io/vibe-vep/docs/annotation-sources/) — Data sources and match levels
+- [Annotation Server](https://inodb.github.io/vibe-vep/docs/annotation-server/) — Serving the Genome Nexus API
 - [Output Formats](https://inodb.github.io/vibe-vep/docs/output-formats/) — VCF and MAF output details
 - [Validation](https://inodb.github.io/vibe-vep/docs/validation/) — Methodology and results
 - [Development](https://inodb.github.io/vibe-vep/docs/development/) — Contributing and project structure

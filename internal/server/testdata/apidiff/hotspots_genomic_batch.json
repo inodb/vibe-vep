@@ -1,0 +1,136 @@
+status=200
+[
+  {
+    "genomicLocation": {
+      "chromosome": "7",
+      "end": 140453136,
+      "referenceAllele": "A",
+      "start": 140453136,
+      "variantAllele": "T"
+    },
+    "hotspots": [
+      {
+        "hugoSymbol": "BRAF",
+        "inframeCount": 0,
+        "missenseCount": 897,
+        "residue": "V600",
+        "spliceCount": 0,
+        "transcriptId": "ENST00000288602",
+        "transcriptIdVersion": "6",
+        "truncatingCount": 0,
+        "tumorCount": 897,
+        "type": "single residue",
+        "version": "v2"
+      },
+      {
+        "hugoSymbol": "BRAF",
+        "residue": "V600",
+        "transcriptId": "ENST00000288602",
+        "transcriptIdVersion": "6",
+        "tumorCount": 545,
+        "type": "3d",
+        "version": "v2"
+      }
+    ],
+    "variant": "7:g.140453136A\u003eT"
+  },
+  {
+    "genomicLocation": {
+      "chromosome": "9",
+      "end": 21971173,
+      "referenceAllele": "A",
+      "start": 21971173,
+      "variantAllele": "G"
+    },
+    "hotspots": [],
+    "variant": "9:g.21971173A\u003eG"
+  },
+  {
+    "genomicLocation": {
+      "chromosome": "9",
+      "end": 21971092,
+      "referenceAllele": "-",
+      "start": 21971091,
+      "variantAllele": "C"
+    },
+    "hotspots": [],
+    "variant": "9:g.21971091_21971092insC"
+  },
+  {
+    "genomicLocation": {
+      "chromosome": "20",
+      "end": 62319056,
+      "referenceAllele": "G",
+      "start": 62319056,
+      "variantAllele": "A"
+    },
+    "hotspots": [],
+    "variant": "20:g.62319056G\u003eA"
+  },
+  {
+    "genomicLocation": {
+      "chromosome": "11",
+      "end": 57003943,
+      "referenceAllele": "A",
+      "start": 57003943,
+      "variantAllele": "G"
+    },
+    "hotspots": [],
+    "variant": "11:g.57003943A\u003eG"
+  },
+  {
+    "genomicLocation": {
+      "chromosome": "4",
+      "end": 1980527,
+      "referenceAllele": "C",
+      "start": 1980527,
+      "variantAllele": "T"
+    },
+    "hotspots": [],
+    "variant": "4:g.1980527C\u003eT"
+  },
+  {
+    "genomicLocation": {
+      "chromosome": "4",
+      "end": 55593606,
+      "referenceAllele": "CCACAGAAACCCATGTATGAAGTACAGTGGA",
+      "start": 55593576,
+      "variantAllele": "-"
+    },
+    "hotspots": [],
+    "variant": "4:g.55593576_55593606del"
+  },
+  {
+    "genomicLocation": {
+      "chromosome": "17",
+      "end": 37876039,
+      "referenceAllele": "G",
+      "start": 37876039,
+      "variantAllele": "A"
+    },
+    "hotspots": [],
+    "variant": "17:g.37876039G\u003eA"
+  },
+  {
+    "genomicLocation": {
+      "chromosome": "17",
+      "end": 7590693,
+      "referenceAllele": "A",
+      "start": 7590693,
+      "variantAllele": "G"
+    },
+    "hotspots": [],
+    "variant": "17:g.7590693A\u003eG"
+  },
+  {
+    "genomicLocation": {
+      "chromosome": "3",
+      "end": 52675445,
+      "referenceAllele": "T",
+      "start": 52675445,
+      "variantAllele": "-"
+    },
+    "hotspots": [],
+    "variant": "3:g.52675445del"
+  }
+]

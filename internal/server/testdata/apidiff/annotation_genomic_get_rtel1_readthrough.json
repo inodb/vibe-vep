@@ -1,0 +1,307 @@
+status=200
+{
+  "allele_string": "G/A",
+  "annotation_summary": {
+    "assemblyName": "GRCh37",
+    "canonicalTranscriptId": "ENST00000360203",
+    "genomicLocation": {
+      "chromosome": "20",
+      "end": 62319056,
+      "referenceAllele": "G",
+      "start": 62319056,
+      "variantAllele": "A"
+    },
+    "strandSign": "+",
+    "transcriptConsequenceSummaries": [
+      {
+        "aminoAcidAlt": "I",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/I",
+        "codonChange": "Gtc/Atc",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "51750",
+        "exon": "17/36",
+        "hgvsc": "ENST00000318100.4:c.1414G\u003eA",
+        "hgvsp": "p.Val472Ile",
+        "hgvspShort": "p.V472I",
+        "hugoGeneSymbol": "RTEL1",
+        "proteinPosition": {
+          "end": 472,
+          "start": 472
+        },
+        "transcriptId": "ENST00000318100",
+        "variantClassification": "Missense_Mutation"
+      },
+      {
+        "aminoAcidAlt": "I",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/I",
+        "codonChange": "Gtc/Atc",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "51750",
+        "exon": "17/35",
+        "hgvsc": "ENST00000360203.5:c.1414G\u003eA",
+        "hgvsp": "p.Val472Ile",
+        "hgvspShort": "p.V472I",
+        "hugoGeneSymbol": "RTEL1",
+        "proteinPosition": {
+          "end": 472,
+          "start": 472
+        },
+        "refSeq": "NM_001283009.1",
+        "transcriptId": "ENST00000360203",
+        "uniprotId": "Q9NZ71-6",
+        "variantClassification": "Missense_Mutation"
+      },
+      {
+        "consequenceTerms": "upstream_gene_variant",
+        "entrezGeneId": "51750",
+        "hugoGeneSymbol": "RTEL1",
+        "transcriptId": "ENST00000370003",
+        "uniprotId": "Q9NZ71-5",
+        "variantClassification": "5'Flank"
+      },
+      {
+        "aminoAcidAlt": "I",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/I",
+        "codonChange": "Gtc/Atc",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "51750",
+        "exon": "17/35",
+        "hgvsc": "ENST00000370018.3:c.1414G\u003eA",
+        "hgvsp": "p.Val472Ile",
+        "hgvspShort": "p.V472I",
+        "hugoGeneSymbol": "RTEL1",
+        "proteinPosition": {
+          "end": 472,
+          "start": 472
+        },
+        "refSeq": "NM_016434.3",
+        "transcriptId": "ENST00000370018",
+        "uniprotId": "Q9NZ71",
+        "variantClassification": "Missense_Mutation"
+      },
+      {
+        "consequenceTerms": "upstream_gene_variant",
+        "entrezGeneId": "51750",
+        "hugoGeneSymbol": "RTEL1",
+        "transcriptId": "ENST00000425905",
+        "variantClassification": "5'Flank"
+      },
+      {
+        "consequenceTerms": "upstream_gene_variant",
+        "entrezGeneId": "51750",
+        "hugoGeneSymbol": "RTEL1",
+        "transcriptId": "ENST00000496816",
+        "variantClassification": "5'Flank"
+      },
+      {
+        "aminoAcidAlt": "I",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/I",
+        "codonChange": "Gtc/Atc",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "51750",
+        "exon": "17/35",
+        "hgvsc": "ENST00000508582.2:c.1486G\u003eA",
+        "hgvsp": "p.Val496Ile",
+        "hgvspShort": "p.V496I",
+        "hugoGeneSymbol": "RTEL1",
+        "proteinPosition": {
+          "end": 496,
+          "start": 496
+        },
+        "transcriptId": "ENST00000508582",
+        "uniprotId": "Q9NZ71-7",
+        "variantClassification": "Missense_Mutation"
+      }
+    ],
+    "transcriptConsequenceSummary": {
+      "aminoAcidAlt": "I",
+      "aminoAcidRef": "V",
+      "aminoAcids": "V/I",
+      "codonChange": "Gtc/Atc",
+      "consequenceTerms": "missense_variant",
+      "entrezGeneId": "51750",
+      "exon": "17/35",
+      "hgvsc": "ENST00000360203.5:c.1414G\u003eA",
+      "hgvsp": "p.Val472Ile",
+      "hgvspShort": "p.V472I",
+      "hugoGeneSymbol": "RTEL1",
+      "proteinPosition": {
+        "end": 472,
+        "start": 472
+      },
+      "refSeq": "NM_001283009.1",
+      "transcriptId": "ENST00000360203",
+      "uniprotId": "Q9NZ71-6",
+      "variantClassification": "Missense_Mutation"
+    },
+    "transcriptConsequences": [
+      {
+        "aminoAcidAlt": "I",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/I",
+        "codonChange": "Gtc/Atc",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "51750",
+        "exon": "17/35",
+        "hgvsc": "ENST00000360203.5:c.1414G\u003eA",
+        "hgvsp": "p.Val472Ile",
+        "hgvspShort": "p.V472I",
+        "hugoGeneSymbol": "RTEL1",
+        "proteinPosition": {
+          "end": 472,
+          "start": 472
+        },
+        "refSeq": "NM_001283009.1",
+        "transcriptId": "ENST00000360203",
+        "uniprotId": "Q9NZ71-6",
+        "variantClassification": "Missense_Mutation"
+      }
+    ],
+    "variant": "20:g.62319056G\u003eA",
+    "variantType": "SNP"
+  },
+  "assembly_name": "GRCh37",
+  "end": 62319056,
+  "hgvsg": "20:g.62319056G\u003eA",
+  "id": "20:g.62319056G\u003eA",
+  "most_severe_consequence": "missense_variant",
+  "originalVariantQuery": "20,62319056,62319056,G,A",
+  "seq_region_name": "20",
+  "start": 62319056,
+  "strand": 1,
+  "successfully_annotated": true,
+  "transcript_consequences": [
+    {
+      "amino_acids": "V/I",
+      "biotype": "protein_coding",
+      "codons": "Gtc/Atc",
+      "consequence_terms": [
+        "missense_variant"
+      ],
+      "exon": "17/36",
+      "gene_id": "ENSG00000258366",
+      "gene_symbol": "RTEL1",
+      "hgnc_id": "15888",
+      "hgvsc": "ENST00000318100.4:c.1414G\u003eA",
+      "hgvsg": "20:g.62319056G\u003eA",
+      "hgvsp": "ENSP00000322287.4:p.Val472Ile",
+      "protein_end": 472,
+      "protein_id": "ENSP00000322287",
+      "protein_start": 472,
+      "transcript_id": "ENST00000318100",
+      "variant_allele": "A"
+    },
+    {
+      "amino_acids": "V/I",
+      "biotype": "protein_coding",
+      "canonical": "1",
+      "codons": "Gtc/Atc",
+      "consequence_terms": [
+        "missense_variant"
+      ],
+      "exon": "17/35",
+      "gene_id": "ENSG00000258366",
+      "gene_symbol": "RTEL1",
+      "hgnc_id": "15888",
+      "hgvsc": "ENST00000360203.5:c.1414G\u003eA",
+      "hgvsg": "20:g.62319056G\u003eA",
+      "hgvsp": "ENSP00000353332.5:p.Val472Ile",
+      "protein_end": 472,
+      "protein_id": "ENSP00000353332",
+      "protein_start": 472,
+      "refseq_transcript_ids": [
+        "NM_001283009.1"
+      ],
+      "transcript_id": "ENST00000360203",
+      "variant_allele": "A"
+    },
+    {
+      "biotype": "protein_coding",
+      "consequence_terms": [
+        "upstream_gene_variant"
+      ],
+      "gene_id": "ENSG00000258366",
+      "gene_symbol": "RTEL1",
+      "hgnc_id": "15888",
+      "hgvsg": "20:g.62319056G\u003eA",
+      "protein_id": "ENSP00000359020",
+      "transcript_id": "ENST00000370003",
+      "variant_allele": "A"
+    },
+    {
+      "amino_acids": "V/I",
+      "biotype": "protein_coding",
+      "codons": "Gtc/Atc",
+      "consequence_terms": [
+        "missense_variant"
+      ],
+      "exon": "17/35",
+      "gene_id": "ENSG00000258366",
+      "gene_symbol": "RTEL1",
+      "hgnc_id": "15888",
+      "hgvsc": "ENST00000370018.3:c.1414G\u003eA",
+      "hgvsg": "20:g.62319056G\u003eA",
+      "hgvsp": "ENSP00000359035.3:p.Val472Ile",
+      "protein_end": 472,
+      "protein_id": "ENSP00000359035",
+      "protein_start": 472,
+      "refseq_transcript_ids": [
+        "NM_016434.3",
+        "NM_032957.4"
+      ],
+      "transcript_id": "ENST00000370018",
+      "variant_allele": "A"
+    },
+    {
+      "biotype": "protein_coding",
+      "consequence_terms": [
+        "upstream_gene_variant"
+      ],
+      "gene_id": "ENSG00000258366",
+      "gene_symbol": "RTEL1",
+      "hgnc_id": "15888",
+      "hgvsg": "20:g.62319056G\u003eA",
+      "protein_id": "ENSP00000388063",
+      "transcript_id": "ENST00000425905",
+      "variant_allele": "A"
+    },
+    {
+      "biotype": "nonsense_mediated_decay",
+      "consequence_terms": [
+        "upstream_gene_variant"
+      ],
+      "gene_id": "ENSG00000258366",
+      "gene_symbol": "RTEL1",
+      "hgnc_id": "15888",
+      "hgvsg": "20:g.62319056G\u003eA",
+      "protein_id": "ENSP00000425576",
+      "transcript_id": "ENST00000496816",
+      "variant_allele": "A"
+    },
+    {
+      "amino_acids": "V/I",
+      "biotype": "protein_coding",
+      "codons": "Gtc/Atc",
+      "consequence_terms": [
+        "missense_variant"
+      ],
+      "exon": "17/35",
+      "gene_id": "ENSG00000258366",
+      "gene_symbol": "RTEL1",
+      "hgnc_id": "15888",
+      "hgvsc": "ENST00000508582.2:c.1486G\u003eA",
+      "hgvsg": "20:g.62319056G\u003eA",
+      "hgvsp": "ENSP00000424307.2:p.Val496Ile",
+      "protein_end": 496,
+      "protein_id": "ENSP00000424307",
+      "protein_start": 496,
+      "transcript_id": "ENST00000508582",
+      "variant_allele": "A"
+    }
+  ],
+  "variant": "20:g.62319056G\u003eA"
+}

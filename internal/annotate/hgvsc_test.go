@@ -838,3 +838,41 @@ func TestFormatHGVSc_SpliceJunctionInsert_NonMatching(t *testing.T) {
 	assert.NotContains(t, hgvsc, "dup", "non-matching insertion should not be dup")
 	assert.Contains(t, hgvsc, "ins", "should be a plain insertion")
 }
+
+// An insertion in the 3'UTR is 3'-shifted like any other, and VEP reports how
+// far it moved as hgvs_offset. TCF7L2 10:114925316_114925317insA is c.*30dup
+// with an offset of 9; this walk found the name and reported no shift at all.
+func TestDuplicationInUTR3ReportsTheShift(t *testing.T) {
+	tr := &cache.Transcript{
+		ID:       "ENST_UTR3",
+		Chrom:    "1",
+		Start:    1000,
+		End:      1030,
+		Strand:   1,
+		Biotype:  "protein_coding",
+		CDSStart: 1000,
+		CDSEnd:   1011,
+		Exons: []cache.Exon{
+			{Number: 1, Start: 1000, End: 1030, CDSStart: 1000, CDSEnd: 1011, Frame: 0},
+		},
+		CDSSequence: "ATGGCTAAATAA",
+		// *1 is C, *2 through *9 are A, *10 is G.
+		UTR3Sequence: "CAAAAAAAAG",
+	}
+
+	// Inserting an A after *1 slides to the 3' end of the A run at *9.
+	v := &vcf.Variant{Chrom: "1", Pos: 1012, Ref: "", Alt: "A"}
+	name, shift, ok := duplicationInUTR3(v, tr, "A")
+	if !ok {
+		t.Fatalf("duplicationInUTR3 declined %v", v)
+	}
+	if name != "*9dup" || shift != 8 {
+		t.Errorf("duplicationInUTR3 = %q, shift %d, want \"*9dup\", shift 8", name, shift)
+	}
+
+	// Inserting a G where nothing repeats leaves the name where it was, and
+	// there is no shift to report.
+	if _, shift, ok := duplicationInUTR3(v, tr, "T"); ok || shift != 0 {
+		t.Errorf("duplicationInUTR3 with no repeat = shift %d, ok %v, want 0, false", shift, ok)
+	}
+}

@@ -43,14 +43,27 @@ func NewGenomeFlankLoader(path string) *GenomeFlankLoader {
 // transcript. Flanks are stored in CODING orientation so callers need not
 // re-derive strand.
 func (l *GenomeFlankLoader) Attach(byChrom map[string][]*Transcript) error {
-	f, err := os.Open(l.path)
+	return StreamGenomeFASTA(l.path,
+		func(chrom string) bool { _, wanted := byChrom[chrom]; return wanted },
+		func(chrom string, seq []byte) { fillFlanks(seq, byChrom[chrom]) })
+}
+
+// StreamGenomeFASTA reads a (optionally gzipped) genomic FASTA one chromosome
+// at a time, calling emit with each chromosome whose normalized name want
+// accepts. The sequence is valid only for the duration of the call: the
+// buffer is reused, so a caller that needs to keep bases must copy them.
+//
+// The genome is never held whole. One chromosome at a time is the largest
+// this reads, which is 249 MB for chr1.
+func StreamGenomeFASTA(path string, want func(chrom string) bool, emit func(chrom string, seq []byte)) error {
+	f, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("open genome FASTA: %w", err)
 	}
 	defer f.Close()
 
 	var r io.Reader = f
-	if strings.HasSuffix(l.path, ".gz") {
+	if strings.HasSuffix(path, ".gz") {
 		gz, err := gzip.NewReader(f)
 		if err != nil {
 			return fmt.Errorf("gunzip genome FASTA: %w", err)
@@ -74,7 +87,7 @@ func (l *GenomeFlankLoader) Attach(byChrom map[string][]*Transcript) error {
 
 	flush := func() {
 		if cur != "" {
-			fillFlanks(seq, byChrom[cur])
+			emit(cur, seq)
 		}
 		seq = seq[:0]
 	}
@@ -95,7 +108,7 @@ func (l *GenomeFlankLoader) Attach(byChrom map[string][]*Transcript) error {
 						name = name[:i]
 					}
 					cur = normalizeChrom(name)
-					if _, wanted := byChrom[cur]; !wanted {
+					if !want(cur) {
 						cur = "" // skip scaffolds and patches
 					}
 					header = header[:0]

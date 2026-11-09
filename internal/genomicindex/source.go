@@ -10,17 +10,17 @@ import (
 
 // Pre-built keys for Extra map to avoid per-variant string concatenation.
 const (
-	extraKeyAMScore  = "alphamissense.score"
-	extraKeyAMClass  = "alphamissense.class"
-	extraKeyCVClnSig = "clinvar.clnsig"
-	extraKeyCVRevStat = "clinvar.clnrevstat"
-	extraKeyCVClnDN  = "clinvar.clndn"
-	extraKeySigMut       = "signal.mutation_status"
-	extraKeySigCount     = "signal.count_carriers"
-	extraKeySigFreq      = "signal.frequency"
-	extraKeyGnomadAF     = "gnomad.af"
-	extraKeyGnomadAC     = "gnomad.ac"
-	extraKeyGnomadAN     = "gnomad.an"
+	extraKeyAMScore       = "alphamissense.score"
+	extraKeyAMClass       = "alphamissense.class"
+	extraKeyCVClnSig      = "clinvar.clnsig"
+	extraKeyCVRevStat     = "clinvar.clnrevstat"
+	extraKeyCVClnDN       = "clinvar.clndn"
+	extraKeySigMut        = "signal.mutation_status"
+	extraKeySigCount      = "signal.count_carriers"
+	extraKeySigFreq       = "signal.frequency"
+	extraKeyGnomadAF      = "gnomad.af"
+	extraKeyGnomadAC      = "gnomad.ac"
+	extraKeyGnomadAN      = "gnomad.an"
 	extraKeyGnomadNhomalt = "gnomad.nhomalt"
 	extraKeyGnomadVersion = "gnomad.version"
 	extraKeyDbSnpID       = "dbsnp.id"
@@ -38,7 +38,10 @@ func NewSource(store *Store, version string) *GenomicSource {
 	return &GenomicSource{store: store, version: version}
 }
 
-func (s *GenomicSource) Name() string                   { return "" }
+// Name identifies the source in logs and in the version report. The index
+// holds several upstream datasets behind one lookup, so it is named for the
+// index rather than for any one of them.
+func (s *GenomicSource) Name() string                    { return "genomic_index" }
 func (s *GenomicSource) Version() string                 { return s.version }
 func (s *GenomicSource) MatchLevel() annotate.MatchLevel { return annotate.MatchGenomic }
 

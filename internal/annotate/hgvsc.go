@@ -13,7 +13,8 @@ import (
 //
 // The function is optimized for minimal allocations on CDS-based paths (SNV, deletion,
 // insertion) by using stack-allocated buffers and lazy computation of reverse complement.
-func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult) string {
+func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult, refs ...Reference) string {
+	ref := firstReference(refs)
 	if t == nil || v == nil || result == nil {
 		return ""
 	}
@@ -111,16 +112,16 @@ func FormatHGVSc(v *vcf.Variant, t *cache.Transcript, result *ConsequenceResult)
 	// alt begins with the ref, so it read that as inserting a single G and
 	// dropped the C>G substitution entirely. VEP calls it c.8067delinsGG.
 	if altLen > refLen && !isDelIns(v.Ref, v.Alt) {
-		return formatHGVScInsertion(v, t, prefix, refLen, altLen, result)
+		return formatHGVScInsertion(v, t, prefix, refLen, altLen, result, ref)
 	}
 
-	return formatHGVScDeletion(v, t, prefix, refLen, altLen, result)
+	return formatHGVScDeletion(v, t, prefix, refLen, altLen, result, ref)
 }
 
 // formatHGVScInsertion handles the insertion path of FormatHGVSc.
 // It computes the inserted sequence on the coding strand using a stack buffer
 // to avoid allocations from ReverseComplement.
-func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, refLen, altLen int, result *ConsequenceResult) string {
+func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, refLen, altLen int, result *ConsequenceResult, ref Reference) string {
 	insLen := altLen - refLen
 
 	// Compute inserted sequence on coding strand into a stack buffer.
@@ -323,6 +324,15 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 		return "c." + strconv.FormatInt(dup.cdsStart, 10) + "_" + strconv.FormatInt(dup.cdsEnd, 10) + "dup"
 	}
 
+	// The same question again, past the stop codon. checkDuplication works in
+	// CDS coordinates, which a 3'UTR position does not have, so an insertion
+	// there was always written as one however plainly it duplicated its
+	// neighbour.
+	if name, k, ok := duplicationInUTR3(v, t, insertedSeq); ok {
+		result.HGVSOffset += k
+		return prefix + name
+	}
+
 	// Check for duplication at splice junctions where one flanking position
 	// is intronic (CDS=0) and the other is exonic. The CDS-based dup check
 	// above bails when the anchor is intronic, but the inserted base may
@@ -358,17 +368,51 @@ func formatHGVScInsertion(v *vcf.Variant, t *cache.Transcript, prefix string, re
 	// c.1047+2_1047+3insTT where vibe-vep wrote c.1047+1_1047+2insTT, and
 	// c.1047+1_1047+2insTT.
 	//
-	// Calling the result a duplication where the shifted bases repeat what
-	// they now follow is left alone: it is HGVS-correct and VEP does it on
-	// the forward strand (RBM10 c.-71dup), but on the reverse strand VEP
-	// writes ins, and turning it on here adds 29 of those divergences --
-	// the same reverse-strand duplication question already settled for the
-	// coding sequence.
-	shifted, insAfterPos, k := genomicInsertionShift(insAfterPos, step, insertedSeq, t)
+	shifted, insAfterPos, k := genomicInsertionShift(insAfterPos, step, insertedSeq, t, ref)
 	result.HGVSOffset += k
+
+	// Inserted bases that repeat what they now follow are a duplication, and
+	// HGVS names them as one. VEP agrees wherever it shifts the same way, so
+	// this closes the cases it writes as dup and leaves the reverse-strand
+	// ones it writes as ins, which is the duplication question already
+	// settled for the coding sequence.
+	if dup := insertionAsDup(insAfterPos, step, shifted, t, prefix, ref); dup != "" {
+		return dup
+	}
+
 	afterStr := genomicToHGVScPos(insAfterPos, t)
 	beforeStr := genomicToHGVScPos(insAfterPos+step, t)
 	return prefix + afterStr + "_" + beforeStr + "ins" + shifted
+}
+
+// insertionAsDup names an insertion as a duplication where the bases it
+// inserts repeat the ones immediately before it in transcript order, or
+// returns the empty string where they do not.
+//
+// insAfter is the position the insertion follows and step the transcript's
+// direction, so the repeated run ends at insAfter and reaches back
+// len(seq)-1 bases against the step.
+func insertionAsDup(insAfter, step int64, seq string, t *cache.Transcript, prefix string, ref Reference) string {
+	if seq == "" {
+		return ""
+	}
+	ref = buffered(ref)
+	n := int64(len(seq))
+	dupStart := insAfter - (n-1)*step
+	for i := int64(0); i < n; i++ {
+		b, ok := codingBaseAt(dupStart+i*step, t, ref)
+		if !ok || b != seq[i] {
+			return ""
+		}
+	}
+	startStr, endStr := genomicToHGVScPos(dupStart, t), genomicToHGVScPos(insAfter, t)
+	if startStr == "" || endStr == "" {
+		return ""
+	}
+	if startStr == endStr {
+		return prefix + startStr + "dup"
+	}
+	return prefix + startStr + "_" + endStr + "dup"
 }
 
 // ProteinUndescribableHGVSc reports whether VEP declines to name a protein
@@ -466,7 +510,7 @@ func isInversion(ref, alt string) bool {
 // formatHGVScDeletion handles the deletion (and delins) path of FormatHGVSc.
 // It avoids calling ReverseComplement for the ref/alt at the top since the
 // deletion CDS path only needs CDS positions and possibly RC of the extra alt bases.
-func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, refLen, altLen int, result *ConsequenceResult) string {
+func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, refLen, altLen int, result *ConsequenceResult, ref Reference) string {
 	// Compute actual shared prefix length on genomic strand
 	sharedLen := 0
 	for sharedLen < refLen && sharedLen < altLen && v.Ref[sharedLen] == v.Alt[sharedLen] {
@@ -571,7 +615,7 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 		// sequence this one cannot.
 		if sEnd == len(t.CDSSequence)-1 {
 			k := genomicDeletionShift(delStartGenomic, delEndGenomic, t,
-				func(pos int64) (byte, bool) { return refAlleleBase(pos, v, t) })
+				func(pos int64) (byte, bool) { return refAlleleBase(pos, v, t) }, ref)
 			if k > sStart-int(delStartCDS-1) {
 				d := int64(k)
 				if t.IsReverseStrand() {
@@ -628,7 +672,7 @@ func formatHGVScDeletion(v *vcf.Variant, t *cache.Transcript, prefix string, ref
 		// of the same rule; they answer only where the genomic one has no
 		// sequence to compare and returns nothing.
 		k := genomicDeletionShift(delStartGenomic, delEndGenomic, t,
-			func(pos int64) (byte, bool) { return refAlleleBase(pos, v, t) })
+			func(pos int64) (byte, bool) { return refAlleleBase(pos, v, t) }, ref)
 		if k == 0 {
 			k, _ = straddlingDeletionShift(v, t)
 		}
@@ -1658,6 +1702,92 @@ func checkSpliceJunctionDup(v *vcf.Variant, t *cache.Transcript, insertedSeq str
 // Per HGVS convention, the inserted sequence must match either the bases
 // immediately before or immediately after the insertion point.
 // Returns the CDS positions of the duplicated bases for direct HGVS formatting.
+// duplicationInUTR3 reports an insertion in the 3'UTR that duplicates the
+// bases beside it, as "*163dup" or "*163_*164dup".
+//
+// The region is decided by asking genomicToHGVScPos what it would call the
+// anchor, so this cannot disagree with the position the notation is built
+// from. The cached 3'UTR runs to utr3ScanBases, and an insertion past that
+// is left as an insertion rather than guessed at.
+//
+// The second return is how far the 3' shift moved the name, which is what
+// VEP reports as hgvs_offset. TCF7L2 10:114925316_114925317insA is c.*30dup
+// with an offset of 9; this walk found the same name and reported no shift
+// at all.
+func duplicationInUTR3(v *vcf.Variant, t *cache.Transcript, insertedSeq string) (string, int, bool) {
+	if len(insertedSeq) == 0 || len(t.UTR3Sequence) == 0 {
+		return "", 0, false
+	}
+
+	// The base the insertion follows, in transcript order.
+	anchor := v.Pos
+	if t.IsReverseStrand() {
+		anchor = v.Pos + 1
+	}
+	// a is the anchor's position as HGVS names it: "*1" is the first base
+	// after the stop codon, so "*a" is utr[a-1].
+	a, ok := utr3Offset(anchor, t)
+	if !ok {
+		return "", 0, false
+	}
+	anchorOffset := a
+
+	n := len(insertedSeq)
+	utr := t.UTR3Sequence
+	if a > len(utr) {
+		return "", 0, false
+	}
+
+	// 3'-shift first. An insertion can move downstream for as long as the
+	// base after it repeats the first base being inserted, and HGVS names it
+	// at the furthest such position. Without this a run of eight A's gives
+	// *343dup where VEP gives *351dup -- a duplication either way, named in
+	// the wrong place.
+	shifted := []byte(insertedSeq)
+	for a < len(utr) && utr[a] == shifted[0] {
+		shifted = append(shifted[1:], shifted[0])
+		a++
+	}
+	moved := string(shifted)
+
+	shift := a - anchorOffset
+	// Duplicating the bases ending at the anchor: *(a-n+1) through *a.
+	if a-n >= 0 && a <= len(utr) && utr[a-n:a] == moved {
+		return utr3RangeStr(a-n+1, a), shift, true
+	}
+	// Duplicating the bases beginning after it: *(a+1) through *(a+n).
+	if a+n <= len(utr) && utr[a:a+n] == moved {
+		return utr3RangeStr(a+1, a+n), shift, true
+	}
+	// Not a duplication, but the shift still moved it.
+	if moved != insertedSeq || a != anchorOffset {
+		return "*" + strconv.Itoa(a) + "_*" + strconv.Itoa(a+1) + "ins" + moved, shift, true
+	}
+	return "", 0, false
+}
+
+// utr3Offset gives the "*N" a genomic position is named by, reporting false
+// where it is not in the 3'UTR at all.
+func utr3Offset(pos int64, t *cache.Transcript) (int, bool) {
+	name := genomicToHGVScPos(pos, t)
+	if !strings.HasPrefix(name, "*") {
+		return 0, false
+	}
+	n, err := strconv.Atoi(name[1:])
+	if err != nil || n < 1 {
+		return 0, false
+	}
+	return n, true
+}
+
+// utr3RangeStr names one or two 3'UTR positions.
+func utr3RangeStr(start, end int) string {
+	if start == end {
+		return "*" + strconv.Itoa(start) + "dup"
+	}
+	return "*" + strconv.Itoa(start) + "_*" + strconv.Itoa(end) + "dup"
+}
+
 func checkDuplication(v *vcf.Variant, t *cache.Transcript, insertedSeq string) dupResult {
 	if len(insertedSeq) == 0 || len(t.CDSSequence) == 0 {
 		return dupResult{}

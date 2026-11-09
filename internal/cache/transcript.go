@@ -16,39 +16,40 @@ type CDSRegion struct {
 
 // Transcript represents a specific gene isoform.
 type Transcript struct {
-	ID              string // Transcript ID (e.g., ENST00000311936)
-	GeneID          string // Parent gene ID
-	GeneName        string // Parent gene symbol
-	ProteinID       string // Ensembl protein ID (e.g., ENSP00000493376), empty if non-coding
-	HGNCId          string // HGNC identifier (e.g., HGNC:14825), empty if not available
-	EntrezGeneID    string // NCBI Entrez gene ID (e.g., "673"), empty if not available
-	RefSeqIDs       []string // RefSeq mRNA accessions (versioned), in GENCODE metadata order
-	Chrom           string // Chromosome
-	Start           int64  // Transcript start (1-based)
-	End             int64  // Transcript end (1-based, inclusive)
-	Strand          int8   // +1 or -1
-	Biotype         string // Transcript biotype
-	IsCanonicalMSK     bool // MSK canonical transcript
-	IsCanonicalEnsembl bool // Ensembl canonical transcript (from GTF tag)
-	IsMANESelect    bool   // MANE Select transcript
-	Exons           []Exon // Exons sorted ascending by genomic Start
-	CDSStart        int64  // CDS start (genomic, 1-based), 0 if non-coding
-	CDSEnd          int64  // CDS end (genomic, 1-based), 0 if non-coding
-	CDSSequence     string // Coding DNA sequence (loaded on demand)
+	ID                 string   // Transcript ID (e.g., ENST00000311936)
+	GeneID             string   // Parent gene ID
+	GeneName           string   // Parent gene symbol
+	ProteinID          string   // Ensembl protein ID (e.g., ENSP00000493376), empty if non-coding
+	ProteinIDVersion   string   // version suffix of the protein ID (e.g. "6"); HGVS p. names the versioned protein
+	HGNCId             string   // HGNC identifier (e.g., HGNC:14825), empty if not available
+	EntrezGeneID       string   // NCBI Entrez gene ID (e.g., "673"), empty if not available
+	RefSeqIDs          []string // RefSeq mRNA accessions (versioned), in GENCODE metadata order
+	Chrom              string   // Chromosome
+	Start              int64    // Transcript start (1-based)
+	End                int64    // Transcript end (1-based, inclusive)
+	Strand             int8     // +1 or -1
+	Biotype            string   // Transcript biotype
+	IsCanonicalMSK     bool     // MSK canonical transcript
+	IsCanonicalEnsembl bool     // Ensembl canonical transcript (from GTF tag)
+	IsMANESelect       bool     // MANE Select transcript
+	Exons              []Exon   // Exons sorted ascending by genomic Start
+	CDSStart           int64    // CDS start (genomic, 1-based), 0 if non-coding
+	CDSEnd             int64    // CDS end (genomic, 1-based), 0 if non-coding
+	CDSSequence        string   // Coding DNA sequence (loaded on demand)
 	// UTR5Packed holds up to UTR5TailBases of 5'UTR immediately preceding the
 	// CDS, 2-bit packed like the intron flanks. A deletion that starts
 	// upstream of the start codon needs these bases to 3'-shift; without
 	// them c.-28_12del cannot become c.-27_13del.
-	UTR5Packed      []byte
-	UTR5Len         uint16
+	UTR5Packed []byte
+	UTR5Len    uint16
 	// CDSStartOffset is how many bases of the first codon are missing from a
 	// 5'-incomplete CDS (GENCODE cds_start_NF): 0, 1 or 2. VEP numbers c.1 from
 	// the first base of that notional complete codon, so CDSSequence is padded
 	// by this many bases and CDS positions are shifted to match.
 	CDSStartOffset  int
-	UTR3Sequence    string // 3'UTR sequence immediately following CDSSequence (for stop scanning)
-	ProteinLength   int    // Protein length in amino acids (persisted, unlike ProteinSequence)
-	ProteinSequence string // Translated protein sequence (loaded on demand)
+	UTR3Sequence    string      // 3'UTR sequence immediately following CDSSequence (for stop scanning)
+	ProteinLength   int         // Protein length in amino acids (persisted, unlike ProteinSequence)
+	ProteinSequence string      // Translated protein sequence (loaded on demand)
 	CDSRegions      []CDSRegion // Pre-computed CDS regions sorted ascending by GenomicStart
 	ExonCumBases    []int64     // Cumulative exonic bases before each exon (transcript order)
 }
@@ -333,4 +334,22 @@ func (t *Transcript) FindNearestExonIdx(pos int64) int {
 // IsCoding returns true if the exon contains coding sequence.
 func (e *Exon) IsCoding() bool {
 	return e.CDSStart > 0 && e.CDSEnd > 0
+}
+
+// SequenceLength names one of the limits on how much sequence a cached
+// transcript keeps.
+type SequenceLength struct {
+	Name  string
+	Bases int
+}
+
+// SequenceLengths reports those limits, so that the cache fingerprint covers
+// them. A cache built under a shorter one holds less sequence than a binary
+// expecting the longer one would find, while being structurally identical --
+// which is exactly the kind of staleness that goes unnoticed.
+func SequenceLengths() []SequenceLength {
+	return []SequenceLength{
+		{"utr3_scan_bases", UTR3ScanBases},
+		{"utr5_tail_bases", UTR5TailBases},
+	}
 }

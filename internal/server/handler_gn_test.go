@@ -68,9 +68,6 @@ func TestGNGenomicGet_KRASG12C(t *testing.T) {
 	if canonical.GeneSymbol != "KRAS" {
 		t.Errorf("gene_symbol: got %q, want KRAS", canonical.GeneSymbol)
 	}
-	if canonical.Impact != "MODERATE" {
-		t.Errorf("impact: got %q, want MODERATE", canonical.Impact)
-	}
 	if !contains(canonical.ConsequenceTerms, "missense_variant") {
 		t.Errorf("consequence_terms: got %v, want to contain missense_variant", canonical.ConsequenceTerms)
 	}
@@ -80,14 +77,26 @@ func TestGNGenomicGet_KRASG12C(t *testing.T) {
 	if canonical.ProteinStart != 12 {
 		t.Errorf("protein_start: got %d, want 12", canonical.ProteinStart)
 	}
-	if canonical.HGVSp != "p.Gly12Cys" {
-		t.Errorf("hgvsp: got %q, want p.Gly12Cys", canonical.HGVSp)
+	// VEP names the versioned protein an HGVS p. change describes; the
+	// annotation summary reports the bare change instead.
+	if !strings.HasSuffix(canonical.HGVSp, ":p.Gly12Cys") {
+		t.Errorf("hgvsp: got %q, want a protein-prefixed p.Gly12Cys", canonical.HGVSp)
 	}
 	if canonical.Canonical != "1" {
 		t.Errorf("canonical: got %q, want 1", canonical.Canonical)
 	}
 	if canonical.Biotype != "protein_coding" {
 		t.Errorf("biotype: got %q, want protein_coding", canonical.Biotype)
+	}
+
+	// genome-nexus's TranscriptConsequence model carries none of these, so
+	// they must not appear on the wire however useful VEP finds them.
+	for _, absent := range []string{
+		`"impact"`, `"intron"`, `"cds_start"`, `"cds_end"`, `"cdna_start"`, `"cdna_end"`,
+	} {
+		if strings.Contains(w.Body.String(), absent) {
+			t.Errorf("response carries %s, which genome-nexus does not report", absent)
+		}
 	}
 }
 
@@ -326,5 +335,91 @@ func TestParseCommaGenomicLocationErrors(t *testing.T) {
 				t.Fatal("expected error")
 			}
 		})
+	}
+}
+
+// TestGNRoutesAtRoot checks that a server with a single assembly answers the
+// genome-nexus API at the root as well as under the assembly prefix, so a
+// genome-nexus client can be pointed at it without being reconfigured.
+func TestGNRoutesAtRoot(t *testing.T) {
+	srv := newTestServerWithKRAS(t)
+	handler := srv.Handler()
+
+	for _, path := range []string{
+		"/annotation/genomic/12,25245351,25245351,C,A",
+		"/genome-nexus/grch38/annotation/genomic/12,25245351,25245351,C,A",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d: %s", path, w.Code, w.Body.String())
+		}
+		var resp output.GNAnnotation
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("%s: decode: %v", path, err)
+		}
+		if resp.MostSevereConsequence != "missense_variant" {
+			t.Errorf("%s: most_severe_consequence: got %q, want missense_variant",
+				path, resp.MostSevereConsequence)
+		}
+	}
+}
+
+// TestServerEndpointsUnderBothMounts checks that the endpoints describing the
+// server, not a variant, answer under the assembly prefix as well as at the
+// root. A genome-nexus client configured with a base URL ending in
+// /genome-nexus/grch37 asks for .../version there.
+func TestServerEndpointsUnderBothMounts(t *testing.T) {
+	srv := newTestServerWithKRAS(t)
+	handler := srv.Handler()
+
+	for _, path := range []string{"/health", "/info", "/version"} {
+		for _, prefix := range []string{"", "/genome-nexus/grch38"} {
+			req := httptest.NewRequest(http.MethodGet, prefix+path, nil)
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Errorf("%s%s: expected 200, got %d", prefix, path, w.Code)
+			}
+			var body map[string]any
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+				t.Errorf("%s%s: decode: %v", prefix, path, err)
+			}
+		}
+	}
+}
+
+// TestGNPostDegradesPerItem checks that one unresolvable notation costs the
+// caller that entry and nothing else. genome-nexus reports a failure per item;
+// aborting the batch would lose every good annotation alongside the bad one.
+func TestGNPostDegradesPerItem(t *testing.T) {
+	srv := newTestServerWithKRAS(t)
+	handler := srv.Handler()
+
+	body := `["12:g.25245351C>A","not-a-variant","12:g.25245351C>A"]`
+	req := httptest.NewRequest(http.MethodPost, "/annotation", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp []output.GNAnnotation
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v\nbody: %s", err, w.Body.String())
+	}
+	if len(resp) != 3 {
+		t.Fatalf("expected one entry per input, got %d", len(resp))
+	}
+	if !resp[0].SuccessfullyAnnotated || !resp[2].SuccessfullyAnnotated {
+		t.Error("the good entries should still be annotated")
+	}
+	if resp[1].SuccessfullyAnnotated {
+		t.Error("the bad entry should be reported as not annotated")
+	}
+	if resp[1].OriginalVariantQuery != "not-a-variant" {
+		t.Errorf("the bad entry should carry its own query, got %q", resp[1].OriginalVariantQuery)
 	}
 }

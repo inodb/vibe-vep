@@ -1,0 +1,7 @@
+status=200
+{
+  "errorMessage": "Reference allele extracted from response (A) does not match given reference allele (T)",
+  "originalVariantQuery": "3,52675445,52675445,T,-",
+  "successfully_annotated": false,
+  "variant": "3:g.52675445del"
+}

@@ -48,7 +48,7 @@ func TestWriteAndLookupVariants(t *testing.T) {
 				TranscriptID: "ENST00000256078.10",
 				GeneName:     "KRAS", GeneID: "ENSG00000133703",
 				Consequence: "missense_variant", Impact: "MODERATE",
-				Allele: "A",
+				Allele:  "A",
 				Biotype: "protein_coding",
 			},
 		},

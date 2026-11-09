@@ -9,20 +9,21 @@ import (
 	"github.com/inodb/vibe-vep/internal/datasource/pfam"
 	"github.com/inodb/vibe-vep/internal/datasource/ptm"
 	"github.com/inodb/vibe-vep/internal/datasource/uniprot"
+	"github.com/inodb/vibe-vep/internal/output"
 )
 
 // ensemblTranscriptResponse is the JSON response for canonical transcript / transcript lookup endpoints.
 type ensemblTranscriptResponse struct {
-	TranscriptID  string              `json:"transcriptId"`
-	GeneID        string              `json:"geneId"`
-	ProteinID     string              `json:"proteinId,omitempty"`
-	HugoSymbols   []string            `json:"hugoSymbols"`
-	ProteinLength int                 `json:"proteinLength"`
-	PfamDomains   []pfamDomainJSON    `json:"pfamDomains"`
-	Exons         []exonJSON          `json:"exons"`
-	UTRs          []utrJSON           `json:"utrs"`
-	UniprotID     string              `json:"uniprotId,omitempty"`
-	EntrezGeneID  string              `json:"entrezGeneId,omitempty"`
+	TranscriptID  string           `json:"transcriptId"`
+	GeneID        string           `json:"geneId"`
+	ProteinID     string           `json:"proteinId,omitempty"`
+	HugoSymbols   []string         `json:"hugoSymbols"`
+	ProteinLength int              `json:"proteinLength"`
+	PfamDomains   []pfamDomainJSON `json:"pfamDomains"`
+	Exons         []exonJSON       `json:"exons"`
+	UTRs          []utrJSON        `json:"utrs"`
+	UniprotID     string           `json:"uniprotId,omitempty"`
+	EntrezGeneID  string           `json:"entrezGeneId,omitempty"`
 }
 
 type pfamDomainJSON struct {
@@ -32,7 +33,7 @@ type pfamDomainJSON struct {
 }
 
 type exonJSON struct {
-	ExonID   string `json:"exonId"`
+	ExonID    string `json:"exonId"`
 	ExonStart int64  `json:"exonStart"`
 	ExonEnd   int64  `json:"exonEnd"`
 	Rank      int    `json:"rank"`
@@ -69,21 +70,20 @@ func (s *Server) handleEnsemblCanonicalByHugo(w http.ResponseWriter, r *http.Req
 
 	isoformSource := r.URL.Query().Get("isoformOverrideSource")
 
-	transcripts := ctx.cache.FindTranscriptsByGene(hugoSymbol)
+	transcripts := s.transcriptsForSymbol(ctx, hugoSymbol)
 	if len(transcripts) == 0 {
-		writeError(w, http.StatusNotFound, "no transcripts found for gene "+hugoSymbol)
+		writeError(w, http.StatusNotFound, "Ensembl transcript not found: "+hugoSymbol)
 		return
 	}
 
-	tx := pickCanonical(transcripts, isoformSource)
+	tx := pickCanonical(transcripts, isoformSource, s.OverrideTranscripts(isoformSource))
 	if tx == nil {
-		writeError(w, http.StatusNotFound, "no canonical transcript found for gene "+hugoSymbol)
+		writeError(w, http.StatusNotFound, "Ensembl transcript not found: "+hugoSymbol)
 		return
 	}
 
-	resp := buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(ctx.transcriptRecord(tx))
 }
 
 // handleEnsemblTranscriptByID handles GET /genome-nexus/{assembly}/ensembl/transcript/{transcriptId}
@@ -99,20 +99,14 @@ func (s *Server) handleEnsemblTranscriptByID(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	tx := ctx.cache.GetTranscript(txID)
-	if tx == nil {
-		// Input is likely unversioned (e.g. "ENST00000357654") but cache
-		// stores versioned IDs (e.g. "ENST00000357654.9"). Try prefix match.
-		tx = ctx.cache.GetTranscriptByPrefix(txID)
-	}
+	tx := lookupTranscript(ctx, txID)
 	if tx == nil {
 		writeError(w, http.StatusNotFound, "transcript not found: "+txID)
 		return
 	}
 
-	resp := buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(ctx.transcriptRecord(tx))
 }
 
 // handlePfamDomainPost handles POST /genome-nexus/{assembly}/pfam/domain
@@ -178,11 +172,23 @@ func (s *Server) handlePfamDomainGet(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// pickCanonical selects the canonical transcript based on isoform override source.
-func pickCanonical(transcripts []*cache.Transcript, isoformSource string) *cache.Transcript {
-	useMSK := strings.EqualFold(isoformSource, "mskcc")
+// pickCanonical selects the canonical transcript for an isoform override
+// source.
+//
+// The override set is consulted first and is keyed by transcript id across all
+// genes, not per gene. That matters wherever the GENCODE release still carries
+// an older gene symbol than the override table -- GENCODE calls NSD2 "WHSC1",
+// so a per-gene lookup finds nothing and the gene silently loses its override.
+func pickCanonical(transcripts []*cache.Transcript, isoformSource string, overrides map[string]bool) *cache.Transcript {
+	for _, tx := range transcripts {
+		if overrides[stripTxVersion(tx.ID)] {
+			return tx
+		}
+	}
 
-	// First pass: look for the matching canonical flag.
+	// No override knows any of these transcripts: fall back to the flags the
+	// transcripts carry.
+	useMSK := strings.EqualFold(cache.NormalizeIsoformSource(isoformSource), cache.IsoformSourceMSKCC)
 	for _, tx := range transcripts {
 		if useMSK && tx.IsCanonicalMSK {
 			return tx
@@ -192,7 +198,6 @@ func pickCanonical(transcripts []*cache.Transcript, isoformSource string) *cache
 		}
 	}
 
-	// Fallback: try the other canonical flag.
 	for _, tx := range transcripts {
 		if tx.IsCanonicalEnsembl || tx.IsCanonicalMSK {
 			return tx
@@ -345,42 +350,137 @@ func (s *Server) handleEnsemblTranscriptPost(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	pfamStore := ctx.pfam
-	uniprotStore := ctx.uniprot
-	var results []ensemblTranscriptResponse
-
-	// Lookup by transcript IDs
-	for _, txID := range filter.TranscriptIDs {
-		tx := ctx.cache.GetTranscript(txID)
-		if tx == nil {
-			tx = ctx.cache.GetTranscriptByPrefix(txID)
-		}
-		if tx != nil {
-			results = append(results, buildTranscriptResponse(tx, pfamStore, uniprotStore))
-		}
-	}
-
-	// Lookup by hugo symbols (all transcripts for the gene).
-	for _, symbol := range filter.HugoSymbols {
-		for _, chrom := range ctx.cache.Chromosomes() {
-			for _, t := range ctx.cache.FindTranscriptsByChrom(chrom) {
-				if t.GeneName == symbol {
-					results = append(results, buildTranscriptResponse(t, pfamStore, uniprotStore))
-				}
+	// The four lists are alternatives, not a union: genome-nexus takes the
+	// first non-empty one and ignores the rest, in this order. Sending both
+	// transcriptIds and hugoSymbols returns the transcripts, not both sets.
+	results := make([]any, 0)
+	switch {
+	case len(filter.TranscriptIDs) > 0:
+		for _, txID := range filter.TranscriptIDs {
+			tx := lookupTranscript(ctx, txID)
+			if tx != nil {
+				results = append(results, ctx.transcriptRecord(tx))
 			}
 		}
+	case len(filter.GeneIDs) > 0:
+		for _, geneID := range filter.GeneIDs {
+			results = appendTranscripts(results, ctx, ctx.cache.FindTranscriptsByGeneID(geneID))
+		}
+	case len(filter.ProteinIDs) > 0:
+		for _, proteinID := range filter.ProteinIDs {
+			results = appendTranscripts(results, ctx, ctx.cache.FindTranscriptsByProteinID(proteinID))
+		}
+	case len(filter.HugoSymbols) > 0:
+		for _, symbol := range filter.HugoSymbols {
+			results = appendTranscripts(results, ctx, s.transcriptsForSymbol(ctx, symbol))
+		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	writeJSON(w, http.StatusOK, results)
 }
 
+// handleEnsemblTranscriptGet handles GET {prefix}/ensembl/transcript, the
+// single-valued form of the filter above.
+//
+// Here the parameters are conjunctive rather than alternative: a gene and a
+// protein together mean transcripts matching both. With no parameters at all
+// the answer is an empty list -- genome-nexus's own documentation claims it
+// returns every transcript, but its implementation does not, and the
+// implementation is what clients were built against.
+func (s *Server) handleEnsemblTranscriptGet(w http.ResponseWriter, r *http.Request) {
+	ctx := s.requireAssembly(w, r)
+	if ctx == nil {
+		return
+	}
+
+	q := r.URL.Query()
+	geneID := q.Get("geneId")
+	proteinID := q.Get("proteinId")
+	hugoSymbol := q.Get("hugoSymbol")
+
+	results := make([]any, 0)
+	if geneID == "" && proteinID == "" && hugoSymbol == "" {
+		writeJSON(w, http.StatusOK, results)
+		return
+	}
+
+	// Start from whichever identifier is most selective, then narrow.
+	var candidates []*cache.Transcript
+	switch {
+	case geneID != "":
+		candidates = ctx.cache.FindTranscriptsByGeneID(geneID)
+	case proteinID != "":
+		candidates = ctx.cache.FindTranscriptsByProteinID(proteinID)
+	default:
+		candidates = s.transcriptsForSymbol(ctx, hugoSymbol)
+	}
+
+	for _, tx := range candidates {
+		if proteinID != "" && stripTxVersion(tx.ProteinID) != stripTxVersion(proteinID) {
+			continue
+		}
+		if hugoSymbol != "" && tx.GeneName != hugoSymbol {
+			continue
+		}
+		results = append(results, ctx.transcriptRecord(tx))
+	}
+
+	writeJSON(w, http.StatusOK, results)
+}
+
+// appendTranscripts renders a set of transcripts into the response slice.
+func appendTranscripts(dst []any, ctx *assemblyContext, txs []*cache.Transcript) []any {
+	for _, tx := range txs {
+		dst = append(dst, ctx.transcriptRecord(tx))
+	}
+	return dst
+}
+
+// transcriptsForSymbol finds a gene's transcripts by any name it answers to.
+//
+// The GENCODE release a cache was built from may predate a symbol change, so
+// the gene HGNC now calls NSD2 is still WHSC1 there. Asking by the approved
+// symbol has to work -- it is the name a caller is most likely to hold -- so
+// a symbol that finds nothing is retried against the names it replaced.
+func (s *Server) transcriptsForSymbol(ctx *assemblyContext, symbol string) []*cache.Transcript {
+	if found := ctx.cache.FindTranscriptsByGene(symbol); len(found) > 0 {
+		return found
+	}
+	meta, ok := s.GeneMetadata(symbol)
+	if !ok {
+		return nil
+	}
+	for _, previous := range meta.PreviousSymbols {
+		if found := ctx.cache.FindTranscriptsByGene(previous); len(found) > 0 {
+			return found
+		}
+	}
+	return nil
+}
+
+// transcriptRecord returns a transcript as the /ensembl endpoints report it.
+//
+// The record comes from genome-nexus-importer's own export where that index
+// was built, so the answer matches genome-nexus exactly. Without it the record
+// is derived from the GENCODE cache instead, which has no CCDS or RefSeq
+// accession, no exon identifiers and no Pfam domains to report.
+func (ctx *assemblyContext) transcriptRecord(tx *cache.Transcript) any {
+	if doc, ok := ctx.ensemblTx.ByTranscriptID(tx.ID); ok {
+		return doc
+	}
+	return buildTranscriptResponse(tx, ctx.pfam, ctx.uniprot)
+}
+
 // ensemblGeneResponse is the JSON response for canonical gene lookups.
+// ensemblGeneResponse is the JSON response for canonical gene lookups,
+// mirroring genome-nexus's EnsemblGene. It names no protein: a gene has one
+// per transcript, and the model carries none.
 type ensemblGeneResponse struct {
-	GeneID       string `json:"geneId"`
-	HugoSymbol   string `json:"hugoSymbol"`
-	EntrezGeneID string `json:"entrezGeneId,omitempty"`
-	UniprotID    string `json:"uniprotId,omitempty"`
+	GeneID          string   `json:"geneId"`
+	HugoSymbol      string   `json:"hugoSymbol"`
+	Synonyms        []string `json:"synonyms,omitempty"`
+	PreviousSymbols []string `json:"previousSymbols,omitempty"`
+	EntrezGeneID    string   `json:"entrezGeneId,omitempty"`
 }
 
 // handleEnsemblCanonicalGeneByHugo handles GET /genome-nexus/{assembly}/ensembl/canonical-gene/hgnc/{hugoSymbol}
@@ -391,22 +491,14 @@ func (s *Server) handleEnsemblCanonicalGeneByHugo(w http.ResponseWriter, r *http
 	}
 
 	symbol := r.PathValue("hugoSymbol")
-	tx := findCanonicalByGene(ctx.cache, symbol)
+	source := r.URL.Query().Get("isoformOverrideSource")
+	tx := pickCanonical(s.transcriptsForSymbol(ctx, symbol), source, s.OverrideTranscripts(source))
 	if tx == nil {
 		writeError(w, http.StatusNotFound, "gene not found: "+symbol)
 		return
 	}
 
-	uniprotID := ""
-	if ctx.uniprot != nil {
-		uniprotID = ctx.uniprot.LookupByTranscript(tx.ID)
-	}
-	writeJSON(w, http.StatusOK, ensemblGeneResponse{
-		GeneID:       tx.GeneID,
-		HugoSymbol:   tx.GeneName,
-		EntrezGeneID: tx.EntrezGeneID,
-		UniprotID:    uniprotID,
-	})
+	writeJSON(w, http.StatusOK, s.geneResponseFor(tx))
 }
 
 // handleEnsemblCanonicalGeneByEntrez handles GET /genome-nexus/{assembly}/ensembl/canonical-gene/entrez/{entrezGeneId}
@@ -417,59 +509,14 @@ func (s *Server) handleEnsemblCanonicalGeneByEntrez(w http.ResponseWriter, r *ht
 	}
 
 	entrezID := r.PathValue("entrezGeneId")
-	var found *cache.Transcript
-	for _, chrom := range ctx.cache.Chromosomes() {
-		for _, t := range ctx.cache.FindTranscriptsByChrom(chrom) {
-			if t.EntrezGeneID == entrezID && t.IsCanonicalMSK {
-				found = t
-				break
-			}
-		}
-		if found != nil {
-			break
-		}
-	}
+	source := r.URL.Query().Get("isoformOverrideSource")
+	found := pickCanonical(ctx.cache.FindTranscriptsByEntrezID(entrezID), source, s.OverrideTranscripts(source))
 	if found == nil {
 		writeError(w, http.StatusNotFound, "gene not found for entrez ID: "+entrezID)
 		return
 	}
 
-	entrezUniprotID := ""
-	if ctx.uniprot != nil {
-		entrezUniprotID = ctx.uniprot.LookupByTranscript(found.ID)
-	}
-	writeJSON(w, http.StatusOK, ensemblGeneResponse{
-		GeneID:       found.GeneID,
-		HugoSymbol:   found.GeneName,
-		EntrezGeneID: found.EntrezGeneID,
-		UniprotID:    entrezUniprotID,
-	})
-}
-
-// handleCancerHotspotsTranscript handles GET /genome-nexus/{assembly}/cancer_hotspots/transcript/{transcriptId}
-// Returns hotspot positions on the protein for the given transcript.
-func (s *Server) handleCancerHotspotsTranscript(w http.ResponseWriter, r *http.Request) {
-	ctx := s.requireAssembly(w, r)
-	if ctx == nil {
-		return
-	}
-
-	// TODO: look up hotspots from the hotspot store by transcript ID
-	// For now return empty array (matches GN behavior for most transcripts).
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte("[]\n"))
-}
-
-// findCanonicalByGene finds the MSK canonical transcript for a gene symbol.
-func findCanonicalByGene(c *cache.Cache, geneName string) *cache.Transcript {
-	for _, chrom := range c.Chromosomes() {
-		for _, t := range c.FindTranscriptsByChrom(chrom) {
-			if t.GeneName == geneName && t.IsCanonicalMSK {
-				return t
-			}
-		}
-	}
-	return nil
+	writeJSON(w, http.StatusOK, s.geneResponseFor(found))
 }
 
 // handlePtmExperimentalGet handles GET /genome-nexus/{assembly}/ptm/experimental?ensemblTranscriptId={id}
@@ -533,9 +580,118 @@ func lookupPtms(store *ptm.Store, transcriptID string) []ptm.PTM {
 }
 
 // stripTxVersion removes the version suffix from a transcript ID (e.g. "ENST00000357654.9" → "ENST00000357654").
+// lookupTranscript finds a transcript by id written either way round: the
+// cache keys on the versioned id, callers mostly hold the bare one, and
+// either spelling has to resolve.
+func lookupTranscript(ctx *assemblyContext, txID string) *cache.Transcript {
+	if tx := ctx.cache.GetTranscript(txID); tx != nil {
+		return tx
+	}
+	return ctx.cache.GetTranscriptByPrefix(stripTxVersion(txID))
+}
+
 func stripTxVersion(id string) string {
 	if i := strings.IndexByte(id, '.'); i >= 0 {
 		return id[:i]
 	}
 	return id
+}
+
+// decodeStringList reads the plain JSON array of identifiers the batch
+// endpoints take as a body.
+func decodeStringList(w http.ResponseWriter, r *http.Request) ([]string, bool) {
+	var ids []string
+	if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return nil, false
+	}
+	return ids, true
+}
+
+// geneResponseFor renders a gene from the transcript chosen to represent it.
+func (s *Server) geneResponseFor(tx *cache.Transcript) ensemblGeneResponse {
+	symbol := output.OfficialGeneSymbol(tx.GeneName, s.OfficialGeneSymbols())
+	resp := ensemblGeneResponse{
+		GeneID:       tx.GeneID,
+		HugoSymbol:   symbol,
+		EntrezGeneID: tx.EntrezGeneID,
+	}
+	if meta, ok := s.GeneMetadata(symbol); ok {
+		resp.Synonyms = meta.Synonyms
+		resp.PreviousSymbols = meta.PreviousSymbols
+		if resp.EntrezGeneID == "" {
+			resp.EntrezGeneID = meta.EntrezGeneID
+		}
+	}
+	return resp
+}
+
+// handleEnsemblCanonicalByHugoPost handles POST
+// {prefix}/ensembl/canonical-transcript/hgnc, the batch form of the lookup
+// above. A symbol with no canonical transcript is left out of the answer
+// rather than failing the request.
+func (s *Server) handleEnsemblCanonicalByHugoPost(w http.ResponseWriter, r *http.Request) {
+	ctx := s.requireAssembly(w, r)
+	if ctx == nil {
+		return
+	}
+	symbols, ok := decodeStringList(w, r)
+	if !ok {
+		return
+	}
+
+	isoformSource := r.URL.Query().Get("isoformOverrideSource")
+	overrides := s.OverrideTranscripts(isoformSource)
+
+	results := make([]any, 0, len(symbols))
+	for _, symbol := range symbols {
+		tx := pickCanonical(s.transcriptsForSymbol(ctx, symbol), isoformSource, overrides)
+		if tx == nil {
+			continue
+		}
+		results = append(results, ctx.transcriptRecord(tx))
+	}
+	writeJSON(w, http.StatusOK, results)
+}
+
+// handleEnsemblCanonicalGeneByHugoPost handles POST
+// {prefix}/ensembl/canonical-gene/hgnc.
+func (s *Server) handleEnsemblCanonicalGeneByHugoPost(w http.ResponseWriter, r *http.Request) {
+	s.canonicalGenesPost(w, r, func(ctx *assemblyContext, id string) []*cache.Transcript {
+		return s.transcriptsForSymbol(ctx, id)
+	})
+}
+
+// handleEnsemblCanonicalGeneByEntrezPost handles POST
+// {prefix}/ensembl/canonical-gene/entrez.
+func (s *Server) handleEnsemblCanonicalGeneByEntrezPost(w http.ResponseWriter, r *http.Request) {
+	s.canonicalGenesPost(w, r, func(ctx *assemblyContext, id string) []*cache.Transcript {
+		return ctx.cache.FindTranscriptsByEntrezID(id)
+	})
+}
+
+// canonicalGenesPost answers a batch of gene lookups, differing only in how an
+// identifier reaches its transcripts.
+func (s *Server) canonicalGenesPost(w http.ResponseWriter, r *http.Request, find func(*assemblyContext, string) []*cache.Transcript) {
+	ctx := s.requireAssembly(w, r)
+	if ctx == nil {
+		return
+	}
+	ids, ok := decodeStringList(w, r)
+	if !ok {
+		return
+	}
+
+	source := r.URL.Query().Get("isoformOverrideSource")
+	overrides := s.OverrideTranscripts(source)
+
+	results := make([]ensemblGeneResponse, 0, len(ids))
+	for _, id := range ids {
+		tx := pickCanonical(find(ctx, id), source, overrides)
+		if tx == nil {
+			continue
+		}
+		results = append(results, s.geneResponseFor(tx))
+	}
+	writeJSON(w, http.StatusOK, results)
 }

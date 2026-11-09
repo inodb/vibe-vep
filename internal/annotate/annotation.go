@@ -32,6 +32,11 @@ const (
 	ConsequenceStopRetained      = "stop_retained_variant"
 	ConsequenceStartRetained     = "start_retained_variant"
 
+	// A CDS whose length is not a multiple of three ends in a part-codon no
+	// amino acid can be read from. VEP names a change there for what it is
+	// rather than guessing a residue.
+	ConsequenceIncompleteTerminalCodon = "incomplete_terminal_codon_variant"
+
 	// LOW impact (generic coding)
 	ConsequenceCodingSequenceVariant = "coding_sequence_variant"
 
@@ -61,12 +66,14 @@ type Annotation struct {
 	GeneName           string            // Gene symbol
 	GeneID             string            // Gene identifier
 	ProteinID          string            // Ensembl protein ID (e.g., ENSP00000493376)
+	ProteinIDVersion   string            // version suffix of the protein ID (e.g. "6")
 	HGNCId             string            // HGNC identifier (e.g., HGNC:14825)
 	EntrezGeneID       string            // NCBI Entrez gene ID (e.g., "673")
 	RefSeqIDs          []string          // RefSeq mRNA accessions (versioned), in GENCODE metadata order
 	HGVSOffset         int               // 3' shift distance applied to reach the HGVS representation
 	ProteinStart       int64             // VEP protein_start: unshifted position of the change
 	ProteinEnd         int64             // VEP protein_end
+	ProteinLength      int               // Length of the transcript's protein, in residues
 	Consequence        string            // SO consequence term
 	Impact             string            // HIGH, MODERATE, LOW, MODIFIER
 	CDSPosition        int64             // Position in CDS, 0 if not in CDS
@@ -112,7 +119,8 @@ func GetImpact(consequence string) string {
 		case ConsequenceSynonymousVariant, ConsequenceSpliceRegion,
 			ConsequenceStopRetained, ConsequenceStartRetained,
 			ConsequenceCodingSequenceVariant, ConsequenceSpliceDonor5thBase,
-			ConsequenceSpliceDonorRegion, ConsequencePolypyrimidineTract:
+			ConsequenceSpliceDonorRegion, ConsequencePolypyrimidineTract,
+			ConsequenceIncompleteTerminalCodon:
 			impact = ImpactLow
 		default:
 			impact = ImpactModifier

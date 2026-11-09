@@ -1,0 +1,61 @@
+status=200
+{
+  "exons": [
+    {
+      "exonEnd": 72427788,
+      "exonId": "ENSE00001826994",
+      "exonStart": 72420976,
+      "rank": 4,
+      "strand": -1,
+      "version": 2
+    },
+    {
+      "exonEnd": 72428289,
+      "exonId": "ENSE00001204361",
+      "exonStart": 72428191,
+      "rank": 3,
+      "strand": -1,
+      "version": 1
+    },
+    {
+      "exonEnd": 72428578,
+      "exonId": "ENSE00001204363",
+      "exonStart": 72428402,
+      "rank": 2,
+      "strand": -1,
+      "version": 1
+    },
+    {
+      "exonEnd": 72496069,
+      "exonId": "ENSE00001930429",
+      "exonStart": 72495647,
+      "rank": 1,
+      "strand": -1,
+      "version": 1
+    }
+  ],
+  "geneId": "ENSG00000163602",
+  "hugoSymbols": [
+    "RYBP"
+  ],
+  "pfamDomains": [
+    {
+      "pfamDomainEnd": 134,
+      "pfamDomainId": "PF00641",
+      "pfamDomainStart": 111
+    }
+  ],
+  "proteinId": "ENSP00000419494",
+  "proteinLength": 317,
+  "refseqMrnaId": "NM_012234",
+  "transcriptId": "ENST00000477973",
+  "transcriptIdVersion": "2",
+  "utrs": [
+    {
+      "end": 72427535,
+      "start": 72420976,
+      "strand": -1,
+      "type": "three_prime_UTR"
+    }
+  ]
+}

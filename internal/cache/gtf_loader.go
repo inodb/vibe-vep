@@ -12,9 +12,18 @@ import (
 	"strings"
 )
 
-// utr3ScanBases is how much 3'UTR to retain per transcript for stop-codon
-// scanning after a frameshift. See the measurement note at its use site.
-const utr3ScanBases = 1500
+// UTR3ScanBases is how much 3'UTR to retain per transcript.
+//
+// Two things need it. Stop-codon scanning after a frameshift was what set it
+// first, and 1500 covered that: the furthest new stop found against VEP111
+// sits 375 codons downstream. Naming an insertion in the 3'UTR needs it too,
+// and reaches further -- a duplication past the end of what is kept can only
+// be written as an insertion, since there is no sequence to recognise it in.
+//
+// 5000 was measured rather than guessed: of the 3'UTR duplications vibe-vep
+// was still getting wrong, every one sat below *5000, and none below *1500.
+// UTR3ScanBases is exported so the cache fingerprint can cover it.
+const UTR3ScanBases = 5000
 
 // GTFLoader loads transcript data from GENCODE GTF files.
 type GTFLoader struct {
@@ -130,6 +139,7 @@ func (l *GTFLoader) parseGTF(reader io.Reader, filterChrom string) (map[string]*
 				GeneID:             stripVersion(feat.attributes["gene_id"]),
 				GeneName:           feat.attributes["gene_name"],
 				ProteinID:          stripVersion(feat.attributes["protein_id"]),
+				ProteinIDVersion:   versionSuffix(feat.attributes["protein_id"]),
 				HGNCId:             feat.attributes["hgnc_id"],
 				Chrom:              feat.chrom,
 				Start:              feat.start,
@@ -365,6 +375,15 @@ func parseStrand(s string) int8 {
 
 // stripVersion removes the version suffix from an Ensembl ID.
 // e.g., "ENST00000456328.2" -> "ENST00000456328"
+// versionSuffix returns the ".N" part of a versioned Ensembl id, without the
+// dot, or "" when the id carries no version.
+func versionSuffix(id string) string {
+	if idx := strings.LastIndex(id, "."); idx != -1 {
+		return id[idx+1:]
+	}
+	return ""
+}
+
 func stripVersion(id string) string {
 	if idx := strings.LastIndex(id, "."); idx != -1 {
 		return id[:idx]
@@ -383,15 +402,15 @@ func normalizeChrom(chrom string) string {
 
 // GENCODELoader combines GTF and FASTA loaders for complete annotation data.
 type GENCODELoader struct {
-	gtfPath                string
-	fastaPath              string
-	gtf                    *GTFLoader
-	fasta                  *FASTALoader
-	mskCanonicalOverrides  CanonicalOverrides
-	ensCanonicalOverrides  CanonicalOverrides
-	entrezGeneIDs          GeneEntrezMap
-	refSeqIDs              map[string][]string
-	genomePath             string
+	gtfPath               string
+	fastaPath             string
+	gtf                   *GTFLoader
+	fasta                 *FASTALoader
+	mskCanonicalOverrides CanonicalOverrides
+	ensCanonicalOverrides CanonicalOverrides
+	entrezGeneIDs         GeneEntrezMap
+	refSeqIDs             map[string][]string
+	genomePath            string
 }
 
 // SetGenomePath supplies a genomic FASTA used only to copy short intron windows
@@ -503,7 +522,7 @@ func (l *GENCODELoader) Load(c *Cache) error {
 				// against VEP111 the furthest new stop sits 375 codons (1125bp)
 				// downstream, and 300bp resolved none of those 168 variants.
 				// Offsets here are relative to the unpadded CDS.
-				if extended := l.fasta.GetCDSPlusDownstream(t.ID, utr3ScanBases); extended != "" && len(extended) > rawCDSLen {
+				if extended := l.fasta.GetCDSPlusDownstream(t.ID, UTR3ScanBases); extended != "" && len(extended) > rawCDSLen {
 					t.UTR3Sequence = extended[rawCDSLen:]
 				}
 			}

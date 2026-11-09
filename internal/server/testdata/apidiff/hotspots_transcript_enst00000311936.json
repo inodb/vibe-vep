@@ -1,0 +1,298 @@
+status=200
+[
+  {
+    "hugoSymbol": "KRAS",
+    "inframeCount": 0,
+    "missenseCount": 8,
+    "residue": "A11",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "truncatingCount": 0,
+    "tumorCount": 8,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "residue": "A11",
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "tumorCount": 1,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "inframeCount": 0,
+    "missenseCount": 86,
+    "residue": "A146",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "truncatingCount": 0,
+    "tumorCount": 86,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "inframeCount": 0,
+    "missenseCount": 12,
+    "residue": "A59",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "truncatingCount": 0,
+    "tumorCount": 12,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "residue": "A59",
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "tumorCount": 5,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "inframeCount": 0,
+    "missenseCount": 4,
+    "residue": "D33",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "truncatingCount": 0,
+    "tumorCount": 4,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "residue": "D33",
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "tumorCount": 1,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "residue": "D92",
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "tumorCount": 1,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "residue": "E62",
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "tumorCount": 2,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "residue": "E63",
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "tumorCount": 2,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "inframeCount": 0,
+    "missenseCount": 2175,
+    "residue": "G12",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "truncatingCount": 0,
+    "tumorCount": 2175,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "residue": "G12",
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "tumorCount": 735,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "inframeCount": 0,
+    "missenseCount": 264,
+    "residue": "G13",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "truncatingCount": 0,
+    "tumorCount": 264,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "residue": "G13",
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "tumorCount": 91,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "inframeCount": 0,
+    "missenseCount": 24,
+    "residue": "G60",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "truncatingCount": 0,
+    "tumorCount": 24,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "residue": "G60",
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "tumorCount": 1,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "residue": "I36",
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "tumorCount": 3,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "inframeCount": 0,
+    "missenseCount": 18,
+    "residue": "K117",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "truncatingCount": 0,
+    "tumorCount": 18,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "inframeCount": 0,
+    "missenseCount": 3,
+    "residue": "K5",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "truncatingCount": 0,
+    "tumorCount": 3,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "inframeCount": 0,
+    "missenseCount": 12,
+    "residue": "L19",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "truncatingCount": 0,
+    "tumorCount": 12,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "residue": "P34",
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "tumorCount": 1,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "inframeCount": 0,
+    "missenseCount": 6,
+    "residue": "Q22",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "truncatingCount": 0,
+    "tumorCount": 6,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "inframeCount": 0,
+    "missenseCount": 190,
+    "residue": "Q61",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "truncatingCount": 0,
+    "tumorCount": 190,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "residue": "Q61",
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "tumorCount": 75,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "residue": "R68",
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "tumorCount": 2,
+    "type": "3d",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "inframeCount": 0,
+    "missenseCount": 18,
+    "residue": "V14",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "truncatingCount": 0,
+    "tumorCount": 18,
+    "type": "single residue",
+    "version": "v3"
+  },
+  {
+    "hugoSymbol": "KRAS",
+    "residue": "Y64",
+    "transcriptId": "ENST00000311936",
+    "transcriptIdVersion": "3",
+    "tumorCount": 3,
+    "type": "3d",
+    "version": "v2"
+  }
+]

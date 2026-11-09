@@ -295,3 +295,130 @@ func TestSignalFieldWithRepeatedParams(t *testing.T) {
 		t.Error("expected annotation_summary with repeated ?fields=")
 	}
 }
+
+// TestEnsemblTranscriptFilterIsAlternativeNotUnion pins genome-nexus's actual
+// semantics: the four lists in the POST body are alternatives, taken in the
+// order transcriptIds, geneIds, proteinIds, hugoSymbols, and the first
+// non-empty one wins. Sending two of them must not union the results.
+func TestEnsemblTranscriptFilterIsAlternativeNotUnion(t *testing.T) {
+	srv := newTestServerWithKRAS(t)
+	handler := srv.Handler()
+
+	post := func(body string) []map[string]any {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/ensembl/transcript", strings.NewReader(body))
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d", body, w.Code)
+		}
+		var out []map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+			t.Fatalf("%s: decode: %v (body %s)", body, err, w.Body.String())
+		}
+		return out
+	}
+
+	byGene := post(`{"hugoSymbols":["KRAS"]}`)
+	if len(byGene) == 0 {
+		t.Fatal("expected transcripts for KRAS")
+	}
+	byTx := post(`{"transcriptIds":["ENST00000311936"]}`)
+	if len(byTx) != 1 {
+		t.Fatalf("expected exactly one transcript, got %d", len(byTx))
+	}
+
+	// transcriptIds outranks hugoSymbols, so the combined request must equal
+	// the transcriptIds-only request, not the two concatenated.
+	both := post(`{"transcriptIds":["ENST00000311936"],"hugoSymbols":["KRAS"]}`)
+	if len(both) != len(byTx) {
+		t.Errorf("combined filter returned %d, want %d (transcriptIds should win)", len(both), len(byTx))
+	}
+
+	// An empty filter is an empty list, and empty must serialise as [].
+	req := httptest.NewRequest(http.MethodPost, "/ensembl/transcript", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if got := strings.TrimSpace(w.Body.String()); got != "[]" {
+		t.Errorf("empty filter body = %q, want []", got)
+	}
+}
+
+// TestEnsemblTranscriptGetIsConjunctive pins the GET form, where the
+// parameters narrow each other rather than being alternatives, and no
+// parameters at all means an empty list.
+func TestEnsemblTranscriptGetIsConjunctive(t *testing.T) {
+	srv := newTestServerWithKRAS(t)
+	handler := srv.Handler()
+
+	get := func(query string) []map[string]any {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/ensembl/transcript"+query, nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d", query, w.Code)
+		}
+		var out []map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+			t.Fatalf("%s: decode: %v", query, err)
+		}
+		return out
+	}
+
+	if n := len(get("")); n != 0 {
+		t.Errorf("no parameters returned %d transcripts, want 0", n)
+	}
+	byGene := get("?hugoSymbol=KRAS")
+	if len(byGene) == 0 {
+		t.Fatal("expected transcripts for KRAS")
+	}
+	// A gene that does not carry that symbol narrows to nothing.
+	if n := len(get("?hugoSymbol=KRAS&geneId=ENSG00000000000")); n != 0 {
+		t.Errorf("contradictory filters returned %d, want 0", n)
+	}
+}
+
+// TestCanonicalBatchEndpoints checks the three batch lookups answer in the
+// same shape as their single-value forms, skip identifiers they cannot
+// resolve rather than failing, and serialise empty as [].
+func TestCanonicalBatchEndpoints(t *testing.T) {
+	srv := newTestServerWithKRAS(t)
+	handler := srv.Handler()
+
+	post := func(path, body string) ([]map[string]any, string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s %s: expected 200, got %d", path, body, w.Code)
+		}
+		raw := strings.TrimSpace(w.Body.String())
+		var out []map[string]any
+		if err := json.Unmarshal([]byte(raw), &out); err != nil {
+			t.Fatalf("%s: decode: %v (body %s)", path, err, raw)
+		}
+		return out, raw
+	}
+
+	// A known gene resolves; an unknown one is skipped, not fatal.
+	got, _ := post("/ensembl/canonical-transcript/hgnc", `["KRAS","NOT_A_GENE"]`)
+	if len(got) != 1 {
+		t.Fatalf("canonical-transcript batch returned %d, want 1", len(got))
+	}
+	if got[0]["transcriptId"] == "" {
+		t.Error("expected a transcript id in the response")
+	}
+
+	got, _ = post("/ensembl/canonical-gene/hgnc", `["KRAS"]`)
+	if len(got) != 1 || got[0]["hugoSymbol"] != "KRAS" {
+		t.Errorf("canonical-gene batch = %v, want one KRAS entry", got)
+	}
+
+	// Nothing resolvable still answers [], never null.
+	_, raw := post("/ensembl/canonical-gene/entrez", `["0"]`)
+	if raw != "[]" {
+		t.Errorf("entrez batch with no matches = %q, want []", raw)
+	}
+}

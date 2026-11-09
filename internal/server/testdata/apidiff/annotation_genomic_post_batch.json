@@ -1,0 +1,3832 @@
+status=200
+[
+  {
+    "allele_string": "A/T",
+    "annotation_summary": {
+      "assemblyName": "GRCh37",
+      "canonicalTranscriptId": "ENST00000288602",
+      "genomicLocation": {
+        "chromosome": "7",
+        "end": 140453136,
+        "referenceAllele": "A",
+        "start": 140453136,
+        "variantAllele": "T"
+      },
+      "strandSign": "+",
+      "transcriptConsequenceSummaries": [
+        {
+          "aminoAcidAlt": "E",
+          "aminoAcidRef": "V",
+          "aminoAcids": "V/E",
+          "codonChange": "gTg/gAg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "673",
+          "exon": "15/18",
+          "hgvsc": "ENST00000288602.6:c.1799T\u003eA",
+          "hgvsp": "p.Val600Glu",
+          "hgvspShort": "p.V600E",
+          "hugoGeneSymbol": "BRAF",
+          "proteinPosition": {
+            "end": 600,
+            "start": 600
+          },
+          "refSeq": "NM_004333.4",
+          "transcriptId": "ENST00000288602",
+          "uniprotId": "P15056",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "E",
+          "aminoAcidRef": "V",
+          "aminoAcids": "V/E",
+          "codonChange": "gTg/gAg",
+          "consequenceTerms": "missense_variant,NMD_transcript_variant",
+          "entrezGeneId": "673",
+          "exon": "2/6",
+          "hgvsc": "ENST00000479537.1:c.83T\u003eA",
+          "hgvsp": "p.Val28Glu",
+          "hgvspShort": "p.V28E",
+          "hugoGeneSymbol": "BRAF",
+          "proteinPosition": {
+            "end": 28,
+            "start": 28
+          },
+          "transcriptId": "ENST00000479537",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "E",
+          "aminoAcidRef": "V",
+          "aminoAcids": "V/E",
+          "codonChange": "gTg/gAg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "673",
+          "exon": "6/10",
+          "hgvsc": "ENST00000496384.2:c.623T\u003eA",
+          "hgvsp": "p.Val208Glu",
+          "hgvspShort": "p.V208E",
+          "hugoGeneSymbol": "BRAF",
+          "proteinPosition": {
+            "end": 208,
+            "start": 208
+          },
+          "transcriptId": "ENST00000496384",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "consequenceTerms": "3_prime_UTR_variant,NMD_transcript_variant",
+          "entrezGeneId": "673",
+          "exon": "16/19",
+          "hgvsc": "ENST00000497784.1:c.*1249T\u003eA",
+          "hugoGeneSymbol": "BRAF",
+          "transcriptId": "ENST00000497784",
+          "variantClassification": "3'UTR"
+        }
+      ],
+      "transcriptConsequenceSummary": {
+        "aminoAcidAlt": "E",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/E",
+        "codonChange": "gTg/gAg",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "673",
+        "exon": "15/18",
+        "hgvsc": "ENST00000288602.6:c.1799T\u003eA",
+        "hgvsp": "p.Val600Glu",
+        "hgvspShort": "p.V600E",
+        "hugoGeneSymbol": "BRAF",
+        "proteinPosition": {
+          "end": 600,
+          "start": 600
+        },
+        "refSeq": "NM_004333.4",
+        "transcriptId": "ENST00000288602",
+        "uniprotId": "P15056",
+        "variantClassification": "Missense_Mutation"
+      },
+      "transcriptConsequences": [
+        {
+          "aminoAcidAlt": "E",
+          "aminoAcidRef": "V",
+          "aminoAcids": "V/E",
+          "codonChange": "gTg/gAg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "673",
+          "exon": "15/18",
+          "hgvsc": "ENST00000288602.6:c.1799T\u003eA",
+          "hgvsp": "p.Val600Glu",
+          "hgvspShort": "p.V600E",
+          "hugoGeneSymbol": "BRAF",
+          "proteinPosition": {
+            "end": 600,
+            "start": 600
+          },
+          "refSeq": "NM_004333.4",
+          "transcriptId": "ENST00000288602",
+          "uniprotId": "P15056",
+          "variantClassification": "Missense_Mutation"
+        }
+      ],
+      "variant": "7:g.140453136A\u003eT",
+      "variantType": "SNP"
+    },
+    "assembly_name": "GRCh37",
+    "end": 140453136,
+    "hgvsg": "7:g.140453136A\u003eT",
+    "id": "7:g.140453136A\u003eT",
+    "most_severe_consequence": "missense_variant",
+    "originalVariantQuery": "7,140453136,140453136,A,T",
+    "seq_region_name": "7",
+    "start": 140453136,
+    "strand": 1,
+    "successfully_annotated": true,
+    "transcript_consequences": [
+      {
+        "amino_acids": "V/E",
+        "biotype": "protein_coding",
+        "canonical": "1",
+        "codons": "gTg/gAg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "15/18",
+        "gene_id": "ENSG00000157764",
+        "gene_symbol": "BRAF",
+        "hgnc_id": "1097",
+        "hgvsc": "ENST00000288602.6:c.1799T\u003eA",
+        "hgvsg": "7:g.140453136A\u003eT",
+        "hgvsp": "ENSP00000288602.6:p.Val600Glu",
+        "protein_end": 600,
+        "protein_id": "ENSP00000288602",
+        "protein_start": 600,
+        "refseq_transcript_ids": [
+          "NM_004333.4"
+        ],
+        "transcript_id": "ENST00000288602",
+        "variant_allele": "T"
+      },
+      {
+        "amino_acids": "V/E",
+        "biotype": "nonsense_mediated_decay",
+        "codons": "gTg/gAg",
+        "consequence_terms": [
+          "missense_variant",
+          "NMD_transcript_variant"
+        ],
+        "exon": "2/6",
+        "gene_id": "ENSG00000157764",
+        "gene_symbol": "BRAF",
+        "hgnc_id": "1097",
+        "hgvsc": "ENST00000479537.1:c.83T\u003eA",
+        "hgvsg": "7:g.140453136A\u003eT",
+        "hgvsp": "ENSP00000418033.1:p.Val28Glu",
+        "protein_end": 28,
+        "protein_id": "ENSP00000418033",
+        "protein_start": 28,
+        "transcript_id": "ENST00000479537",
+        "variant_allele": "T"
+      },
+      {
+        "amino_acids": "V/E",
+        "biotype": "protein_coding",
+        "codons": "gTg/gAg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "6/10",
+        "gene_id": "ENSG00000157764",
+        "gene_symbol": "BRAF",
+        "hgnc_id": "1097",
+        "hgvsc": "ENST00000496384.2:c.623T\u003eA",
+        "hgvsg": "7:g.140453136A\u003eT",
+        "hgvsp": "ENSP00000419060.1:p.Val208Glu",
+        "protein_end": 208,
+        "protein_id": "ENSP00000419060",
+        "protein_start": 208,
+        "transcript_id": "ENST00000496384",
+        "variant_allele": "T"
+      },
+      {
+        "biotype": "nonsense_mediated_decay",
+        "consequence_terms": [
+          "3_prime_UTR_variant",
+          "NMD_transcript_variant"
+        ],
+        "exon": "16/19",
+        "gene_id": "ENSG00000157764",
+        "gene_symbol": "BRAF",
+        "hgnc_id": "1097",
+        "hgvsc": "ENST00000497784.1:c.*1249T\u003eA",
+        "hgvsg": "7:g.140453136A\u003eT",
+        "protein_id": "ENSP00000420119",
+        "transcript_id": "ENST00000497784",
+        "variant_allele": "T"
+      }
+    ],
+    "variant": "7:g.140453136A\u003eT"
+  },
+  {
+    "allele_string": "A/G",
+    "annotation_summary": {
+      "assemblyName": "GRCh37",
+      "canonicalTranscriptId": "ENST00000304494",
+      "genomicLocation": {
+        "chromosome": "9",
+        "end": 21971173,
+        "referenceAllele": "A",
+        "start": 21971173,
+        "variantAllele": "G"
+      },
+      "strandSign": "+",
+      "transcriptConsequenceSummaries": [
+        {
+          "aminoAcidAlt": "P",
+          "aminoAcidRef": "L",
+          "aminoAcids": "L/P",
+          "codonChange": "cTg/cCg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000304494.5:c.185T\u003eC",
+          "hgvsp": "p.Leu62Pro",
+          "hgvspShort": "p.L62P",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 62,
+            "start": 62
+          },
+          "refSeq": "NM_000077.4",
+          "transcriptId": "ENST00000304494",
+          "uniprotId": "P42771",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "A",
+          "aminoAcidRef": "A",
+          "aminoAcids": "A",
+          "codonChange": "gcT/gcC",
+          "consequenceTerms": "synonymous_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000361570.3:c.351T\u003eC",
+          "hgvsp": "p.Ala117=",
+          "hgvspShort": "p.A117=",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 117,
+            "start": 117
+          },
+          "refSeq": "NM_058195.3",
+          "transcriptId": "ENST00000361570",
+          "variantClassification": "Silent"
+        },
+        {
+          "consequenceTerms": "non_coding_transcript_exon_variant",
+          "entrezGeneId": "1029",
+          "exon": "1/2",
+          "hgvsc": "ENST00000380150.2:n.159T\u003eC",
+          "hgvspShort": "p.*53*",
+          "hugoGeneSymbol": "CDKN2A",
+          "transcriptId": "ENST00000380150",
+          "variantClassification": "RNA"
+        },
+        {
+          "consequenceTerms": "3_prime_UTR_variant,NMD_transcript_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000380151.3:c.*108T\u003eC",
+          "hugoGeneSymbol": "CDKN2A",
+          "transcriptId": "ENST00000380151",
+          "uniprotId": "P42771-3",
+          "variantClassification": "3'UTR"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "51198",
+          "hugoGeneSymbol": "CDKN2A-AS1",
+          "transcriptId": "ENST00000441769",
+          "uniprotId": "Q9UH64",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "aminoAcidAlt": "P",
+          "aminoAcidRef": "L",
+          "aminoAcids": "L/P",
+          "codonChange": "cTg/cCg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000446177.1:c.185T\u003eC",
+          "hgvsp": "p.Leu62Pro",
+          "hgvspShort": "p.L62P",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 62,
+            "start": 62
+          },
+          "transcriptId": "ENST00000446177",
+          "uniprotId": "P42771-4",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "P",
+          "aminoAcidRef": "L",
+          "aminoAcids": "L/P",
+          "codonChange": "cTg/cCg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000479692.2:c.32T\u003eC",
+          "hgvsp": "p.Leu11Pro",
+          "hgvspShort": "p.L11P",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 11,
+            "start": 11
+          },
+          "transcriptId": "ENST00000479692",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "P",
+          "aminoAcidRef": "L",
+          "aminoAcids": "L/P",
+          "codonChange": "cTg/cCg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "1029",
+          "exon": "3/4",
+          "hgvsc": "ENST00000494262.1:c.32T\u003eC",
+          "hgvsp": "p.Leu11Pro",
+          "hgvspShort": "p.L11P",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 11,
+            "start": 11
+          },
+          "transcriptId": "ENST00000494262",
+          "uniprotId": "P42771-2",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "P",
+          "aminoAcidRef": "L",
+          "aminoAcids": "L/P",
+          "codonChange": "cTg/cCg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/2",
+          "hgvsc": "ENST00000497750.1:c.32T\u003eC",
+          "hgvsp": "p.Leu11Pro",
+          "hgvspShort": "p.L11P",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 11,
+            "start": 11
+          },
+          "transcriptId": "ENST00000497750",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "P",
+          "aminoAcidRef": "L",
+          "aminoAcids": "L/P",
+          "codonChange": "cTg/cCg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/4",
+          "hgvsc": "ENST00000498124.1:c.185T\u003eC",
+          "hgvsp": "p.Leu62Pro",
+          "hgvspShort": "p.L62P",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 62,
+            "start": 62
+          },
+          "refSeq": "NM_001195132.1",
+          "transcriptId": "ENST00000498124",
+          "uniprotId": "P42771-4",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "P",
+          "aminoAcidRef": "L",
+          "aminoAcids": "L/P",
+          "codonChange": "cTg/cCg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000498628.2:c.32T\u003eC",
+          "hgvsp": "p.Leu11Pro",
+          "hgvspShort": "p.L11P",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 11,
+            "start": 11
+          },
+          "transcriptId": "ENST00000498628",
+          "uniprotId": "P42771-2",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "A",
+          "aminoAcidRef": "A",
+          "aminoAcids": "A",
+          "codonChange": "gcT/gcC",
+          "consequenceTerms": "synonymous_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000530628.2:c.228T\u003eC",
+          "hgvsp": "p.Ala76=",
+          "hgvspShort": "p.A76=",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 76,
+            "start": 76
+          },
+          "transcriptId": "ENST00000530628",
+          "uniprotId": "Q8N726",
+          "variantClassification": "Silent"
+        },
+        {
+          "consequenceTerms": "upstream_gene_variant",
+          "entrezGeneId": "1029",
+          "hugoGeneSymbol": "CDKN2A",
+          "transcriptId": "ENST00000577854",
+          "variantClassification": "5'Flank"
+        },
+        {
+          "aminoAcidAlt": "P",
+          "aminoAcidRef": "L",
+          "aminoAcids": "L/P",
+          "codonChange": "cTg/cCg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "1029",
+          "exon": "1/2",
+          "hgvsc": "ENST00000578845.2:c.32T\u003eC",
+          "hgvsp": "p.Leu11Pro",
+          "hgvspShort": "p.L11P",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 11,
+            "start": 11
+          },
+          "transcriptId": "ENST00000578845",
+          "uniprotId": "P42771-2",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "P",
+          "aminoAcidRef": "L",
+          "aminoAcids": "L/P",
+          "codonChange": "cTg/cCg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000579122.1:c.185T\u003eC",
+          "hgvsp": "p.Leu62Pro",
+          "hgvspShort": "p.L62P",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 62,
+            "start": 62
+          },
+          "transcriptId": "ENST00000579122",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "A",
+          "aminoAcidRef": "A",
+          "aminoAcids": "A",
+          "codonChange": "gcT/gcC",
+          "consequenceTerms": "synonymous_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000579755.1:c.228T\u003eC",
+          "hgvsp": "p.Ala76=",
+          "hgvspShort": "p.A76=",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 76,
+            "start": 76
+          },
+          "transcriptId": "ENST00000579755",
+          "uniprotId": "Q8N726",
+          "variantClassification": "Silent"
+        }
+      ],
+      "transcriptConsequenceSummary": {
+        "aminoAcidAlt": "P",
+        "aminoAcidRef": "L",
+        "aminoAcids": "L/P",
+        "codonChange": "cTg/cCg",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "1029",
+        "exon": "2/3",
+        "hgvsc": "ENST00000304494.5:c.185T\u003eC",
+        "hgvsp": "p.Leu62Pro",
+        "hgvspShort": "p.L62P",
+        "hugoGeneSymbol": "CDKN2A",
+        "proteinPosition": {
+          "end": 62,
+          "start": 62
+        },
+        "refSeq": "NM_000077.4",
+        "transcriptId": "ENST00000304494",
+        "uniprotId": "P42771",
+        "variantClassification": "Missense_Mutation"
+      },
+      "transcriptConsequences": [
+        {
+          "aminoAcidAlt": "P",
+          "aminoAcidRef": "L",
+          "aminoAcids": "L/P",
+          "codonChange": "cTg/cCg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000304494.5:c.185T\u003eC",
+          "hgvsp": "p.Leu62Pro",
+          "hgvspShort": "p.L62P",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 62,
+            "start": 62
+          },
+          "refSeq": "NM_000077.4",
+          "transcriptId": "ENST00000304494",
+          "uniprotId": "P42771",
+          "variantClassification": "Missense_Mutation"
+        }
+      ],
+      "variant": "9:g.21971173A\u003eG",
+      "variantType": "SNP"
+    },
+    "assembly_name": "GRCh37",
+    "end": 21971173,
+    "hgvsg": "9:g.21971173A\u003eG",
+    "id": "9:g.21971173A\u003eG",
+    "most_severe_consequence": "missense_variant",
+    "originalVariantQuery": "9,21971173,21971173,A,G",
+    "seq_region_name": "9",
+    "start": 21971173,
+    "strand": 1,
+    "successfully_annotated": true,
+    "transcript_consequences": [
+      {
+        "amino_acids": "L/P",
+        "biotype": "protein_coding",
+        "canonical": "1",
+        "codons": "cTg/cCg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000304494.5:c.185T\u003eC",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "hgvsp": "ENSP00000307101.5:p.Leu62Pro",
+        "protein_end": 62,
+        "protein_id": "ENSP00000307101",
+        "protein_start": 62,
+        "refseq_transcript_ids": [
+          "NM_000077.4"
+        ],
+        "transcript_id": "ENST00000304494",
+        "variant_allele": "G"
+      },
+      {
+        "amino_acids": "A",
+        "biotype": "protein_coding",
+        "codons": "gcT/gcC",
+        "consequence_terms": [
+          "synonymous_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000361570.3:c.351T\u003eC",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "hgvsp": "ENSP00000355153.3:p.Ala117=",
+        "protein_end": 117,
+        "protein_id": "ENSP00000355153",
+        "protein_start": 117,
+        "refseq_transcript_ids": [
+          "NM_058195.3"
+        ],
+        "transcript_id": "ENST00000361570",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "processed_transcript",
+        "consequence_terms": [
+          "non_coding_transcript_exon_variant"
+        ],
+        "exon": "1/2",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000380150.2:n.159T\u003eC",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "transcript_id": "ENST00000380150",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "nonsense_mediated_decay",
+        "consequence_terms": [
+          "3_prime_UTR_variant",
+          "NMD_transcript_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000380151.3:c.*108T\u003eC",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "protein_id": "ENSP00000369496",
+        "transcript_id": "ENST00000380151",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000224854",
+        "gene_symbol": "C9orf53",
+        "hgnc_id": "23831",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "protein_id": "ENSP00000414893",
+        "transcript_id": "ENST00000441769",
+        "variant_allele": "G"
+      },
+      {
+        "amino_acids": "L/P",
+        "biotype": "protein_coding",
+        "codons": "cTg/cCg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000446177.1:c.185T\u003eC",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "hgvsp": "ENSP00000394932.1:p.Leu62Pro",
+        "protein_end": 62,
+        "protein_id": "ENSP00000394932",
+        "protein_start": 62,
+        "transcript_id": "ENST00000446177",
+        "variant_allele": "G"
+      },
+      {
+        "amino_acids": "L/P",
+        "biotype": "protein_coding",
+        "codons": "cTg/cCg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000479692.2:c.32T\u003eC",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "hgvsp": "ENSP00000466887.1:p.Leu11Pro",
+        "protein_end": 11,
+        "protein_id": "ENSP00000466887",
+        "protein_start": 11,
+        "transcript_id": "ENST00000479692",
+        "variant_allele": "G"
+      },
+      {
+        "amino_acids": "L/P",
+        "biotype": "protein_coding",
+        "codons": "cTg/cCg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "3/4",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000494262.1:c.32T\u003eC",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "hgvsp": "ENSP00000464952.1:p.Leu11Pro",
+        "protein_end": 11,
+        "protein_id": "ENSP00000464952",
+        "protein_start": 11,
+        "transcript_id": "ENST00000494262",
+        "variant_allele": "G"
+      },
+      {
+        "amino_acids": "L/P",
+        "biotype": "protein_coding",
+        "codons": "cTg/cCg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "2/2",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000497750.1:c.32T\u003eC",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "hgvsp": "ENSP00000468510.1:p.Leu11Pro",
+        "protein_end": 11,
+        "protein_id": "ENSP00000468510",
+        "protein_start": 11,
+        "transcript_id": "ENST00000497750",
+        "variant_allele": "G"
+      },
+      {
+        "amino_acids": "L/P",
+        "biotype": "protein_coding",
+        "codons": "cTg/cCg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "2/4",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000498124.1:c.185T\u003eC",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "hgvsp": "ENSP00000418915.1:p.Leu62Pro",
+        "protein_end": 62,
+        "protein_id": "ENSP00000418915",
+        "protein_start": 62,
+        "refseq_transcript_ids": [
+          "NM_001195132.1"
+        ],
+        "transcript_id": "ENST00000498124",
+        "variant_allele": "G"
+      },
+      {
+        "amino_acids": "L/P",
+        "biotype": "protein_coding",
+        "codons": "cTg/cCg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000498628.2:c.32T\u003eC",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "hgvsp": "ENSP00000467857.1:p.Leu11Pro",
+        "protein_end": 11,
+        "protein_id": "ENSP00000467857",
+        "protein_start": 11,
+        "transcript_id": "ENST00000498628",
+        "variant_allele": "G"
+      },
+      {
+        "amino_acids": "A",
+        "biotype": "protein_coding",
+        "codons": "gcT/gcC",
+        "consequence_terms": [
+          "synonymous_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000530628.2:c.228T\u003eC",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "hgvsp": "ENSP00000432664.2:p.Ala76=",
+        "protein_end": 76,
+        "protein_id": "ENSP00000432664",
+        "protein_start": 76,
+        "transcript_id": "ENST00000530628",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "processed_transcript",
+        "consequence_terms": [
+          "upstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "transcript_id": "ENST00000577854",
+        "variant_allele": "G"
+      },
+      {
+        "amino_acids": "L/P",
+        "biotype": "protein_coding",
+        "codons": "cTg/cCg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "1/2",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000578845.2:c.32T\u003eC",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "hgvsp": "ENSP00000467390.1:p.Leu11Pro",
+        "protein_end": 11,
+        "protein_id": "ENSP00000467390",
+        "protein_start": 11,
+        "transcript_id": "ENST00000578845",
+        "variant_allele": "G"
+      },
+      {
+        "amino_acids": "L/P",
+        "biotype": "protein_coding",
+        "codons": "cTg/cCg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000579122.1:c.185T\u003eC",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "hgvsp": "ENSP00000464202.1:p.Leu62Pro",
+        "protein_end": 62,
+        "protein_id": "ENSP00000464202",
+        "protein_start": 62,
+        "transcript_id": "ENST00000579122",
+        "variant_allele": "G"
+      },
+      {
+        "amino_acids": "A",
+        "biotype": "protein_coding",
+        "canonical": "1",
+        "codons": "gcT/gcC",
+        "consequence_terms": [
+          "synonymous_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000579755.1:c.228T\u003eC",
+        "hgvsg": "9:g.21971173A\u003eG",
+        "hgvsp": "ENSP00000462950.1:p.Ala76=",
+        "protein_end": 76,
+        "protein_id": "ENSP00000462950",
+        "protein_start": 76,
+        "transcript_id": "ENST00000579755",
+        "variant_allele": "G"
+      }
+    ],
+    "variant": "9:g.21971173A\u003eG"
+  },
+  {
+    "allele_string": "-/C",
+    "annotation_summary": {
+      "assemblyName": "GRCh37",
+      "canonicalTranscriptId": "ENST00000304494",
+      "genomicLocation": {
+        "chromosome": "9",
+        "end": 21971092,
+        "referenceAllele": "-",
+        "start": 21971091,
+        "variantAllele": "C"
+      },
+      "strandSign": "+",
+      "transcriptConsequenceSummaries": [
+        {
+          "aminoAcidAlt": "GX",
+          "aminoAcidRef": "G",
+          "aminoAcids": "G/GX",
+          "codonChange": "ggc/ggGc",
+          "consequenceTerms": "frameshift_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000304494.5:c.266_267insG",
+          "hgvsp": "p.Phe90LeufsTer30",
+          "hgvspShort": "p.F90Lfs*30",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 89,
+            "start": 89
+          },
+          "refSeq": "NM_000077.4",
+          "transcriptId": "ENST00000304494",
+          "uniprotId": "P42771",
+          "variantClassification": "Frame_Shift_Ins"
+        },
+        {
+          "aminoAcidAlt": "X",
+          "aminoAcidRef": "-",
+          "aminoAcids": "-/X",
+          "codonChange": "-/G",
+          "consequenceTerms": "frameshift_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000361570.3:c.432_433insG",
+          "hgvsp": "p.Leu145AlafsTer57",
+          "hgvspShort": "p.L145Afs*57",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 145,
+            "start": 144
+          },
+          "refSeq": "NM_058195.3",
+          "transcriptId": "ENST00000361570",
+          "variantClassification": "Frame_Shift_Ins"
+        },
+        {
+          "consequenceTerms": "non_coding_transcript_exon_variant",
+          "entrezGeneId": "1029",
+          "exon": "1/2",
+          "hgvsc": "ENST00000380150.2:n.240_241insG",
+          "hgvspShort": "p.*80*",
+          "hugoGeneSymbol": "CDKN2A",
+          "transcriptId": "ENST00000380150",
+          "variantClassification": "RNA"
+        },
+        {
+          "consequenceTerms": "3_prime_UTR_variant,NMD_transcript_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000380151.3:c.*189_*190insG",
+          "hugoGeneSymbol": "CDKN2A",
+          "transcriptId": "ENST00000380151",
+          "uniprotId": "P42771-3",
+          "variantClassification": "3'UTR"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "51198",
+          "hugoGeneSymbol": "CDKN2A-AS1",
+          "transcriptId": "ENST00000441769",
+          "uniprotId": "Q9UH64",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "aminoAcidAlt": "GX",
+          "aminoAcidRef": "G",
+          "aminoAcids": "G/GX",
+          "codonChange": "ggc/ggGc",
+          "consequenceTerms": "frameshift_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000446177.1:c.266_267insG",
+          "hgvsp": "p.Phe90LeufsTer30",
+          "hgvspShort": "p.F90Lfs*30",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 89,
+            "start": 89
+          },
+          "transcriptId": "ENST00000446177",
+          "uniprotId": "P42771-4",
+          "variantClassification": "Frame_Shift_Ins"
+        },
+        {
+          "aminoAcidAlt": "GX",
+          "aminoAcidRef": "G",
+          "aminoAcids": "G/GX",
+          "codonChange": "ggc/ggGc",
+          "consequenceTerms": "frameshift_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000479692.2:c.113_114insG",
+          "hgvsp": "p.Phe39LeufsTer30",
+          "hgvspShort": "p.F39Lfs*30",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 38,
+            "start": 38
+          },
+          "transcriptId": "ENST00000479692",
+          "variantClassification": "Frame_Shift_Ins"
+        },
+        {
+          "aminoAcidAlt": "GX",
+          "aminoAcidRef": "G",
+          "aminoAcids": "G/GX",
+          "codonChange": "ggc/ggGc",
+          "consequenceTerms": "frameshift_variant",
+          "entrezGeneId": "1029",
+          "exon": "3/4",
+          "hgvsc": "ENST00000494262.1:c.113_114insG",
+          "hgvsp": "p.Phe39LeufsTer30",
+          "hgvspShort": "p.F39Lfs*30",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 38,
+            "start": 38
+          },
+          "transcriptId": "ENST00000494262",
+          "uniprotId": "P42771-2",
+          "variantClassification": "Frame_Shift_Ins"
+        },
+        {
+          "aminoAcidAlt": "GX",
+          "aminoAcidRef": "G",
+          "aminoAcids": "G/GX",
+          "codonChange": "ggc/ggGc",
+          "consequenceTerms": "frameshift_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/2",
+          "hgvsc": "ENST00000497750.1:c.113_114insG",
+          "hgvsp": "p.Phe39LeufsTer30",
+          "hgvspShort": "p.F39Lfs*30",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 38,
+            "start": 38
+          },
+          "transcriptId": "ENST00000497750",
+          "variantClassification": "Frame_Shift_Ins"
+        },
+        {
+          "aminoAcidAlt": "GX",
+          "aminoAcidRef": "G",
+          "aminoAcids": "G/GX",
+          "codonChange": "ggc/ggGc",
+          "consequenceTerms": "frameshift_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/4",
+          "hgvsc": "ENST00000498124.1:c.266_267insG",
+          "hgvsp": "p.Phe90LeufsTer30",
+          "hgvspShort": "p.F90Lfs*30",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 89,
+            "start": 89
+          },
+          "refSeq": "NM_001195132.1",
+          "transcriptId": "ENST00000498124",
+          "uniprotId": "P42771-4",
+          "variantClassification": "Frame_Shift_Ins"
+        },
+        {
+          "aminoAcidAlt": "GX",
+          "aminoAcidRef": "G",
+          "aminoAcids": "G/GX",
+          "codonChange": "ggc/ggGc",
+          "consequenceTerms": "frameshift_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000498628.2:c.113_114insG",
+          "hgvsp": "p.Phe39LeufsTer30",
+          "hgvspShort": "p.F39Lfs*30",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 38,
+            "start": 38
+          },
+          "transcriptId": "ENST00000498628",
+          "uniprotId": "P42771-2",
+          "variantClassification": "Frame_Shift_Ins"
+        },
+        {
+          "aminoAcidAlt": "X",
+          "aminoAcidRef": "-",
+          "aminoAcids": "-/X",
+          "codonChange": "-/G",
+          "consequenceTerms": "frameshift_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000530628.2:c.309_310insG",
+          "hgvsp": "p.Leu104AlafsTer44",
+          "hgvspShort": "p.L104Afs*44",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 104,
+            "start": 103
+          },
+          "transcriptId": "ENST00000530628",
+          "uniprotId": "Q8N726",
+          "variantClassification": "Frame_Shift_Ins"
+        },
+        {
+          "consequenceTerms": "upstream_gene_variant",
+          "entrezGeneId": "1029",
+          "hugoGeneSymbol": "CDKN2A",
+          "transcriptId": "ENST00000577854",
+          "variantClassification": "5'Flank"
+        },
+        {
+          "aminoAcidAlt": "GX",
+          "aminoAcidRef": "G",
+          "aminoAcids": "G/GX",
+          "codonChange": "ggc/ggGc",
+          "consequenceTerms": "frameshift_variant",
+          "entrezGeneId": "1029",
+          "exon": "1/2",
+          "hgvsc": "ENST00000578845.2:c.113_114insG",
+          "hgvsp": "p.Phe39LeufsTer30",
+          "hgvspShort": "p.F39Lfs*30",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 38,
+            "start": 38
+          },
+          "transcriptId": "ENST00000578845",
+          "uniprotId": "P42771-2",
+          "variantClassification": "Frame_Shift_Ins"
+        },
+        {
+          "aminoAcidAlt": "GX",
+          "aminoAcidRef": "G",
+          "aminoAcids": "G/GX",
+          "codonChange": "ggc/ggGc",
+          "consequenceTerms": "frameshift_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000579122.1:c.266_267insG",
+          "hgvsp": "p.Phe90LeufsTer30",
+          "hgvspShort": "p.F90Lfs*30",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 89,
+            "start": 89
+          },
+          "transcriptId": "ENST00000579122",
+          "variantClassification": "Frame_Shift_Ins"
+        },
+        {
+          "aminoAcidAlt": "X",
+          "aminoAcidRef": "-",
+          "aminoAcids": "-/X",
+          "codonChange": "-/G",
+          "consequenceTerms": "frameshift_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000579755.1:c.309_310insG",
+          "hgvsp": "p.Leu104AlafsTer57",
+          "hgvspShort": "p.L104Afs*57",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 104,
+            "start": 103
+          },
+          "transcriptId": "ENST00000579755",
+          "uniprotId": "Q8N726",
+          "variantClassification": "Frame_Shift_Ins"
+        }
+      ],
+      "transcriptConsequenceSummary": {
+        "aminoAcidAlt": "GX",
+        "aminoAcidRef": "G",
+        "aminoAcids": "G/GX",
+        "codonChange": "ggc/ggGc",
+        "consequenceTerms": "frameshift_variant",
+        "entrezGeneId": "1029",
+        "exon": "2/3",
+        "hgvsc": "ENST00000304494.5:c.266_267insG",
+        "hgvsp": "p.Phe90LeufsTer30",
+        "hgvspShort": "p.F90Lfs*30",
+        "hugoGeneSymbol": "CDKN2A",
+        "proteinPosition": {
+          "end": 89,
+          "start": 89
+        },
+        "refSeq": "NM_000077.4",
+        "transcriptId": "ENST00000304494",
+        "uniprotId": "P42771",
+        "variantClassification": "Frame_Shift_Ins"
+      },
+      "transcriptConsequences": [
+        {
+          "aminoAcidAlt": "GX",
+          "aminoAcidRef": "G",
+          "aminoAcids": "G/GX",
+          "codonChange": "ggc/ggGc",
+          "consequenceTerms": "frameshift_variant",
+          "entrezGeneId": "1029",
+          "exon": "2/3",
+          "hgvsc": "ENST00000304494.5:c.266_267insG",
+          "hgvsp": "p.Phe90LeufsTer30",
+          "hgvspShort": "p.F90Lfs*30",
+          "hugoGeneSymbol": "CDKN2A",
+          "proteinPosition": {
+            "end": 89,
+            "start": 89
+          },
+          "refSeq": "NM_000077.4",
+          "transcriptId": "ENST00000304494",
+          "uniprotId": "P42771",
+          "variantClassification": "Frame_Shift_Ins"
+        }
+      ],
+      "variant": "9:g.21971091_21971092insC",
+      "variantType": "INS"
+    },
+    "assembly_name": "GRCh37",
+    "end": 21971091,
+    "hgvsg": "9:g.21971094dup",
+    "id": "9:g.21971091_21971092insC",
+    "most_severe_consequence": "frameshift_variant",
+    "originalVariantQuery": "9,21971091,21971092,-,C",
+    "seq_region_name": "9",
+    "start": 21971092,
+    "strand": 1,
+    "successfully_annotated": true,
+    "transcript_consequences": [
+      {
+        "amino_acids": "G/GX",
+        "biotype": "protein_coding",
+        "canonical": "1",
+        "codons": "ggc/ggGc",
+        "consequence_terms": [
+          "frameshift_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000304494.5:c.266_267insG",
+        "hgvsg": "9:g.21971094dup",
+        "hgvsp": "ENSP00000307101.5:p.Phe90LeufsTer30",
+        "protein_end": 89,
+        "protein_id": "ENSP00000307101",
+        "protein_start": 89,
+        "refseq_transcript_ids": [
+          "NM_000077.4"
+        ],
+        "transcript_id": "ENST00000304494",
+        "variant_allele": "C"
+      },
+      {
+        "amino_acids": "-/X",
+        "biotype": "protein_coding",
+        "codons": "-/G",
+        "consequence_terms": [
+          "frameshift_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000361570.3:c.432_433insG",
+        "hgvsg": "9:g.21971094dup",
+        "hgvsp": "ENSP00000355153.3:p.Leu145AlafsTer57",
+        "protein_end": 145,
+        "protein_id": "ENSP00000355153",
+        "protein_start": 144,
+        "refseq_transcript_ids": [
+          "NM_058195.3"
+        ],
+        "transcript_id": "ENST00000361570",
+        "variant_allele": "C"
+      },
+      {
+        "biotype": "processed_transcript",
+        "consequence_terms": [
+          "non_coding_transcript_exon_variant"
+        ],
+        "exon": "1/2",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000380150.2:n.240_241insG",
+        "hgvsg": "9:g.21971094dup",
+        "transcript_id": "ENST00000380150",
+        "variant_allele": "C"
+      },
+      {
+        "biotype": "nonsense_mediated_decay",
+        "consequence_terms": [
+          "3_prime_UTR_variant",
+          "NMD_transcript_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000380151.3:c.*189_*190insG",
+        "hgvsg": "9:g.21971094dup",
+        "protein_id": "ENSP00000369496",
+        "transcript_id": "ENST00000380151",
+        "variant_allele": "C"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000224854",
+        "gene_symbol": "C9orf53",
+        "hgnc_id": "23831",
+        "hgvsg": "9:g.21971094dup",
+        "protein_id": "ENSP00000414893",
+        "transcript_id": "ENST00000441769",
+        "variant_allele": "C"
+      },
+      {
+        "amino_acids": "G/GX",
+        "biotype": "protein_coding",
+        "codons": "ggc/ggGc",
+        "consequence_terms": [
+          "frameshift_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000446177.1:c.266_267insG",
+        "hgvsg": "9:g.21971094dup",
+        "hgvsp": "ENSP00000394932.1:p.Phe90LeufsTer30",
+        "protein_end": 89,
+        "protein_id": "ENSP00000394932",
+        "protein_start": 89,
+        "transcript_id": "ENST00000446177",
+        "variant_allele": "C"
+      },
+      {
+        "amino_acids": "G/GX",
+        "biotype": "protein_coding",
+        "codons": "ggc/ggGc",
+        "consequence_terms": [
+          "frameshift_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000479692.2:c.113_114insG",
+        "hgvsg": "9:g.21971094dup",
+        "hgvsp": "ENSP00000466887.1:p.Phe39LeufsTer30",
+        "protein_end": 38,
+        "protein_id": "ENSP00000466887",
+        "protein_start": 38,
+        "transcript_id": "ENST00000479692",
+        "variant_allele": "C"
+      },
+      {
+        "amino_acids": "G/GX",
+        "biotype": "protein_coding",
+        "codons": "ggc/ggGc",
+        "consequence_terms": [
+          "frameshift_variant"
+        ],
+        "exon": "3/4",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000494262.1:c.113_114insG",
+        "hgvsg": "9:g.21971094dup",
+        "hgvsp": "ENSP00000464952.1:p.Phe39LeufsTer30",
+        "protein_end": 38,
+        "protein_id": "ENSP00000464952",
+        "protein_start": 38,
+        "transcript_id": "ENST00000494262",
+        "variant_allele": "C"
+      },
+      {
+        "amino_acids": "G/GX",
+        "biotype": "protein_coding",
+        "codons": "ggc/ggGc",
+        "consequence_terms": [
+          "frameshift_variant"
+        ],
+        "exon": "2/2",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000497750.1:c.113_114insG",
+        "hgvsg": "9:g.21971094dup",
+        "hgvsp": "ENSP00000468510.1:p.Phe39LeufsTer30",
+        "protein_end": 38,
+        "protein_id": "ENSP00000468510",
+        "protein_start": 38,
+        "transcript_id": "ENST00000497750",
+        "variant_allele": "C"
+      },
+      {
+        "amino_acids": "G/GX",
+        "biotype": "protein_coding",
+        "codons": "ggc/ggGc",
+        "consequence_terms": [
+          "frameshift_variant"
+        ],
+        "exon": "2/4",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000498124.1:c.266_267insG",
+        "hgvsg": "9:g.21971094dup",
+        "hgvsp": "ENSP00000418915.1:p.Phe90LeufsTer30",
+        "protein_end": 89,
+        "protein_id": "ENSP00000418915",
+        "protein_start": 89,
+        "refseq_transcript_ids": [
+          "NM_001195132.1"
+        ],
+        "transcript_id": "ENST00000498124",
+        "variant_allele": "C"
+      },
+      {
+        "amino_acids": "G/GX",
+        "biotype": "protein_coding",
+        "codons": "ggc/ggGc",
+        "consequence_terms": [
+          "frameshift_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000498628.2:c.113_114insG",
+        "hgvsg": "9:g.21971094dup",
+        "hgvsp": "ENSP00000467857.1:p.Phe39LeufsTer30",
+        "protein_end": 38,
+        "protein_id": "ENSP00000467857",
+        "protein_start": 38,
+        "transcript_id": "ENST00000498628",
+        "variant_allele": "C"
+      },
+      {
+        "amino_acids": "-/X",
+        "biotype": "protein_coding",
+        "codons": "-/G",
+        "consequence_terms": [
+          "frameshift_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000530628.2:c.309_310insG",
+        "hgvsg": "9:g.21971094dup",
+        "hgvsp": "ENSP00000432664.2:p.Leu104AlafsTer44",
+        "protein_end": 104,
+        "protein_id": "ENSP00000432664",
+        "protein_start": 103,
+        "transcript_id": "ENST00000530628",
+        "variant_allele": "C"
+      },
+      {
+        "biotype": "processed_transcript",
+        "consequence_terms": [
+          "upstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsg": "9:g.21971094dup",
+        "transcript_id": "ENST00000577854",
+        "variant_allele": "C"
+      },
+      {
+        "amino_acids": "G/GX",
+        "biotype": "protein_coding",
+        "codons": "ggc/ggGc",
+        "consequence_terms": [
+          "frameshift_variant"
+        ],
+        "exon": "1/2",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000578845.2:c.113_114insG",
+        "hgvsg": "9:g.21971094dup",
+        "hgvsp": "ENSP00000467390.1:p.Phe39LeufsTer30",
+        "protein_end": 38,
+        "protein_id": "ENSP00000467390",
+        "protein_start": 38,
+        "transcript_id": "ENST00000578845",
+        "variant_allele": "C"
+      },
+      {
+        "amino_acids": "G/GX",
+        "biotype": "protein_coding",
+        "codons": "ggc/ggGc",
+        "consequence_terms": [
+          "frameshift_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000579122.1:c.266_267insG",
+        "hgvsg": "9:g.21971094dup",
+        "hgvsp": "ENSP00000464202.1:p.Phe90LeufsTer30",
+        "protein_end": 89,
+        "protein_id": "ENSP00000464202",
+        "protein_start": 89,
+        "transcript_id": "ENST00000579122",
+        "variant_allele": "C"
+      },
+      {
+        "amino_acids": "-/X",
+        "biotype": "protein_coding",
+        "canonical": "1",
+        "codons": "-/G",
+        "consequence_terms": [
+          "frameshift_variant"
+        ],
+        "exon": "2/3",
+        "gene_id": "ENSG00000147889",
+        "gene_symbol": "CDKN2A",
+        "hgnc_id": "1787",
+        "hgvsc": "ENST00000579755.1:c.309_310insG",
+        "hgvsg": "9:g.21971094dup",
+        "hgvsp": "ENSP00000462950.1:p.Leu104AlafsTer57",
+        "protein_end": 104,
+        "protein_id": "ENSP00000462950",
+        "protein_start": 103,
+        "transcript_id": "ENST00000579755",
+        "variant_allele": "C"
+      }
+    ],
+    "variant": "9:g.21971091_21971092insC"
+  },
+  {
+    "allele_string": "G/A",
+    "annotation_summary": {
+      "assemblyName": "GRCh37",
+      "canonicalTranscriptId": "ENST00000360203",
+      "genomicLocation": {
+        "chromosome": "20",
+        "end": 62319056,
+        "referenceAllele": "G",
+        "start": 62319056,
+        "variantAllele": "A"
+      },
+      "strandSign": "+",
+      "transcriptConsequenceSummaries": [
+        {
+          "aminoAcidAlt": "I",
+          "aminoAcidRef": "V",
+          "aminoAcids": "V/I",
+          "codonChange": "Gtc/Atc",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "51750",
+          "exon": "17/36",
+          "hgvsc": "ENST00000318100.4:c.1414G\u003eA",
+          "hgvsp": "p.Val472Ile",
+          "hgvspShort": "p.V472I",
+          "hugoGeneSymbol": "RTEL1",
+          "proteinPosition": {
+            "end": 472,
+            "start": 472
+          },
+          "transcriptId": "ENST00000318100",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "I",
+          "aminoAcidRef": "V",
+          "aminoAcids": "V/I",
+          "codonChange": "Gtc/Atc",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "51750",
+          "exon": "17/35",
+          "hgvsc": "ENST00000360203.5:c.1414G\u003eA",
+          "hgvsp": "p.Val472Ile",
+          "hgvspShort": "p.V472I",
+          "hugoGeneSymbol": "RTEL1",
+          "proteinPosition": {
+            "end": 472,
+            "start": 472
+          },
+          "refSeq": "NM_001283009.1",
+          "transcriptId": "ENST00000360203",
+          "uniprotId": "Q9NZ71-6",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "consequenceTerms": "upstream_gene_variant",
+          "entrezGeneId": "51750",
+          "hugoGeneSymbol": "RTEL1",
+          "transcriptId": "ENST00000370003",
+          "uniprotId": "Q9NZ71-5",
+          "variantClassification": "5'Flank"
+        },
+        {
+          "aminoAcidAlt": "I",
+          "aminoAcidRef": "V",
+          "aminoAcids": "V/I",
+          "codonChange": "Gtc/Atc",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "51750",
+          "exon": "17/35",
+          "hgvsc": "ENST00000370018.3:c.1414G\u003eA",
+          "hgvsp": "p.Val472Ile",
+          "hgvspShort": "p.V472I",
+          "hugoGeneSymbol": "RTEL1",
+          "proteinPosition": {
+            "end": 472,
+            "start": 472
+          },
+          "refSeq": "NM_016434.3",
+          "transcriptId": "ENST00000370018",
+          "uniprotId": "Q9NZ71",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "consequenceTerms": "upstream_gene_variant",
+          "entrezGeneId": "51750",
+          "hugoGeneSymbol": "RTEL1",
+          "transcriptId": "ENST00000425905",
+          "variantClassification": "5'Flank"
+        },
+        {
+          "consequenceTerms": "upstream_gene_variant",
+          "entrezGeneId": "51750",
+          "hugoGeneSymbol": "RTEL1",
+          "transcriptId": "ENST00000496816",
+          "variantClassification": "5'Flank"
+        },
+        {
+          "aminoAcidAlt": "I",
+          "aminoAcidRef": "V",
+          "aminoAcids": "V/I",
+          "codonChange": "Gtc/Atc",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "51750",
+          "exon": "17/35",
+          "hgvsc": "ENST00000508582.2:c.1486G\u003eA",
+          "hgvsp": "p.Val496Ile",
+          "hgvspShort": "p.V496I",
+          "hugoGeneSymbol": "RTEL1",
+          "proteinPosition": {
+            "end": 496,
+            "start": 496
+          },
+          "transcriptId": "ENST00000508582",
+          "uniprotId": "Q9NZ71-7",
+          "variantClassification": "Missense_Mutation"
+        }
+      ],
+      "transcriptConsequenceSummary": {
+        "aminoAcidAlt": "I",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/I",
+        "codonChange": "Gtc/Atc",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "51750",
+        "exon": "17/35",
+        "hgvsc": "ENST00000360203.5:c.1414G\u003eA",
+        "hgvsp": "p.Val472Ile",
+        "hgvspShort": "p.V472I",
+        "hugoGeneSymbol": "RTEL1",
+        "proteinPosition": {
+          "end": 472,
+          "start": 472
+        },
+        "refSeq": "NM_001283009.1",
+        "transcriptId": "ENST00000360203",
+        "uniprotId": "Q9NZ71-6",
+        "variantClassification": "Missense_Mutation"
+      },
+      "transcriptConsequences": [
+        {
+          "aminoAcidAlt": "I",
+          "aminoAcidRef": "V",
+          "aminoAcids": "V/I",
+          "codonChange": "Gtc/Atc",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "51750",
+          "exon": "17/35",
+          "hgvsc": "ENST00000360203.5:c.1414G\u003eA",
+          "hgvsp": "p.Val472Ile",
+          "hgvspShort": "p.V472I",
+          "hugoGeneSymbol": "RTEL1",
+          "proteinPosition": {
+            "end": 472,
+            "start": 472
+          },
+          "refSeq": "NM_001283009.1",
+          "transcriptId": "ENST00000360203",
+          "uniprotId": "Q9NZ71-6",
+          "variantClassification": "Missense_Mutation"
+        }
+      ],
+      "variant": "20:g.62319056G\u003eA",
+      "variantType": "SNP"
+    },
+    "assembly_name": "GRCh37",
+    "end": 62319056,
+    "hgvsg": "20:g.62319056G\u003eA",
+    "id": "20:g.62319056G\u003eA",
+    "most_severe_consequence": "missense_variant",
+    "originalVariantQuery": "20,62319056,62319056,G,A",
+    "seq_region_name": "20",
+    "start": 62319056,
+    "strand": 1,
+    "successfully_annotated": true,
+    "transcript_consequences": [
+      {
+        "amino_acids": "V/I",
+        "biotype": "protein_coding",
+        "codons": "Gtc/Atc",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "17/36",
+        "gene_id": "ENSG00000258366",
+        "gene_symbol": "RTEL1",
+        "hgnc_id": "15888",
+        "hgvsc": "ENST00000318100.4:c.1414G\u003eA",
+        "hgvsg": "20:g.62319056G\u003eA",
+        "hgvsp": "ENSP00000322287.4:p.Val472Ile",
+        "protein_end": 472,
+        "protein_id": "ENSP00000322287",
+        "protein_start": 472,
+        "transcript_id": "ENST00000318100",
+        "variant_allele": "A"
+      },
+      {
+        "amino_acids": "V/I",
+        "biotype": "protein_coding",
+        "canonical": "1",
+        "codons": "Gtc/Atc",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "17/35",
+        "gene_id": "ENSG00000258366",
+        "gene_symbol": "RTEL1",
+        "hgnc_id": "15888",
+        "hgvsc": "ENST00000360203.5:c.1414G\u003eA",
+        "hgvsg": "20:g.62319056G\u003eA",
+        "hgvsp": "ENSP00000353332.5:p.Val472Ile",
+        "protein_end": 472,
+        "protein_id": "ENSP00000353332",
+        "protein_start": 472,
+        "refseq_transcript_ids": [
+          "NM_001283009.1"
+        ],
+        "transcript_id": "ENST00000360203",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "upstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000258366",
+        "gene_symbol": "RTEL1",
+        "hgnc_id": "15888",
+        "hgvsg": "20:g.62319056G\u003eA",
+        "protein_id": "ENSP00000359020",
+        "transcript_id": "ENST00000370003",
+        "variant_allele": "A"
+      },
+      {
+        "amino_acids": "V/I",
+        "biotype": "protein_coding",
+        "codons": "Gtc/Atc",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "17/35",
+        "gene_id": "ENSG00000258366",
+        "gene_symbol": "RTEL1",
+        "hgnc_id": "15888",
+        "hgvsc": "ENST00000370018.3:c.1414G\u003eA",
+        "hgvsg": "20:g.62319056G\u003eA",
+        "hgvsp": "ENSP00000359035.3:p.Val472Ile",
+        "protein_end": 472,
+        "protein_id": "ENSP00000359035",
+        "protein_start": 472,
+        "refseq_transcript_ids": [
+          "NM_016434.3",
+          "NM_032957.4"
+        ],
+        "transcript_id": "ENST00000370018",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "upstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000258366",
+        "gene_symbol": "RTEL1",
+        "hgnc_id": "15888",
+        "hgvsg": "20:g.62319056G\u003eA",
+        "protein_id": "ENSP00000388063",
+        "transcript_id": "ENST00000425905",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "nonsense_mediated_decay",
+        "consequence_terms": [
+          "upstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000258366",
+        "gene_symbol": "RTEL1",
+        "hgnc_id": "15888",
+        "hgvsg": "20:g.62319056G\u003eA",
+        "protein_id": "ENSP00000425576",
+        "transcript_id": "ENST00000496816",
+        "variant_allele": "A"
+      },
+      {
+        "amino_acids": "V/I",
+        "biotype": "protein_coding",
+        "codons": "Gtc/Atc",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "17/35",
+        "gene_id": "ENSG00000258366",
+        "gene_symbol": "RTEL1",
+        "hgnc_id": "15888",
+        "hgvsc": "ENST00000508582.2:c.1486G\u003eA",
+        "hgvsg": "20:g.62319056G\u003eA",
+        "hgvsp": "ENSP00000424307.2:p.Val496Ile",
+        "protein_end": 496,
+        "protein_id": "ENSP00000424307",
+        "protein_start": 496,
+        "transcript_id": "ENST00000508582",
+        "variant_allele": "A"
+      }
+    ],
+    "variant": "20:g.62319056G\u003eA"
+  },
+  {
+    "allele_string": "A/G",
+    "annotation_summary": {
+      "assemblyName": "GRCh37",
+      "canonicalTranscriptId": "ENST00000606794",
+      "genomicLocation": {
+        "chromosome": "11",
+        "end": 57003943,
+        "referenceAllele": "A",
+        "start": 57003943,
+        "variantAllele": "G"
+      },
+      "strandSign": "+",
+      "transcriptConsequenceSummaries": [
+        {
+          "aminoAcidAlt": "A",
+          "aminoAcidRef": "V",
+          "aminoAcids": "V/A",
+          "codonChange": "gTg/gCg",
+          "consequenceTerms": "missense_variant,NMD_transcript_variant",
+          "entrezGeneId": "187",
+          "exon": "1/2",
+          "hgvsc": "ENST00000257254.3:c.536T\u003eC",
+          "hgvsp": "p.Val179Ala",
+          "hgvspShort": "p.V179A",
+          "hugoGeneSymbol": "APLNR",
+          "proteinPosition": {
+            "end": 179,
+            "start": 179
+          },
+          "transcriptId": "ENST00000257254",
+          "uniprotId": "P35414",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "A",
+          "aminoAcidRef": "V",
+          "aminoAcids": "V/A",
+          "codonChange": "gTg/gCg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "187",
+          "exon": "1/1",
+          "hgvsc": "ENST00000606794.1:c.536T\u003eC",
+          "hgvsp": "p.Val179Ala",
+          "hgvspShort": "p.V179A",
+          "hugoGeneSymbol": "APLNR",
+          "proteinPosition": {
+            "end": 179,
+            "start": 179
+          },
+          "refSeq": "NM_005161.4",
+          "transcriptId": "ENST00000606794",
+          "uniprotId": "P35414",
+          "variantClassification": "Missense_Mutation"
+        }
+      ],
+      "transcriptConsequenceSummary": {
+        "aminoAcidAlt": "A",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/A",
+        "codonChange": "gTg/gCg",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "187",
+        "exon": "1/1",
+        "hgvsc": "ENST00000606794.1:c.536T\u003eC",
+        "hgvsp": "p.Val179Ala",
+        "hgvspShort": "p.V179A",
+        "hugoGeneSymbol": "APLNR",
+        "proteinPosition": {
+          "end": 179,
+          "start": 179
+        },
+        "refSeq": "NM_005161.4",
+        "transcriptId": "ENST00000606794",
+        "uniprotId": "P35414",
+        "variantClassification": "Missense_Mutation"
+      },
+      "transcriptConsequences": [
+        {
+          "aminoAcidAlt": "A",
+          "aminoAcidRef": "V",
+          "aminoAcids": "V/A",
+          "codonChange": "gTg/gCg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "187",
+          "exon": "1/1",
+          "hgvsc": "ENST00000606794.1:c.536T\u003eC",
+          "hgvsp": "p.Val179Ala",
+          "hgvspShort": "p.V179A",
+          "hugoGeneSymbol": "APLNR",
+          "proteinPosition": {
+            "end": 179,
+            "start": 179
+          },
+          "refSeq": "NM_005161.4",
+          "transcriptId": "ENST00000606794",
+          "uniprotId": "P35414",
+          "variantClassification": "Missense_Mutation"
+        }
+      ],
+      "variant": "11:g.57003943A\u003eG",
+      "variantType": "SNP"
+    },
+    "assembly_name": "GRCh37",
+    "end": 57003943,
+    "hgvsg": "11:g.57003943A\u003eG",
+    "id": "11:g.57003943A\u003eG",
+    "most_severe_consequence": "missense_variant",
+    "originalVariantQuery": "11,57003943,57003943,A,G",
+    "seq_region_name": "11",
+    "start": 57003943,
+    "strand": 1,
+    "successfully_annotated": true,
+    "transcript_consequences": [
+      {
+        "amino_acids": "V/A",
+        "biotype": "nonsense_mediated_decay",
+        "codons": "gTg/gCg",
+        "consequence_terms": [
+          "missense_variant",
+          "NMD_transcript_variant"
+        ],
+        "exon": "1/2",
+        "gene_id": "ENSG00000134817",
+        "gene_symbol": "APLNR",
+        "hgnc_id": "339",
+        "hgvsc": "ENST00000257254.3:c.536T\u003eC",
+        "hgvsg": "11:g.57003943A\u003eG",
+        "hgvsp": "ENSP00000257254.3:p.Val179Ala",
+        "protein_end": 179,
+        "protein_id": "ENSP00000257254",
+        "protein_start": 179,
+        "transcript_id": "ENST00000257254",
+        "variant_allele": "G"
+      },
+      {
+        "amino_acids": "V/A",
+        "biotype": "protein_coding",
+        "canonical": "1",
+        "codons": "gTg/gCg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "1/1",
+        "gene_id": "ENSG00000134817",
+        "gene_symbol": "APLNR",
+        "hgnc_id": "339",
+        "hgvsc": "ENST00000606794.1:c.536T\u003eC",
+        "hgvsg": "11:g.57003943A\u003eG",
+        "hgvsp": "ENSP00000475344.1:p.Val179Ala",
+        "protein_end": 179,
+        "protein_id": "ENSP00000475344",
+        "protein_start": 179,
+        "refseq_transcript_ids": [
+          "NM_005161.4"
+        ],
+        "transcript_id": "ENST00000606794",
+        "variant_allele": "G"
+      }
+    ],
+    "variant": "11:g.57003943A\u003eG"
+  },
+  {
+    "allele_string": "C/T",
+    "annotation_summary": {
+      "assemblyName": "GRCh37",
+      "canonicalTranscriptId": "ENST00000382891",
+      "genomicLocation": {
+        "chromosome": "4",
+        "end": 1980527,
+        "referenceAllele": "C",
+        "start": 1980527,
+        "variantAllele": "T"
+      },
+      "strandSign": "+",
+      "transcriptConsequenceSummaries": [
+        {
+          "consequenceTerms": "3_prime_UTR_variant,NMD_transcript_variant",
+          "entrezGeneId": "7468",
+          "exon": "25/25",
+          "hgvsc": "ENST00000312087.6:c.*2272C\u003eT",
+          "hugoGeneSymbol": "NSD2",
+          "transcriptId": "ENST00000312087",
+          "uniprotId": "O96028-3",
+          "variantClassification": "3'UTR"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "7469",
+          "hugoGeneSymbol": "NELFA",
+          "transcriptId": "ENST00000333877",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "consequenceTerms": "3_prime_UTR_variant,NMD_transcript_variant",
+          "entrezGeneId": "7468",
+          "exon": "25/25",
+          "hgvsc": "ENST00000353275.5:c.*2139C\u003eT",
+          "hugoGeneSymbol": "NSD2",
+          "transcriptId": "ENST00000353275",
+          "uniprotId": "O96028-3",
+          "variantClassification": "3'UTR"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "7469",
+          "hugoGeneSymbol": "NELFA",
+          "transcriptId": "ENST00000382882",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "aminoAcidAlt": "V",
+          "aminoAcidRef": "A",
+          "aminoAcids": "A/V",
+          "codonChange": "gCg/gTg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "7468",
+          "exon": "12/12",
+          "hgvsc": "ENST00000382888.3:c.2033C\u003eT",
+          "hgvsp": "p.Ala678Val",
+          "hgvspShort": "p.A678V",
+          "hugoGeneSymbol": "NSD2",
+          "proteinPosition": {
+            "end": 678,
+            "start": 678
+          },
+          "transcriptId": "ENST00000382888",
+          "uniprotId": "O96028-2",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "V",
+          "aminoAcidRef": "A",
+          "aminoAcids": "A/V",
+          "codonChange": "gCg/gTg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "7468",
+          "exon": "22/22",
+          "hgvsc": "ENST00000382891.5:c.3989C\u003eT",
+          "hgvsp": "p.Ala1330Val",
+          "hgvspShort": "p.A1330V",
+          "hugoGeneSymbol": "NSD2",
+          "proteinPosition": {
+            "end": 1330,
+            "start": 1330
+          },
+          "refSeq": "NM_133335.3",
+          "transcriptId": "ENST00000382891",
+          "uniprotId": "O96028",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "V",
+          "aminoAcidRef": "A",
+          "aminoAcids": "A/V",
+          "codonChange": "gCg/gTg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "7468",
+          "exon": "23/23",
+          "hgvsc": "ENST00000382892.2:c.3989C\u003eT",
+          "hgvsp": "p.Ala1330Val",
+          "hgvspShort": "p.A1330V",
+          "hugoGeneSymbol": "NSD2",
+          "proteinPosition": {
+            "end": 1330,
+            "start": 1330
+          },
+          "refSeq": "NM_133331.2",
+          "transcriptId": "ENST00000382892",
+          "uniprotId": "O96028",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "aminoAcidAlt": "V",
+          "aminoAcidRef": "A",
+          "aminoAcids": "A/V",
+          "codonChange": "gCg/gTg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "7468",
+          "exon": "24/24",
+          "hgvsc": "ENST00000382895.3:c.3989C\u003eT",
+          "hgvsp": "p.Ala1330Val",
+          "hgvspShort": "p.A1330V",
+          "hugoGeneSymbol": "NSD2",
+          "proteinPosition": {
+            "end": 1330,
+            "start": 1330
+          },
+          "refSeq": "NM_133330.2",
+          "transcriptId": "ENST00000382895",
+          "uniprotId": "O96028",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "7469",
+          "hugoGeneSymbol": "NELFA",
+          "refSeq": "NM_005663.4",
+          "transcriptId": "ENST00000411638",
+          "uniprotId": "Q9H3P2",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "7469",
+          "hugoGeneSymbol": "NELFA",
+          "transcriptId": "ENST00000416258",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "7469",
+          "hugoGeneSymbol": "NELFA",
+          "transcriptId": "ENST00000463820",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "7469",
+          "hugoGeneSymbol": "NELFA",
+          "transcriptId": "ENST00000467661",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "consequenceTerms": "non_coding_transcript_exon_variant",
+          "entrezGeneId": "7468",
+          "exon": "14/14",
+          "hgvsc": "ENST00000482415.2:n.2606C\u003eT",
+          "hgvspShort": "p.*869*",
+          "hugoGeneSymbol": "NSD2",
+          "transcriptId": "ENST00000482415",
+          "variantClassification": "RNA"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "677770",
+          "hugoGeneSymbol": "SCARNA22",
+          "transcriptId": "ENST00000503991",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "consequenceTerms": "non_coding_transcript_exon_variant",
+          "entrezGeneId": "7468",
+          "exon": "2/2",
+          "hgvsc": "ENST00000508299.1:n.490C\u003eT",
+          "hgvspShort": "p.*164*",
+          "hugoGeneSymbol": "NSD2",
+          "transcriptId": "ENST00000508299",
+          "variantClassification": "RNA"
+        },
+        {
+          "aminoAcidAlt": "V",
+          "aminoAcidRef": "A",
+          "aminoAcids": "A/V",
+          "codonChange": "gCg/gTg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "7468",
+          "exon": "22/22",
+          "hgvsc": "ENST00000508803.1:c.3989C\u003eT",
+          "hgvsp": "p.Ala1330Val",
+          "hgvspShort": "p.A1330V",
+          "hugoGeneSymbol": "NSD2",
+          "proteinPosition": {
+            "end": 1330,
+            "start": 1330
+          },
+          "refSeq": "NM_001042424.2",
+          "transcriptId": "ENST00000508803",
+          "uniprotId": "O96028",
+          "variantClassification": "Missense_Mutation"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "7468",
+          "hugoGeneSymbol": "NSD2",
+          "transcriptId": "ENST00000515695",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "7469",
+          "hugoGeneSymbol": "NELFA",
+          "transcriptId": "ENST00000542778",
+          "variantClassification": "3'Flank"
+        }
+      ],
+      "transcriptConsequenceSummary": {
+        "aminoAcidAlt": "V",
+        "aminoAcidRef": "A",
+        "aminoAcids": "A/V",
+        "codonChange": "gCg/gTg",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "7468",
+        "exon": "22/22",
+        "hgvsc": "ENST00000382891.5:c.3989C\u003eT",
+        "hgvsp": "p.Ala1330Val",
+        "hgvspShort": "p.A1330V",
+        "hugoGeneSymbol": "NSD2",
+        "proteinPosition": {
+          "end": 1330,
+          "start": 1330
+        },
+        "refSeq": "NM_133335.3",
+        "transcriptId": "ENST00000382891",
+        "uniprotId": "O96028",
+        "variantClassification": "Missense_Mutation"
+      },
+      "transcriptConsequences": [
+        {
+          "aminoAcidAlt": "V",
+          "aminoAcidRef": "A",
+          "aminoAcids": "A/V",
+          "codonChange": "gCg/gTg",
+          "consequenceTerms": "missense_variant",
+          "entrezGeneId": "7468",
+          "exon": "22/22",
+          "hgvsc": "ENST00000382891.5:c.3989C\u003eT",
+          "hgvsp": "p.Ala1330Val",
+          "hgvspShort": "p.A1330V",
+          "hugoGeneSymbol": "NSD2",
+          "proteinPosition": {
+            "end": 1330,
+            "start": 1330
+          },
+          "refSeq": "NM_133335.3",
+          "transcriptId": "ENST00000382891",
+          "uniprotId": "O96028",
+          "variantClassification": "Missense_Mutation"
+        }
+      ],
+      "variant": "4:g.1980527C\u003eT",
+      "variantType": "SNP"
+    },
+    "assembly_name": "GRCh37",
+    "end": 1980527,
+    "hgvsg": "4:g.1980527C\u003eT",
+    "id": "4:g.1980527C\u003eT",
+    "most_severe_consequence": "missense_variant",
+    "originalVariantQuery": "4,1980527,1980527,C,T",
+    "seq_region_name": "4",
+    "start": 1980527,
+    "strand": 1,
+    "successfully_annotated": true,
+    "transcript_consequences": [
+      {
+        "biotype": "nonsense_mediated_decay",
+        "consequence_terms": [
+          "3_prime_UTR_variant",
+          "NMD_transcript_variant"
+        ],
+        "exon": "25/25",
+        "gene_id": "ENSG00000109685",
+        "gene_symbol": "WHSC1",
+        "hgnc_id": "12766",
+        "hgvsc": "ENST00000312087.6:c.*2272C\u003eT",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "protein_id": "ENSP00000308780",
+        "transcript_id": "ENST00000312087",
+        "variant_allele": "T"
+      },
+      {
+        "biotype": "nonsense_mediated_decay",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000185049",
+        "gene_symbol": "NELFA",
+        "hgnc_id": "12768",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "protein_id": "ENSP00000330311",
+        "transcript_id": "ENST00000333877",
+        "variant_allele": "T"
+      },
+      {
+        "biotype": "nonsense_mediated_decay",
+        "consequence_terms": [
+          "3_prime_UTR_variant",
+          "NMD_transcript_variant"
+        ],
+        "exon": "25/25",
+        "gene_id": "ENSG00000109685",
+        "gene_symbol": "WHSC1",
+        "hgnc_id": "12766",
+        "hgvsc": "ENST00000353275.5:c.*2139C\u003eT",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "protein_id": "ENSP00000329167",
+        "transcript_id": "ENST00000353275",
+        "variant_allele": "T"
+      },
+      {
+        "biotype": "protein_coding",
+        "canonical": "1",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000185049",
+        "gene_symbol": "NELFA",
+        "hgnc_id": "12768",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "protein_id": "ENSP00000372335",
+        "transcript_id": "ENST00000382882",
+        "variant_allele": "T"
+      },
+      {
+        "amino_acids": "A/V",
+        "biotype": "protein_coding",
+        "codons": "gCg/gTg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "12/12",
+        "gene_id": "ENSG00000109685",
+        "gene_symbol": "WHSC1",
+        "hgnc_id": "12766",
+        "hgvsc": "ENST00000382888.3:c.2033C\u003eT",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "hgvsp": "ENSP00000372344.3:p.Ala678Val",
+        "protein_end": 678,
+        "protein_id": "ENSP00000372344",
+        "protein_start": 678,
+        "transcript_id": "ENST00000382888",
+        "variant_allele": "T"
+      },
+      {
+        "amino_acids": "A/V",
+        "biotype": "protein_coding",
+        "canonical": "1",
+        "codons": "gCg/gTg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "22/22",
+        "gene_id": "ENSG00000109685",
+        "gene_symbol": "WHSC1",
+        "hgnc_id": "12766",
+        "hgvsc": "ENST00000382891.5:c.3989C\u003eT",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "hgvsp": "ENSP00000372347.5:p.Ala1330Val",
+        "protein_end": 1330,
+        "protein_id": "ENSP00000372347",
+        "protein_start": 1330,
+        "refseq_transcript_ids": [
+          "NM_133335.3"
+        ],
+        "transcript_id": "ENST00000382891",
+        "variant_allele": "T"
+      },
+      {
+        "amino_acids": "A/V",
+        "biotype": "protein_coding",
+        "codons": "gCg/gTg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "23/23",
+        "gene_id": "ENSG00000109685",
+        "gene_symbol": "WHSC1",
+        "hgnc_id": "12766",
+        "hgvsc": "ENST00000382892.2:c.3989C\u003eT",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "hgvsp": "ENSP00000372348.2:p.Ala1330Val",
+        "protein_end": 1330,
+        "protein_id": "ENSP00000372348",
+        "protein_start": 1330,
+        "refseq_transcript_ids": [
+          "NM_133331.2"
+        ],
+        "transcript_id": "ENST00000382892",
+        "variant_allele": "T"
+      },
+      {
+        "amino_acids": "A/V",
+        "biotype": "protein_coding",
+        "codons": "gCg/gTg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "24/24",
+        "gene_id": "ENSG00000109685",
+        "gene_symbol": "WHSC1",
+        "hgnc_id": "12766",
+        "hgvsc": "ENST00000382895.3:c.3989C\u003eT",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "hgvsp": "ENSP00000372351.3:p.Ala1330Val",
+        "protein_end": 1330,
+        "protein_id": "ENSP00000372351",
+        "protein_start": 1330,
+        "refseq_transcript_ids": [
+          "NM_133330.2"
+        ],
+        "transcript_id": "ENST00000382895",
+        "variant_allele": "T"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000185049",
+        "gene_symbol": "NELFA",
+        "hgnc_id": "12768",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "protein_id": "ENSP00000399165",
+        "refseq_transcript_ids": [
+          "NM_005663.4"
+        ],
+        "transcript_id": "ENST00000411638",
+        "variant_allele": "T"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000185049",
+        "gene_symbol": "NELFA",
+        "hgnc_id": "12768",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "protein_id": "ENSP00000387647",
+        "transcript_id": "ENST00000416258",
+        "variant_allele": "T"
+      },
+      {
+        "biotype": "retained_intron",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000185049",
+        "gene_symbol": "NELFA",
+        "hgnc_id": "12768",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "transcript_id": "ENST00000463820",
+        "variant_allele": "T"
+      },
+      {
+        "biotype": "retained_intron",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000185049",
+        "gene_symbol": "NELFA",
+        "hgnc_id": "12768",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "transcript_id": "ENST00000467661",
+        "variant_allele": "T"
+      },
+      {
+        "biotype": "processed_transcript",
+        "consequence_terms": [
+          "non_coding_transcript_exon_variant"
+        ],
+        "exon": "14/14",
+        "gene_id": "ENSG00000109685",
+        "gene_symbol": "WHSC1",
+        "hgnc_id": "12766",
+        "hgvsc": "ENST00000482415.2:n.2606C\u003eT",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "transcript_id": "ENST00000482415",
+        "variant_allele": "T"
+      },
+      {
+        "biotype": "snoRNA",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000249784",
+        "gene_symbol": "SCARNA22",
+        "hgnc_id": "32580",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "transcript_id": "ENST00000503991",
+        "variant_allele": "T"
+      },
+      {
+        "biotype": "retained_intron",
+        "consequence_terms": [
+          "non_coding_transcript_exon_variant"
+        ],
+        "exon": "2/2",
+        "gene_id": "ENSG00000109685",
+        "gene_symbol": "WHSC1",
+        "hgnc_id": "12766",
+        "hgvsc": "ENST00000508299.1:n.490C\u003eT",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "transcript_id": "ENST00000508299",
+        "variant_allele": "T"
+      },
+      {
+        "amino_acids": "A/V",
+        "biotype": "protein_coding",
+        "codons": "gCg/gTg",
+        "consequence_terms": [
+          "missense_variant"
+        ],
+        "exon": "22/22",
+        "gene_id": "ENSG00000109685",
+        "gene_symbol": "WHSC1",
+        "hgnc_id": "12766",
+        "hgvsc": "ENST00000508803.1:c.3989C\u003eT",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "hgvsp": "ENSP00000423972.1:p.Ala1330Val",
+        "protein_end": 1330,
+        "protein_id": "ENSP00000423972",
+        "protein_start": 1330,
+        "refseq_transcript_ids": [
+          "NM_001042424.2"
+        ],
+        "transcript_id": "ENST00000508803",
+        "variant_allele": "T"
+      },
+      {
+        "biotype": "retained_intron",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000109685",
+        "gene_symbol": "WHSC1",
+        "hgnc_id": "12766",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "transcript_id": "ENST00000515695",
+        "variant_allele": "T"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000185049",
+        "gene_symbol": "NELFA",
+        "hgnc_id": "12768",
+        "hgvsg": "4:g.1980527C\u003eT",
+        "protein_id": "ENSP00000445757",
+        "transcript_id": "ENST00000542778",
+        "variant_allele": "T"
+      }
+    ],
+    "variant": "4:g.1980527C\u003eT"
+  },
+  {
+    "allele_string": "CCACAGAAACCCATGTATGAAGTACAGTGGA/-",
+    "annotation_summary": {
+      "assemblyName": "GRCh37",
+      "canonicalTranscriptId": "ENST00000288135",
+      "genomicLocation": {
+        "chromosome": "4",
+        "end": 55593606,
+        "referenceAllele": "CCACAGAAACCCATGTATGAAGTACAGTGGA",
+        "start": 55593576,
+        "variantAllele": "-"
+      },
+      "strandSign": "+",
+      "transcriptConsequenceSummaries": [
+        {
+          "consequenceTerms": "splice_acceptor_variant,coding_sequence_variant,intron_variant",
+          "entrezGeneId": "3815",
+          "exon": "11/21",
+          "hgvsc": "ENST00000288135.5:c.1648-6_1672del",
+          "hgvspShort": "p.K550_K558del",
+          "hugoGeneSymbol": "KIT",
+          "isVue": true,
+          "proteinPosition": {
+            "end": 558,
+            "start": 550
+          },
+          "refSeq": "NM_001093772.1",
+          "transcriptId": "ENST00000288135",
+          "uniprotId": "P10721",
+          "variantClassification": "In_Frame_Del"
+        },
+        {
+          "consequenceTerms": "splice_acceptor_variant,coding_sequence_variant,intron_variant",
+          "entrezGeneId": "3815",
+          "exon": "11/21",
+          "hgvsc": "ENST00000412167.2:c.1636-6_1660del",
+          "hgvspShort": "p.X546_splice",
+          "hugoGeneSymbol": "KIT",
+          "proteinPosition": {
+            "end": 546,
+            "start": 546
+          },
+          "transcriptId": "ENST00000412167",
+          "uniprotId": "P10721-2",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "upstream_gene_variant",
+          "entrezGeneId": "3815",
+          "hugoGeneSymbol": "KIT",
+          "transcriptId": "ENST00000512959",
+          "variantClassification": "5'Flank"
+        }
+      ],
+      "transcriptConsequenceSummary": {
+        "consequenceTerms": "splice_acceptor_variant,coding_sequence_variant,intron_variant",
+        "entrezGeneId": "3815",
+        "exon": "11/21",
+        "hgvsc": "ENST00000288135.5:c.1648-6_1672del",
+        "hgvspShort": "p.K550_K558del",
+        "hugoGeneSymbol": "KIT",
+        "isVue": true,
+        "proteinPosition": {
+          "end": 558,
+          "start": 550
+        },
+        "refSeq": "NM_001093772.1",
+        "transcriptId": "ENST00000288135",
+        "uniprotId": "P10721",
+        "variantClassification": "In_Frame_Del"
+      },
+      "transcriptConsequences": [
+        {
+          "consequenceTerms": "splice_acceptor_variant,coding_sequence_variant,intron_variant",
+          "entrezGeneId": "3815",
+          "exon": "11/21",
+          "hgvsc": "ENST00000288135.5:c.1648-6_1672del",
+          "hgvspShort": "p.K550_K558del",
+          "hugoGeneSymbol": "KIT",
+          "isVue": true,
+          "proteinPosition": {
+            "end": 558,
+            "start": 550
+          },
+          "refSeq": "NM_001093772.1",
+          "transcriptId": "ENST00000288135",
+          "uniprotId": "P10721",
+          "variantClassification": "In_Frame_Del"
+        }
+      ],
+      "variant": "4:g.55593576_55593606del",
+      "variantType": "DEL",
+      "vues": {
+        "comment": "Changes splice donor site, cause inframe deletion in exon 11",
+        "confirmed": true,
+        "context": "Actionable in GIST",
+        "defaultEffect": "splice",
+        "genomicLocation": "4,55593576,55593606,CCACAGAAACCCATGTATGAAGTACAGTGGA,-",
+        "genomicLocationDescription": "Deletions flanking intron 10 - exon 11 boundary (e.g. 4:55593576_55593606del)",
+        "hugoGeneSymbol": "KIT",
+        "mutationOrigin": null,
+        "references": [
+          {
+            "pubmedId": 15507676,
+            "referenceText": "Corless et al., 2004"
+          }
+        ],
+        "revisedProteinEffect": "p.K550_K558del",
+        "revisedVariantClassification": "Splice_Exon_Shortening_In_Frame",
+        "revisedVariantClassificationStandard": "In_Frame_Del",
+        "transcriptId": "ENST00000288135",
+        "variant": "4:g.55593576_55593606del",
+        "vepPredictedProteinEffect": "p.X550_splice",
+        "vepPredictedVariantClassification": "Splice_Site"
+      }
+    },
+    "assembly_name": "GRCh37",
+    "end": 55593606,
+    "hgvsg": "4:g.55593576_55593606del",
+    "id": "4:g.55593576_55593606del",
+    "most_severe_consequence": "splice_acceptor_variant",
+    "originalVariantQuery": "4,55593576,55593606,CCACAGAAACCCATGTATGAAGTACAGTGGA,-",
+    "seq_region_name": "4",
+    "start": 55593576,
+    "strand": 1,
+    "successfully_annotated": true,
+    "transcript_consequences": [
+      {
+        "biotype": "protein_coding",
+        "canonical": "1",
+        "consequence_terms": [
+          "splice_acceptor_variant",
+          "coding_sequence_variant",
+          "intron_variant"
+        ],
+        "exon": "11/21",
+        "gene_id": "ENSG00000157404",
+        "gene_symbol": "KIT",
+        "hgnc_id": "6342",
+        "hgvsc": "ENST00000288135.5:c.1648-6_1672del",
+        "hgvsg": "4:g.55593576_55593606del",
+        "protein_end": 558,
+        "protein_id": "ENSP00000288135",
+        "refseq_transcript_ids": [
+          "NM_001093772.1",
+          "NM_000222.2"
+        ],
+        "transcript_id": "ENST00000288135",
+        "variant_allele": "-"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_acceptor_variant",
+          "coding_sequence_variant",
+          "intron_variant"
+        ],
+        "exon": "11/21",
+        "gene_id": "ENSG00000157404",
+        "gene_symbol": "KIT",
+        "hgnc_id": "6342",
+        "hgvsc": "ENST00000412167.2:c.1636-6_1660del",
+        "hgvsg": "4:g.55593576_55593606del",
+        "protein_end": 554,
+        "protein_id": "ENSP00000390987",
+        "transcript_id": "ENST00000412167",
+        "variant_allele": "-"
+      },
+      {
+        "biotype": "retained_intron",
+        "consequence_terms": [
+          "upstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000157404",
+        "gene_symbol": "KIT",
+        "hgnc_id": "6342",
+        "hgvsg": "4:g.55593576_55593606del",
+        "transcript_id": "ENST00000512959",
+        "variant_allele": "-"
+      }
+    ],
+    "variant": "4:g.55593576_55593606del"
+  },
+  {
+    "allele_string": "G/A",
+    "annotation_summary": {
+      "assemblyName": "GRCh37",
+      "canonicalTranscriptId": "ENST00000269571",
+      "genomicLocation": {
+        "chromosome": "17",
+        "end": 37876039,
+        "referenceAllele": "G",
+        "start": 37876039,
+        "variantAllele": "A"
+      },
+      "strandSign": "+",
+      "transcriptConsequenceSummaries": [
+        {
+          "consequenceTerms": "splice_acceptor_variant",
+          "entrezGeneId": "2064",
+          "hgvsc": "ENST00000269571.5:c.1899-1G\u003eA",
+          "hgvspShort": "p.C634_S649del",
+          "hugoGeneSymbol": "ERBB2",
+          "isVue": true,
+          "proteinPosition": {
+            "end": 649,
+            "start": 634
+          },
+          "transcriptId": "ENST00000269571",
+          "uniprotId": "P04626",
+          "variantClassification": "In_Frame_Del"
+        },
+        {
+          "consequenceTerms": "splice_acceptor_variant",
+          "entrezGeneId": "2064",
+          "hgvsc": "ENST00000406381.2:c.1809-1G\u003eA",
+          "hgvspShort": "p.X603_splice",
+          "hugoGeneSymbol": "ERBB2",
+          "proteinPosition": {
+            "end": 603,
+            "start": 603
+          },
+          "refSeq": "NM_001005862.1",
+          "transcriptId": "ENST00000406381",
+          "uniprotId": "P04626-5",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "splice_acceptor_variant",
+          "entrezGeneId": "2064",
+          "hgvsc": "ENST00000445658.2:c.1071-1G\u003eA",
+          "hgvspShort": "p.X357_splice",
+          "hugoGeneSymbol": "ERBB2",
+          "proteinPosition": {
+            "end": 357,
+            "start": 357
+          },
+          "transcriptId": "ENST00000445658",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "2064",
+          "hugoGeneSymbol": "ERBB2",
+          "transcriptId": "ENST00000540042",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "consequenceTerms": "splice_acceptor_variant",
+          "entrezGeneId": "2064",
+          "hgvsc": "ENST00000540147.1:c.1809-1G\u003eA",
+          "hgvspShort": "p.X603_splice",
+          "hugoGeneSymbol": "ERBB2",
+          "proteinPosition": {
+            "end": 603,
+            "start": 603
+          },
+          "refSeq": "NM_004448.2",
+          "transcriptId": "ENST00000540147",
+          "uniprotId": "P04626-5",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "splice_acceptor_variant",
+          "entrezGeneId": "2064",
+          "hgvsc": "ENST00000541774.1:c.1854-1G\u003eA",
+          "hgvspShort": "p.X618_splice",
+          "hugoGeneSymbol": "ERBB2",
+          "proteinPosition": {
+            "end": 618,
+            "start": 618
+          },
+          "transcriptId": "ENST00000541774",
+          "uniprotId": "P04626-4",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "2064",
+          "hugoGeneSymbol": "ERBB2",
+          "transcriptId": "ENST00000578199",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "consequenceTerms": "splice_acceptor_variant,NMD_transcript_variant",
+          "entrezGeneId": "2064",
+          "hgvsc": "ENST00000578373.1:c.*1689-1G\u003eA",
+          "hgvspShort": "p.X90_splice",
+          "hugoGeneSymbol": "ERBB2",
+          "proteinPosition": {
+            "end": 90,
+            "start": 90
+          },
+          "transcriptId": "ENST00000578373",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "2064",
+          "hugoGeneSymbol": "ERBB2",
+          "transcriptId": "ENST00000578502",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "consequenceTerms": "splice_acceptor_variant,non_coding_transcript_variant",
+          "entrezGeneId": "2064",
+          "hgvsc": "ENST00000578630.1:n.508-1G\u003eA",
+          "hgvspShort": "p.X170_splice",
+          "hugoGeneSymbol": "ERBB2",
+          "proteinPosition": {
+            "end": 170,
+            "start": 170
+          },
+          "transcriptId": "ENST00000578630",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "intron_variant",
+          "entrezGeneId": "2064",
+          "hgvsc": "ENST00000580074.1:c.52+2306G\u003eA",
+          "hgvspShort": "p.*18*",
+          "hugoGeneSymbol": "ERBB2",
+          "transcriptId": "ENST00000580074",
+          "variantClassification": "Intron"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "2064",
+          "hugoGeneSymbol": "ERBB2",
+          "transcriptId": "ENST00000582648",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "consequenceTerms": "downstream_gene_variant",
+          "entrezGeneId": "2064",
+          "hugoGeneSymbol": "ERBB2",
+          "transcriptId": "ENST00000582788",
+          "variantClassification": "3'Flank"
+        },
+        {
+          "consequenceTerms": "splice_acceptor_variant",
+          "entrezGeneId": "2064",
+          "hgvsc": "ENST00000582818.1:c.217-1G\u003eA",
+          "hgvspShort": "p.X73_splice",
+          "hugoGeneSymbol": "ERBB2",
+          "proteinPosition": {
+            "end": 73,
+            "start": 73
+          },
+          "transcriptId": "ENST00000582818",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "splice_acceptor_variant,non_coding_transcript_variant",
+          "entrezGeneId": "2064",
+          "hgvsc": "ENST00000583038.1:n.3033-1G\u003eA",
+          "hgvspShort": "p.X1011_splice",
+          "hugoGeneSymbol": "ERBB2",
+          "proteinPosition": {
+            "end": 1011,
+            "start": 1011
+          },
+          "transcriptId": "ENST00000583038",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "splice_acceptor_variant",
+          "entrezGeneId": "2064",
+          "hgvsc": "ENST00000584450.1:c.1899-1G\u003eA",
+          "hgvspShort": "p.X633_splice",
+          "hugoGeneSymbol": "ERBB2",
+          "proteinPosition": {
+            "end": 633,
+            "start": 633
+          },
+          "transcriptId": "ENST00000584450",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "splice_acceptor_variant",
+          "entrezGeneId": "2064",
+          "hgvsc": "ENST00000584601.1:c.1809-1G\u003eA",
+          "hgvspShort": "p.X603_splice",
+          "hugoGeneSymbol": "ERBB2",
+          "proteinPosition": {
+            "end": 603,
+            "start": 603
+          },
+          "transcriptId": "ENST00000584601",
+          "uniprotId": "P04626-5",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "splice_acceptor_variant,non_coding_transcript_variant",
+          "entrezGeneId": "2064",
+          "hgvsc": "ENST00000584684.1:n.139-1G\u003eA",
+          "hgvspShort": "p.X47_splice",
+          "hugoGeneSymbol": "ERBB2",
+          "proteinPosition": {
+            "end": 47,
+            "start": 47
+          },
+          "transcriptId": "ENST00000584684",
+          "variantClassification": "Splice_Site"
+        }
+      ],
+      "transcriptConsequenceSummary": {
+        "consequenceTerms": "splice_acceptor_variant",
+        "entrezGeneId": "2064",
+        "hgvsc": "ENST00000269571.5:c.1899-1G\u003eA",
+        "hgvspShort": "p.C634_S649del",
+        "hugoGeneSymbol": "ERBB2",
+        "isVue": true,
+        "proteinPosition": {
+          "end": 649,
+          "start": 634
+        },
+        "transcriptId": "ENST00000269571",
+        "uniprotId": "P04626",
+        "variantClassification": "In_Frame_Del"
+      },
+      "transcriptConsequences": [
+        {
+          "consequenceTerms": "splice_acceptor_variant",
+          "entrezGeneId": "2064",
+          "hgvsc": "ENST00000269571.5:c.1899-1G\u003eA",
+          "hgvspShort": "p.C634_S649del",
+          "hugoGeneSymbol": "ERBB2",
+          "isVue": true,
+          "proteinPosition": {
+            "end": 649,
+            "start": 634
+          },
+          "transcriptId": "ENST00000269571",
+          "uniprotId": "P04626",
+          "variantClassification": "In_Frame_Del"
+        }
+      ],
+      "variant": "17:g.37876039G\u003eA",
+      "variantType": "SNP",
+      "vues": {
+        "comment": "Alters intron 15 acceptor site or intron 16 donor site, leads to exon 16 skipping",
+        "confirmed": true,
+        "context": "Found in many cancer types, such as NSCLC, ovary, brest, esophageal, gastric, urinary, melanoma, crc, head and neck, biliary, endometrial, and glioma.",
+        "defaultEffect": "splice",
+        "genomicLocation": "17,37876039,37876039,G,A",
+        "genomicLocationDescription": "Alterations at intron 15 acceptor site and intron 16 donor site",
+        "hugoGeneSymbol": "ERBB2",
+        "mutationOrigin": null,
+        "references": [
+          {
+            "pubmedId": 32727899,
+            "referenceText": "Smith et al., 2020"
+          }
+        ],
+        "revisedProteinEffect": "p.C634_S649del",
+        "revisedVariantClassification": "Splice_Exon_Skip_In_Frame",
+        "revisedVariantClassificationStandard": "In_Frame_Del",
+        "transcriptId": "ENST00000269571",
+        "variant": "17:g.37876039G\u003eA",
+        "vepPredictedProteinEffect": "p.X633_splice",
+        "vepPredictedVariantClassification": "Splice_Site"
+      }
+    },
+    "assembly_name": "GRCh37",
+    "end": 37876039,
+    "hgvsg": "17:g.37876039G\u003eA",
+    "id": "17:g.37876039G\u003eA",
+    "most_severe_consequence": "splice_acceptor_variant",
+    "originalVariantQuery": "17,37876039,37876039,G,A",
+    "seq_region_name": "17",
+    "start": 37876039,
+    "strand": 1,
+    "successfully_annotated": true,
+    "transcript_consequences": [
+      {
+        "biotype": "protein_coding",
+        "canonical": "1",
+        "consequence_terms": [
+          "splice_acceptor_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsc": "ENST00000269571.5:c.1899-1G\u003eA",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "protein_id": "ENSP00000269571",
+        "transcript_id": "ENST00000269571",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_acceptor_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsc": "ENST00000406381.2:c.1809-1G\u003eA",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "protein_id": "ENSP00000385185",
+        "refseq_transcript_ids": [
+          "NM_001005862.1"
+        ],
+        "transcript_id": "ENST00000406381",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_acceptor_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsc": "ENST00000445658.2:c.1071-1G\u003eA",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "protein_id": "ENSP00000404047",
+        "transcript_id": "ENST00000445658",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "protein_id": "ENSP00000446382",
+        "transcript_id": "ENST00000540042",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_acceptor_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsc": "ENST00000540147.1:c.1809-1G\u003eA",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "protein_id": "ENSP00000443562",
+        "refseq_transcript_ids": [
+          "NM_004448.2"
+        ],
+        "transcript_id": "ENST00000540147",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_acceptor_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsc": "ENST00000541774.1:c.1854-1G\u003eA",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "protein_id": "ENSP00000446466",
+        "transcript_id": "ENST00000541774",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "protein_id": "ENSP00000462808",
+        "transcript_id": "ENST00000578199",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "nonsense_mediated_decay",
+        "consequence_terms": [
+          "splice_acceptor_variant",
+          "NMD_transcript_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsc": "ENST00000578373.1:c.*1689-1G\u003eA",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "protein_id": "ENSP00000463427",
+        "transcript_id": "ENST00000578373",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "protein_id": "ENSP00000464420",
+        "transcript_id": "ENST00000578502",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "retained_intron",
+        "consequence_terms": [
+          "splice_acceptor_variant",
+          "non_coding_transcript_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsc": "ENST00000578630.1:n.508-1G\u003eA",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "transcript_id": "ENST00000578630",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "intron_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsc": "ENST00000580074.1:c.52+2306G\u003eA",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "protein_id": "ENSP00000463002",
+        "transcript_id": "ENST00000580074",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "nonsense_mediated_decay",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "protein_id": "ENSP00000462024",
+        "transcript_id": "ENST00000582648",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "retained_intron",
+        "consequence_terms": [
+          "downstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "transcript_id": "ENST00000582788",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_acceptor_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsc": "ENST00000582818.1:c.217-1G\u003eA",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "protein_id": "ENSP00000464252",
+        "transcript_id": "ENST00000582818",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "retained_intron",
+        "consequence_terms": [
+          "splice_acceptor_variant",
+          "non_coding_transcript_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsc": "ENST00000583038.1:n.3033-1G\u003eA",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "transcript_id": "ENST00000583038",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_acceptor_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsc": "ENST00000584450.1:c.1899-1G\u003eA",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "protein_id": "ENSP00000463714",
+        "transcript_id": "ENST00000584450",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_acceptor_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsc": "ENST00000584601.1:c.1809-1G\u003eA",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "protein_id": "ENSP00000462438",
+        "transcript_id": "ENST00000584601",
+        "variant_allele": "A"
+      },
+      {
+        "biotype": "retained_intron",
+        "consequence_terms": [
+          "splice_acceptor_variant",
+          "non_coding_transcript_variant"
+        ],
+        "gene_id": "ENSG00000141736",
+        "gene_symbol": "ERBB2",
+        "hgnc_id": "3430",
+        "hgvsc": "ENST00000584684.1:n.139-1G\u003eA",
+        "hgvsg": "17:g.37876039G\u003eA",
+        "transcript_id": "ENST00000584684",
+        "variant_allele": "A"
+      }
+    ],
+    "variant": "17:g.37876039G\u003eA"
+  },
+  {
+    "allele_string": "A/G",
+    "annotation_summary": {
+      "assemblyName": "GRCh37",
+      "canonicalTranscriptId": "ENST00000269305",
+      "genomicLocation": {
+        "chromosome": "17",
+        "end": 7590693,
+        "referenceAllele": "A",
+        "start": 7590693,
+        "variantAllele": "G"
+      },
+      "strandSign": "+",
+      "transcriptConsequenceSummaries": [
+        {
+          "consequenceTerms": "splice_donor_variant",
+          "entrezGeneId": "7157",
+          "hgvsc": "ENST00000269305.4:c.-29+2T\u003eC",
+          "hgvspShort": "p.X1_splice",
+          "hugoGeneSymbol": "TP53",
+          "proteinPosition": {
+            "end": 1,
+            "start": 1
+          },
+          "refSeq": "NM_001126118.1",
+          "transcriptId": "ENST00000269305",
+          "uniprotId": "P04637",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "5_prime_UTR_variant",
+          "entrezGeneId": "55135",
+          "exon": "1/10",
+          "hgvsc": "ENST00000316024.5:c.-1274A\u003eG",
+          "hgvspShort": "p.*425*",
+          "hugoGeneSymbol": "WRAP53",
+          "transcriptId": "ENST00000316024",
+          "uniprotId": "Q9BUR4",
+          "variantClassification": "5'UTR"
+        },
+        {
+          "consequenceTerms": "upstream_gene_variant",
+          "entrezGeneId": "55135",
+          "hugoGeneSymbol": "WRAP53",
+          "refSeq": "NM_001143992.1",
+          "transcriptId": "ENST00000396463",
+          "uniprotId": "Q9BUR4",
+          "variantClassification": "5'Flank"
+        },
+        {
+          "consequenceTerms": "splice_donor_variant",
+          "entrezGeneId": "7157",
+          "hgvsc": "ENST00000420246.2:c.-29+2T\u003eC",
+          "hgvspShort": "p.X1_splice",
+          "hugoGeneSymbol": "TP53",
+          "proteinPosition": {
+            "end": 1,
+            "start": 1
+          },
+          "refSeq": "NM_001276696.1",
+          "transcriptId": "ENST00000420246",
+          "uniprotId": "P04637-2",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "intron_variant",
+          "entrezGeneId": "55135",
+          "hgvsc": "ENST00000431639.2:c.-2+1151A\u003eG",
+          "hgvspShort": "p.*1*",
+          "hugoGeneSymbol": "WRAP53",
+          "refSeq": "NM_001143990.1",
+          "transcriptId": "ENST00000431639",
+          "uniprotId": "Q9BUR4",
+          "variantClassification": "Intron"
+        },
+        {
+          "consequenceTerms": "splice_donor_variant",
+          "entrezGeneId": "7157",
+          "hgvsc": "ENST00000445888.2:c.-26+2T\u003eC",
+          "hgvspShort": "p.X1_splice",
+          "hugoGeneSymbol": "TP53",
+          "proteinPosition": {
+            "end": 1,
+            "start": 1
+          },
+          "transcriptId": "ENST00000445888",
+          "uniprotId": "P04637",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "splice_donor_variant",
+          "entrezGeneId": "7157",
+          "hgvsc": "ENST00000455263.2:c.-29+2T\u003eC",
+          "hgvspShort": "p.X1_splice",
+          "hugoGeneSymbol": "TP53",
+          "proteinPosition": {
+            "end": 1,
+            "start": 1
+          },
+          "refSeq": "NM_001126113.2",
+          "transcriptId": "ENST00000455263",
+          "uniprotId": "P04637-3",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "upstream_gene_variant",
+          "entrezGeneId": "55135",
+          "hugoGeneSymbol": "WRAP53",
+          "refSeq": "NM_001143991.1",
+          "transcriptId": "ENST00000457584",
+          "uniprotId": "Q9BUR4",
+          "variantClassification": "5'Flank"
+        },
+        {
+          "consequenceTerms": "upstream_gene_variant",
+          "entrezGeneId": "55135",
+          "hugoGeneSymbol": "WRAP53",
+          "transcriptId": "ENST00000467699",
+          "variantClassification": "5'Flank"
+        },
+        {
+          "consequenceTerms": "upstream_gene_variant",
+          "entrezGeneId": "55135",
+          "hugoGeneSymbol": "WRAP53",
+          "transcriptId": "ENST00000498311",
+          "variantClassification": "5'Flank"
+        },
+        {
+          "consequenceTerms": "splice_donor_variant",
+          "entrezGeneId": "7157",
+          "hgvsc": "ENST00000503591.1:c.-132+2T\u003eC",
+          "hgvspShort": "p.X1_splice",
+          "hugoGeneSymbol": "TP53",
+          "proteinPosition": {
+            "end": 1,
+            "start": 1
+          },
+          "transcriptId": "ENST00000503591",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "splice_donor_variant,non_coding_transcript_variant",
+          "entrezGeneId": "7157",
+          "hgvsc": "ENST00000505014.1:n.111+2T\u003eC",
+          "hgvspShort": "p.X37_splice",
+          "hugoGeneSymbol": "TP53",
+          "proteinPosition": {
+            "end": 37,
+            "start": 37
+          },
+          "transcriptId": "ENST00000505014",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "splice_donor_variant",
+          "entrezGeneId": "7157",
+          "hgvsc": "ENST00000509690.1:c.-22+2T\u003eC",
+          "hgvspShort": "p.X1_splice",
+          "hugoGeneSymbol": "TP53",
+          "proteinPosition": {
+            "end": 1,
+            "start": 1
+          },
+          "transcriptId": "ENST00000509690",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "splice_donor_variant",
+          "entrezGeneId": "7157",
+          "hgvsc": "ENST00000514944.1:c.-29+2T\u003eC",
+          "hgvspShort": "p.X1_splice",
+          "hugoGeneSymbol": "TP53",
+          "proteinPosition": {
+            "end": 1,
+            "start": 1
+          },
+          "transcriptId": "ENST00000514944",
+          "variantClassification": "Splice_Site"
+        },
+        {
+          "consequenceTerms": "upstream_gene_variant",
+          "entrezGeneId": "55135",
+          "hugoGeneSymbol": "WRAP53",
+          "transcriptId": "ENST00000534050",
+          "variantClassification": "5'Flank"
+        },
+        {
+          "consequenceTerms": "upstream_gene_variant",
+          "hugoGeneSymbol": "RP11-199F11.2",
+          "transcriptId": "ENST00000571370",
+          "variantClassification": "5'Flank"
+        },
+        {
+          "consequenceTerms": "splice_donor_variant",
+          "entrezGeneId": "7157",
+          "hgvsc": "ENST00000604348.1:c.-29+2T\u003eC",
+          "hgvspShort": "p.X1_splice",
+          "hugoGeneSymbol": "TP53",
+          "proteinPosition": {
+            "end": 1,
+            "start": 1
+          },
+          "transcriptId": "ENST00000604348",
+          "variantClassification": "Splice_Site"
+        }
+      ],
+      "transcriptConsequenceSummary": {
+        "consequenceTerms": "splice_donor_variant",
+        "entrezGeneId": "7157",
+        "hgvsc": "ENST00000269305.4:c.-29+2T\u003eC",
+        "hgvspShort": "p.X1_splice",
+        "hugoGeneSymbol": "TP53",
+        "proteinPosition": {
+          "end": 1,
+          "start": 1
+        },
+        "refSeq": "NM_001126118.1",
+        "transcriptId": "ENST00000269305",
+        "uniprotId": "P04637",
+        "variantClassification": "Splice_Site"
+      },
+      "transcriptConsequences": [
+        {
+          "consequenceTerms": "splice_donor_variant",
+          "entrezGeneId": "7157",
+          "hgvsc": "ENST00000269305.4:c.-29+2T\u003eC",
+          "hgvspShort": "p.X1_splice",
+          "hugoGeneSymbol": "TP53",
+          "proteinPosition": {
+            "end": 1,
+            "start": 1
+          },
+          "refSeq": "NM_001126118.1",
+          "transcriptId": "ENST00000269305",
+          "uniprotId": "P04637",
+          "variantClassification": "Splice_Site"
+        }
+      ],
+      "variant": "17:g.7590693A\u003eG",
+      "variantType": "SNP"
+    },
+    "assembly_name": "GRCh37",
+    "end": 7590693,
+    "hgvsg": "17:g.7590693A\u003eG",
+    "id": "17:g.7590693A\u003eG",
+    "most_severe_consequence": "splice_donor_variant",
+    "originalVariantQuery": "17,7590693,7590693,A,G",
+    "seq_region_name": "17",
+    "start": 7590693,
+    "strand": 1,
+    "successfully_annotated": true,
+    "transcript_consequences": [
+      {
+        "biotype": "protein_coding",
+        "canonical": "1",
+        "consequence_terms": [
+          "splice_donor_variant"
+        ],
+        "gene_id": "ENSG00000141510",
+        "gene_symbol": "TP53",
+        "hgnc_id": "11998",
+        "hgvsc": "ENST00000269305.4:c.-29+2T\u003eC",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "protein_id": "ENSP00000269305",
+        "refseq_transcript_ids": [
+          "NM_001126118.1",
+          "NM_000546.5",
+          "NM_001276760.1",
+          "NM_001276761.1",
+          "NM_001126112.2"
+        ],
+        "transcript_id": "ENST00000269305",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "5_prime_UTR_variant"
+        ],
+        "exon": "1/10",
+        "gene_id": "ENSG00000141499",
+        "gene_symbol": "WRAP53",
+        "hgnc_id": "25522",
+        "hgvsc": "ENST00000316024.5:c.-1274A\u003eG",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "protein_id": "ENSP00000324203",
+        "transcript_id": "ENST00000316024",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "upstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000141499",
+        "gene_symbol": "WRAP53",
+        "hgnc_id": "25522",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "protein_id": "ENSP00000379727",
+        "refseq_transcript_ids": [
+          "NM_001143992.1",
+          "NM_018081.2"
+        ],
+        "transcript_id": "ENST00000396463",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_donor_variant"
+        ],
+        "gene_id": "ENSG00000141510",
+        "gene_symbol": "TP53",
+        "hgnc_id": "11998",
+        "hgvsc": "ENST00000420246.2:c.-29+2T\u003eC",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "protein_id": "ENSP00000391127",
+        "refseq_transcript_ids": [
+          "NM_001276696.1",
+          "NM_001126114.2"
+        ],
+        "transcript_id": "ENST00000420246",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "intron_variant"
+        ],
+        "gene_id": "ENSG00000141499",
+        "gene_symbol": "WRAP53",
+        "hgnc_id": "25522",
+        "hgvsc": "ENST00000431639.2:c.-2+1151A\u003eG",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "protein_id": "ENSP00000397219",
+        "refseq_transcript_ids": [
+          "NM_001143990.1"
+        ],
+        "transcript_id": "ENST00000431639",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_donor_variant"
+        ],
+        "gene_id": "ENSG00000141510",
+        "gene_symbol": "TP53",
+        "hgnc_id": "11998",
+        "hgvsc": "ENST00000445888.2:c.-26+2T\u003eC",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "protein_id": "ENSP00000391478",
+        "transcript_id": "ENST00000445888",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_donor_variant"
+        ],
+        "gene_id": "ENSG00000141510",
+        "gene_symbol": "TP53",
+        "hgnc_id": "11998",
+        "hgvsc": "ENST00000455263.2:c.-29+2T\u003eC",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "protein_id": "ENSP00000398846",
+        "refseq_transcript_ids": [
+          "NM_001126113.2",
+          "NM_001276695.1"
+        ],
+        "transcript_id": "ENST00000455263",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "upstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000141499",
+        "gene_symbol": "WRAP53",
+        "hgnc_id": "25522",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "protein_id": "ENSP00000411061",
+        "refseq_transcript_ids": [
+          "NM_001143991.1"
+        ],
+        "transcript_id": "ENST00000457584",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "retained_intron",
+        "consequence_terms": [
+          "upstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000141499",
+        "gene_symbol": "WRAP53",
+        "hgnc_id": "25522",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "transcript_id": "ENST00000467699",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "nonsense_mediated_decay",
+        "consequence_terms": [
+          "upstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000141499",
+        "gene_symbol": "WRAP53",
+        "hgnc_id": "25522",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "protein_id": "ENSP00000432991",
+        "transcript_id": "ENST00000498311",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_donor_variant"
+        ],
+        "gene_id": "ENSG00000141510",
+        "gene_symbol": "TP53",
+        "hgnc_id": "11998",
+        "hgvsc": "ENST00000503591.1:c.-132+2T\u003eC",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "protein_id": "ENSP00000426252",
+        "transcript_id": "ENST00000503591",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "retained_intron",
+        "consequence_terms": [
+          "splice_donor_variant",
+          "non_coding_transcript_variant"
+        ],
+        "gene_id": "ENSG00000141510",
+        "gene_symbol": "TP53",
+        "hgnc_id": "11998",
+        "hgvsc": "ENST00000505014.1:n.111+2T\u003eC",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "transcript_id": "ENST00000505014",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_donor_variant"
+        ],
+        "gene_id": "ENSG00000141510",
+        "gene_symbol": "TP53",
+        "hgnc_id": "11998",
+        "hgvsc": "ENST00000509690.1:c.-22+2T\u003eC",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "protein_id": "ENSP00000425104",
+        "transcript_id": "ENST00000509690",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_donor_variant"
+        ],
+        "gene_id": "ENSG00000141510",
+        "gene_symbol": "TP53",
+        "hgnc_id": "11998",
+        "hgvsc": "ENST00000514944.1:c.-29+2T\u003eC",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "protein_id": "ENSP00000423862",
+        "transcript_id": "ENST00000514944",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "upstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000141499",
+        "gene_symbol": "WRAP53",
+        "hgnc_id": "25522",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "protein_id": "ENSP00000434999",
+        "transcript_id": "ENST00000534050",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "sense_intronic",
+        "consequence_terms": [
+          "upstream_gene_variant"
+        ],
+        "gene_id": "ENSG00000262251",
+        "gene_symbol": "RP11-199F11.2",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "transcript_id": "ENST00000571370",
+        "variant_allele": "G"
+      },
+      {
+        "biotype": "protein_coding",
+        "consequence_terms": [
+          "splice_donor_variant"
+        ],
+        "gene_id": "ENSG00000141510",
+        "gene_symbol": "TP53",
+        "hgnc_id": "11998",
+        "hgvsc": "ENST00000604348.1:c.-29+2T\u003eC",
+        "hgvsg": "17:g.7590693A\u003eG",
+        "protein_id": "ENSP00000473895",
+        "transcript_id": "ENST00000604348",
+        "variant_allele": "G"
+      }
+    ],
+    "variant": "17:g.7590693A\u003eG"
+  },
+  {
+    "errorMessage": "Reference allele extracted from response (A) does not match given reference allele (T)",
+    "originalVariantQuery": "3,52675445,52675445,T,-",
+    "successfully_annotated": false,
+    "variant": "3:g.52675445del"
+  }
+]

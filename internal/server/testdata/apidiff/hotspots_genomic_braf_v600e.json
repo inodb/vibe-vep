@@ -1,0 +1,25 @@
+status=200
+[
+  {
+    "hugoSymbol": "BRAF",
+    "inframeCount": 0,
+    "missenseCount": 897,
+    "residue": "V600",
+    "spliceCount": 0,
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "truncatingCount": 0,
+    "tumorCount": 897,
+    "type": "single residue",
+    "version": "v2"
+  },
+  {
+    "hugoSymbol": "BRAF",
+    "residue": "V600",
+    "transcriptId": "ENST00000288602",
+    "transcriptIdVersion": "6",
+    "tumorCount": 545,
+    "type": "3d",
+    "version": "v2"
+  }
+]

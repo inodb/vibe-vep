@@ -1,0 +1,163 @@
+status=200
+{
+  "allele_string": "A/G",
+  "annotation_summary": {
+    "assemblyName": "GRCh37",
+    "canonicalTranscriptId": "ENST00000606794",
+    "genomicLocation": {
+      "chromosome": "11",
+      "end": 57003943,
+      "referenceAllele": "A",
+      "start": 57003943,
+      "variantAllele": "G"
+    },
+    "strandSign": "+",
+    "transcriptConsequenceSummaries": [
+      {
+        "aminoAcidAlt": "A",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/A",
+        "codonChange": "gTg/gCg",
+        "consequenceTerms": "missense_variant,NMD_transcript_variant",
+        "entrezGeneId": "187",
+        "exon": "1/2",
+        "hgvsc": "ENST00000257254.3:c.536T\u003eC",
+        "hgvsp": "p.Val179Ala",
+        "hgvspShort": "p.V179A",
+        "hugoGeneSymbol": "APLNR",
+        "proteinPosition": {
+          "end": 179,
+          "start": 179
+        },
+        "transcriptId": "ENST00000257254",
+        "uniprotId": "P35414",
+        "variantClassification": "Missense_Mutation"
+      },
+      {
+        "aminoAcidAlt": "A",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/A",
+        "codonChange": "gTg/gCg",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "187",
+        "exon": "1/1",
+        "hgvsc": "ENST00000606794.1:c.536T\u003eC",
+        "hgvsp": "p.Val179Ala",
+        "hgvspShort": "p.V179A",
+        "hugoGeneSymbol": "APLNR",
+        "proteinPosition": {
+          "end": 179,
+          "start": 179
+        },
+        "refSeq": "NM_005161.4",
+        "transcriptId": "ENST00000606794",
+        "uniprotId": "P35414",
+        "variantClassification": "Missense_Mutation"
+      }
+    ],
+    "transcriptConsequenceSummary": {
+      "aminoAcidAlt": "A",
+      "aminoAcidRef": "V",
+      "aminoAcids": "V/A",
+      "codonChange": "gTg/gCg",
+      "consequenceTerms": "missense_variant",
+      "entrezGeneId": "187",
+      "exon": "1/1",
+      "hgvsc": "ENST00000606794.1:c.536T\u003eC",
+      "hgvsp": "p.Val179Ala",
+      "hgvspShort": "p.V179A",
+      "hugoGeneSymbol": "APLNR",
+      "proteinPosition": {
+        "end": 179,
+        "start": 179
+      },
+      "refSeq": "NM_005161.4",
+      "transcriptId": "ENST00000606794",
+      "uniprotId": "P35414",
+      "variantClassification": "Missense_Mutation"
+    },
+    "transcriptConsequences": [
+      {
+        "aminoAcidAlt": "A",
+        "aminoAcidRef": "V",
+        "aminoAcids": "V/A",
+        "codonChange": "gTg/gCg",
+        "consequenceTerms": "missense_variant",
+        "entrezGeneId": "187",
+        "exon": "1/1",
+        "hgvsc": "ENST00000606794.1:c.536T\u003eC",
+        "hgvsp": "p.Val179Ala",
+        "hgvspShort": "p.V179A",
+        "hugoGeneSymbol": "APLNR",
+        "proteinPosition": {
+          "end": 179,
+          "start": 179
+        },
+        "refSeq": "NM_005161.4",
+        "transcriptId": "ENST00000606794",
+        "uniprotId": "P35414",
+        "variantClassification": "Missense_Mutation"
+      }
+    ],
+    "variant": "11:g.57003943A\u003eG",
+    "variantType": "SNP"
+  },
+  "assembly_name": "GRCh37",
+  "end": 57003943,
+  "hgvsg": "11:g.57003943A\u003eG",
+  "id": "11:g.57003943A\u003eG",
+  "most_severe_consequence": "missense_variant",
+  "originalVariantQuery": "11,57003943,57003943,A,G",
+  "seq_region_name": "11",
+  "start": 57003943,
+  "strand": 1,
+  "successfully_annotated": true,
+  "transcript_consequences": [
+    {
+      "amino_acids": "V/A",
+      "biotype": "nonsense_mediated_decay",
+      "codons": "gTg/gCg",
+      "consequence_terms": [
+        "missense_variant",
+        "NMD_transcript_variant"
+      ],
+      "exon": "1/2",
+      "gene_id": "ENSG00000134817",
+      "gene_symbol": "APLNR",
+      "hgnc_id": "339",
+      "hgvsc": "ENST00000257254.3:c.536T\u003eC",
+      "hgvsg": "11:g.57003943A\u003eG",
+      "hgvsp": "ENSP00000257254.3:p.Val179Ala",
+      "protein_end": 179,
+      "protein_id": "ENSP00000257254",
+      "protein_start": 179,
+      "transcript_id": "ENST00000257254",
+      "variant_allele": "G"
+    },
+    {
+      "amino_acids": "V/A",
+      "biotype": "protein_coding",
+      "canonical": "1",
+      "codons": "gTg/gCg",
+      "consequence_terms": [
+        "missense_variant"
+      ],
+      "exon": "1/1",
+      "gene_id": "ENSG00000134817",
+      "gene_symbol": "APLNR",
+      "hgnc_id": "339",
+      "hgvsc": "ENST00000606794.1:c.536T\u003eC",
+      "hgvsg": "11:g.57003943A\u003eG",
+      "hgvsp": "ENSP00000475344.1:p.Val179Ala",
+      "protein_end": 179,
+      "protein_id": "ENSP00000475344",
+      "protein_start": 179,
+      "refseq_transcript_ids": [
+        "NM_005161.4"
+      ],
+      "transcript_id": "ENST00000606794",
+      "variant_allele": "G"
+    }
+  ],
+  "variant": "11:g.57003943A\u003eG"
+}

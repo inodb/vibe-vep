@@ -121,14 +121,15 @@ func intronicInsertionDup(v *vcf.Variant, t *cache.Transcript, insertedSeq strin
 // CDS-space walk never sees, where neither flank is a coding base: both ends
 // inside an intron, or in a UTR. It reads through codingBaseAt and so stops
 // where vibe-vep has no sequence left.
-func genomicInsertionShift(insAfter, step int64, seq string, t *cache.Transcript) (string, int64, int) {
+func genomicInsertionShift(insAfter, step int64, seq string, t *cache.Transcript, ref Reference) (string, int64, int) {
 	if seq == "" {
 		return seq, insAfter, 0
 	}
 	buf := []byte(seq)
+	ref = buffered(ref)
 	k := 0
-	for k < 2*cache.IntronFlankBases {
-		b, ok := codingBaseAt(insAfter+step, t)
+	for k < maxShiftBases(t, ref) {
+		b, ok := codingBaseAt(insAfter+step, t, ref)
 		if !ok || b != buf[0] {
 			break
 		}
@@ -159,15 +160,41 @@ func refAlleleBase(pos int64, v *vcf.Variant, t *cache.Transcript) (byte, bool) 
 	return b, true
 }
 
-// codingBaseAt returns the base at a genomic position in coding orientation,
-// from the CDS where the position is exonic and from the cached intron flanks
-// otherwise. It reports false wherever vibe-vep has no sequence - past the
-// flank, or in a UTR, which the UTR-specific shifts cover.
-func codingBaseAt(pos int64, t *cache.Transcript) (byte, bool) {
+// codingBaseAt returns the base at a genomic position in coding orientation.
+//
+// The transcript cache answers first, because it is already in memory: the
+// CDS for a coding base, the stored UTR tails for an exonic one outside it,
+// the intron flanks for the hundred bases either side of an exon. Where it
+// has nothing the reference does, and the position is simply read from the
+// genome and complemented if the transcript runs backwards.
+//
+// Without a reference it reports false there instead, which is what every
+// caller saw before one existed: a shift then stops at the edge of the
+// cache rather than at the edge of the repeat.
+func codingBaseAt(pos int64, t *cache.Transcript, ref Reference) (byte, bool) {
+	if b, ok := cachedCodingBaseAt(pos, t); ok {
+		return b, true
+	}
+	b, ok := referenceBase(ref, t.Chrom, pos)
+	if ok && t.IsReverseStrand() {
+		b = Complement(b)
+	}
+	return b, ok
+}
+
+// cachedCodingBaseAt is the part of codingBaseAt the transcript cache can
+// answer. Every path that cannot reports false, so the caller asks the
+// reference rather than treating the gap as the end of the sequence -- which
+// is what a non-coding transcript used to get, since it has no CDS, no UTR
+// tails and no flanks, and so no base anywhere.
+func cachedCodingBaseAt(pos int64, t *cache.Transcript) (byte, bool) {
 	if cds := GenomicToCDS(pos, t); cds >= 1 && int(cds) <= len(t.CDSSequence) {
 		return t.CDSSequence[cds-1], true
 	}
 	if t.FindExon(pos) != nil {
+		if !t.IsProteinCoding() {
+			return 0, false
+		}
 		// Exonic but outside the CDS, so a UTR base. Both tails are stored in
 		// coding orientation and addressed by distance from the start or stop
 		// codon, which is the same number HGVS writes as -k or *k. A deletion
@@ -218,7 +245,7 @@ func codingBaseAt(pos int64, t *cache.Transcript) (byte, bool) {
 // c.921-473_977del, whose first deleted base is 481 bases into the intron and
 // whose eight-base shift lands entirely inside the next exon, came out
 // unshifted. deleted may be nil, and the cache is still asked first.
-func genomicDeletionShift(delStart, delEnd int64, t *cache.Transcript, deleted func(int64) (byte, bool)) int {
+func genomicDeletionShift(delStart, delEnd int64, t *cache.Transcript, deleted func(int64) (byte, bool), ref Reference) int {
 	// formatHGVScDeletion hands these over in transcript order, so on the
 	// reverse strand the first is the larger. Put them back in genomic order
 	// before picking the ends -- the early return this replaces meant no
@@ -231,17 +258,18 @@ func genomicDeletionShift(delStart, delEnd int64, t *cache.Transcript, deleted f
 	if t.IsReverseStrand() {
 		head, tail, step = delEnd, delStart, -1
 	}
-	maxShift := len(t.CDSSequence) + 2*cache.IntronFlankBases
+	ref = buffered(ref)
+	maxShift := maxShiftBases(t, ref)
 	shift := 0
 	for shift < maxShift {
-		hb, ok := codingBaseAt(head, t)
+		hb, ok := codingBaseAt(head, t, ref)
 		if !ok && deleted != nil {
 			hb, ok = deleted(head)
 		}
 		if !ok {
 			break
 		}
-		nb, ok := codingBaseAt(tail+step, t)
+		nb, ok := codingBaseAt(tail+step, t, ref)
 		if !ok || hb != nb {
 			break
 		}
@@ -249,4 +277,19 @@ func genomicDeletionShift(delStart, delEnd int64, t *cache.Transcript, deleted f
 		shift++
 	}
 	return shift
+}
+
+// maxShiftBases bounds how far a shift may walk.
+//
+// Reading through the cache alone the bound is what the cache holds, and
+// going past it was impossible anyway. With a reference there is no natural
+// end short of the chromosome, so the bound becomes a guard against a very
+// long repeat rather than a statement about available sequence. Ten thousand
+// is far beyond anything VEP reports and still finite.
+func maxShiftBases(t *cache.Transcript, ref Reference) int {
+	cached := len(t.CDSSequence) + 2*cache.IntronFlankBases
+	if ref == nil {
+		return cached
+	}
+	return max(cached, 10000)
 }

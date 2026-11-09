@@ -1,0 +1,10 @@
+status=200
+{
+  "entrezGeneId": "7157",
+  "geneId": "ENSG00000141510",
+  "hugoSymbol": "TP53",
+  "synonyms": [
+    "p53",
+    "LFS1"
+  ]
+}

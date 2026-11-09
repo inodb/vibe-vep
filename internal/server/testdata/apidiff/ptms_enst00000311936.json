@@ -1,0 +1,206 @@
+status=200
+[
+  {
+    "ensemblTranscriptIds": [
+      "ENST00000256078.8",
+      "ENST00000311936.7"
+    ],
+    "position": 186,
+    "pubmedIds": [
+      "27791178"
+    ],
+    "sequence": "KTPGCVKIKKCIIM-------",
+    "type": "Palmitoylation",
+    "uniprotAccession": "P01116",
+    "uniprotEntry": "RASK_HUMAN"
+  },
+  {
+    "ensemblTranscriptIds": [
+      "ENST00000256078.8",
+      "ENST00000311936.7"
+    ],
+    "position": 101,
+    "pubmedIds": [
+      "112847399"
+    ],
+    "sequence": "EDIHHYREQIKRVKDSEDVPM",
+    "type": "Acetylation",
+    "uniprotAccession": "P01116",
+    "uniprotEntry": "RASK_HUMAN"
+  },
+  {
+    "ensemblTranscriptIds": [
+      "ENST00000256078.8",
+      "ENST00000311936.7"
+    ],
+    "position": 104,
+    "pubmedIds": [
+      "22711838"
+    ],
+    "sequence": "HHYREQIKRVKDSEDVPMVLV",
+    "type": "Acetylation",
+    "uniprotAccession": "P01116",
+    "uniprotEntry": "RASK_HUMAN"
+  },
+  {
+    "ensemblTranscriptIds": [
+      "ENST00000256078.8",
+      "ENST00000311936.7"
+    ],
+    "position": 128,
+    "pubmedIds": [
+      "112847401"
+    ],
+    "sequence": "CDLPSRTVDTKQAQDLARSYG",
+    "type": "Acetylation",
+    "uniprotAccession": "P01116",
+    "uniprotEntry": "RASK_HUMAN"
+  },
+  {
+    "ensemblTranscriptIds": [
+      "ENST00000256078.8",
+      "ENST00000311936.7"
+    ],
+    "position": 147,
+    "pubmedIds": [
+      "112847403"
+    ],
+    "sequence": "YGIPFIETSAKTRQRVEDAFY",
+    "type": "Acetylation",
+    "uniprotAccession": "P01116",
+    "uniprotEntry": "RASK_HUMAN"
+  },
+  {
+    "ensemblTranscriptIds": [
+      "ENST00000256078.8",
+      "ENST00000311936.7"
+    ],
+    "position": 186,
+    "pubmedIds": [
+      "27791178"
+    ],
+    "sequence": "KTPGCVKIKKCIIM-------",
+    "type": "Methylation",
+    "uniprotAccession": "P01116",
+    "uniprotEntry": "RASK_HUMAN"
+  },
+  {
+    "ensemblTranscriptIds": [
+      "ENST00000256078.8",
+      "ENST00000311936.7"
+    ],
+    "position": 128,
+    "pubmedIds": [
+      "21890473"
+    ],
+    "sequence": "CDLPSRTVDTKQAQDLARSYG",
+    "type": "Ubiquitination",
+    "uniprotAccession": "P01116",
+    "uniprotEntry": "RASK_HUMAN"
+  },
+  {
+    "ensemblTranscriptIds": [
+      "ENST00000256078.8",
+      "ENST00000311936.7"
+    ],
+    "position": 147,
+    "pubmedIds": [
+      "2190698"
+    ],
+    "sequence": "YGIPFIETSAKTRQRVEDAFY",
+    "type": "Ubiquitination",
+    "uniprotAccession": "P01116",
+    "uniprotEntry": "RASK_HUMAN"
+  },
+  {
+    "ensemblTranscriptIds": [
+      "ENST00000256078.8",
+      "ENST00000311936.7"
+    ],
+    "position": 137,
+    "pubmedIds": [
+      "22135298"
+    ],
+    "sequence": "TKQAQDLARSYGIPFIETSAK",
+    "type": "Phosphorylation",
+    "uniprotAccession": "P01116",
+    "uniprotEntry": "RASK_HUMAN"
+  },
+  {
+    "ensemblTranscriptIds": [
+      "ENST00000256078.8",
+      "ENST00000311936.7"
+    ],
+    "position": 2,
+    "pubmedIds": [
+      "23193290",
+      "16381945",
+      "19690332"
+    ],
+    "sequence": "---------MTEYKLVVVGAG",
+    "type": "Phosphorylation",
+    "uniprotAccession": "P01116",
+    "uniprotEntry": "RASK_HUMAN"
+  },
+  {
+    "ensemblTranscriptIds": [
+      "ENST00000256078.8",
+      "ENST00000311936.7"
+    ],
+    "position": 64,
+    "pubmedIds": [
+      "22322096",
+      "23193290",
+      "16381945"
+    ],
+    "sequence": "DILDTAGQEEYSAMRDQYMRT",
+    "type": "Phosphorylation",
+    "uniprotAccession": "P01116",
+    "uniprotEntry": "RASK_HUMAN"
+  },
+  {
+    "ensemblTranscriptIds": [
+      "ENST00000256078.8",
+      "ENST00000311936.7"
+    ],
+    "position": 106,
+    "pubmedIds": [
+      "22817900"
+    ],
+    "sequence": "YREQIKRVKDSEDVPMVLVGN",
+    "type": "Phosphorylation",
+    "uniprotAccession": "P01116",
+    "uniprotEntry": "RASK_HUMAN"
+  },
+  {
+    "ensemblTranscriptIds": [
+      "ENST00000256078.8",
+      "ENST00000311936.7"
+    ],
+    "position": 172,
+    "pubmedIds": [
+      "22798277",
+      "24702127"
+    ],
+    "sequence": "EIRQYRLKKISKEEKTPGCVK",
+    "type": "Phosphorylation",
+    "uniprotAccession": "P01116",
+    "uniprotEntry": "RASK_HUMAN"
+  },
+  {
+    "ensemblTranscriptIds": [
+      "ENST00000256078.8",
+      "ENST00000311936.7"
+    ],
+    "position": 4,
+    "pubmedIds": [
+      "23193290",
+      "16381945",
+      "19690332"
+    ],
+    "sequence": "-------MTEYKLVVVGAGGV",
+    "type": "Phosphorylation",
+    "uniprotAccession": "P01116",
+    "uniprotEntry": "RASK_HUMAN"
+  }
+]

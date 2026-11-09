@@ -1,0 +1,146 @@
+status=200
+{
+  "annotationSourcesInfo": [
+    {
+      "description": "\"VEP determines the effect of your variants(SNPs, insertions, deletions, CNVs or structural variants) on genes, transcripts, and protein sequence, as well as regulatory regions.\"",
+      "id": "vep",
+      "name": "VEP",
+      "type": "mirrored",
+      "url": "https://grch37.ensembl.org/info/docs/tools/vep/index.html",
+      "version": "grch37"
+    },
+    {
+      "description": "The resource for approved human gene nomenclature. Genome Nexus uses HGNC gene symbols in annotation",
+      "id": "hgnc",
+      "name": "HGNC",
+      "type": "mirrored",
+      "url": "http://ftp.ebi.ac.uk/pub/databases/genenames/hgnc/archive/monthly/tsv/",
+      "version": "hgnc_v2025.10.7"
+    },
+    {
+      "description": "A resource for statistically significant mutations in cancer ",
+      "id": "cancer_hotspots",
+      "name": "Cancer Hotspots",
+      "type": "mirrored",
+      "url": "https://www.cancerhotspots.org",
+      "version": "v3"
+    },
+    {
+      "description": "A resource for statistically significant mutations clustering in 3d protein structures in cancer",
+      "id": "3d_hotspots",
+      "name": "3D Hotspots",
+      "type": "mirrored",
+      "url": "https://www.3dhotspots.org/",
+      "version": "v3"
+    },
+    {
+      "description": "A Repository for Variants with Unexpected Effects (VUE) in Cancer",
+      "id": "revue",
+      "name": "reVUE",
+      "type": "mirrored",
+      "url": "https://www.cancerrevue.org/",
+      "version": "https://github.com/knowledgesystems/reVUE-data/blob/main/generated/VUEs.json"
+    },
+    {
+      "description": "\"MyVariant.info provides simple-to-use REST web services to query/retrieve variant annotation data, aggregated from many popular data resources.\"",
+      "id": "my_variant_info",
+      "name": "My Variant Info",
+      "type": "external",
+      "url": "https://myvariant.info",
+      "version": "\"Includes many annotation sources, see https://docs.myvariant.info/en/latest/doc/data.html\""
+    },
+    {
+      "description": "ClinVar aggregates information about genomic variation and its relationship to human health.",
+      "id": "clinvar",
+      "name": "ClinVar",
+      "type": "mirrored",
+      "url": "https://www.ncbi.nlm.nih.gov/clinvar/",
+      "version": "20260208"
+    },
+    {
+      "description": "OncoKB™ is a precision oncology knowledge base that contains biological and clinical information about genomic alterations in cancer.",
+      "id": "oncokb",
+      "name": "OncoKB",
+      "type": "mirrored",
+      "url": "https://www.oncokb.org/",
+      "version": "v7.1"
+    },
+    {
+      "description": "A resource for the three-dimensional structural data of large biological molecules such as proteins and nucleic acids.",
+      "id": "pdb",
+      "name": "PDB",
+      "type": "external",
+      "url": "https://www.rcsb.org/",
+      "version": "latest"
+    },
+    {
+      "description": "Xref endpoint is a lookup of Ensembl Identifiers and retrieve their external references in other databases",
+      "id": "xrefs",
+      "name": "xrefs",
+      "type": "external",
+      "url": "http://grch37.rest.ensembl.org/",
+      "version": "latest"
+    },
+    {
+      "description": "A database of protein families that includes their annotations and multiple sequence alignments generated using hidden Markov models.",
+      "id": "pfam",
+      "name": "PFAM",
+      "type": "mirrored",
+      "url": "https://www.ebi.ac.uk/interpro/",
+      "version": "32.0"
+    },
+    {
+      "description": "A resource for protein post-translational modifications (PTMs).",
+      "id": "ptm",
+      "name": "PTM",
+      "type": "mirrored",
+      "url": "https://awi.cuhk.edu.cn/dbPTM/",
+      "version": "dbPTM 2019"
+    },
+    {
+      "description": "\"PolyPhen-2 predicts the effect of an amino acid substitution on the structure and function of a protein using sequence homology, Pfam annotations, 3D structures from PDB where available, and a number of other databases and tools (including DSSP, ncoils etc.)\"",
+      "id": "polyphen",
+      "name": "Polyphen-2",
+      "type": "external",
+      "url": "http://genetics.bwh.harvard.edu/pph2/",
+      "version": "2.2.3, release 405c"
+    },
+    {
+      "description": "SIFT predicts whether an amino acid substitution is likely to affect protein function based on sequence homology and the physico-chemical similarity between the alternate amino acids.",
+      "id": "sift",
+      "name": "Sift",
+      "type": "external",
+      "url": "http://sift.bii.a-star.edu.sg/",
+      "version": "6.2.1"
+    },
+    {
+      "description": "The SIGNAL resource integrates germline and somatic alterations identified by clinical sequencing of active cancer patients. ",
+      "id": "signal",
+      "name": "SignalDB",
+      "type": "mirrored",
+      "url": "https://www.signaldb.org/",
+      "version": "https://www.nature.com/articles/s41588-021-00949-1"
+    }
+  ],
+  "genomeNexus": {
+    "database": {
+      "static": true,
+      "version": "1.5"
+    },
+    "server": {
+      "static": true,
+      "version": "2.2.3"
+    }
+  },
+  "vep": {
+    "cache": {
+      "static": false,
+      "version": "111"
+    },
+    "comment": null,
+    "server": {
+      "static": false,
+      "version": "3.1.1"
+    }
+  }
+}

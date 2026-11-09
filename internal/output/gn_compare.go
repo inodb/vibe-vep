@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
@@ -30,6 +32,7 @@ type GNAnnotation struct {
 	Hotspots               *GNHotspots                `json:"hotspots,omitempty"`
 	SignalAnnotation       *GNSignalAnnotation        `json:"signalAnnotation,omitempty"`
 	MyVariantInfo          *GNMyVariantInfoAnnotation `json:"my_variant_info,omitempty"`
+	Ptms                   *GNPtms                    `json:"ptms,omitempty"`
 }
 
 // GNMyVariantInfoAnnotation wraps the myvariant.info annotation in genome-nexus format.
@@ -122,13 +125,26 @@ type GNHotspots struct {
 	Annotation [][]GNHotspotEntry `json:"annotation"`
 }
 
-// GNHotspotEntry represents a single hotspot hit.
+// GNHotspotEntry is one hotspot, in genome-nexus's wire shape. It is what the
+// /cancer_hotspots endpoints report and what the "hotspots" field of an
+// annotation carries, which are the same records.
+//
+// Its `id` field is deliberately absent: the Jackson mixin there hides it.
 type GNHotspotEntry struct {
-	HugoSymbol   string `json:"hugoSymbol,omitempty"`
-	TranscriptID string `json:"transcriptId,omitempty"`
-	Residue      string `json:"residue,omitempty"`
-	Type         string `json:"type,omitempty"`
-	TumorCount   int    `json:"tumorCount,omitempty"`
+	HugoSymbol          string `json:"hugoSymbol,omitempty"`
+	TranscriptID        string `json:"transcriptId,omitempty"`
+	TranscriptIDVersion string `json:"transcriptIdVersion,omitempty"`
+	Residue             string `json:"residue,omitempty"`
+	Version             string `json:"version,omitempty"`
+	TumorCount          int    `json:"tumorCount"`
+	Type                string `json:"type,omitempty"`
+
+	// 3d hotspots carry no per-class breakdown; genome-nexus leaves these out
+	// of the response rather than reporting zeros.
+	MissenseCount   *int `json:"missenseCount,omitempty"`
+	TruncatingCount *int `json:"truncatingCount,omitempty"`
+	InframeCount    *int `json:"inframeCount,omitempty"`
+	SpliceCount     *int `json:"spliceCount,omitempty"`
 }
 
 // GNAnnotationSummary is the enriched annotation summary returned when
@@ -143,6 +159,8 @@ type GNAnnotationSummary struct {
 	TranscriptConsequenceSummary   *GNTranscriptConsequenceSummary  `json:"transcriptConsequenceSummary"`
 	TranscriptConsequenceSummaries []GNTranscriptConsequenceSummary `json:"transcriptConsequenceSummaries"`
 	TranscriptConsequences         []GNTranscriptConsequenceSummary `json:"transcriptConsequences"`
+
+	AlphaMissense *GNAlphaMissense `json:"alphaMissense,omitempty"`
 }
 
 // GNGenomicLocation represents a genomic location in the annotation summary.
@@ -175,6 +193,42 @@ type GNTranscriptConsequenceSummary struct {
 	PolyphenPrediction    string          `json:"polyphenPrediction,omitempty"`
 	SIFTScore             *float64        `json:"siftScore,omitempty"`
 	SIFTPrediction        string          `json:"siftPrediction,omitempty"`
+
+	AlphaMissense *GNAlphaMissense `json:"alphaMissense,omitempty"`
+
+	// UniprotID names the protein entry the transcript translates to, which
+	// clients use to line a variant up against protein-level annotation.
+	UniprotID string `json:"uniprotId,omitempty"`
+
+	// IsVue marks a protein change that came from reVUE's published evidence
+	// rather than from the sequence.
+	IsVue bool `json:"isVue,omitempty"`
+}
+
+// GNAlphaMissense is AlphaMissense's pathogenicity call for a missense
+// substitution. genome-nexus takes it from VEP's AlphaMissense plugin; here it
+// comes from the locally indexed table.
+type GNAlphaMissense struct {
+	Score         *float64 `json:"score,omitempty"`
+	Pathogenicity string   `json:"pathogenicity,omitempty"`
+}
+
+// GNPtmEntry is one post-translational modification site.
+type GNPtmEntry struct {
+	UniprotEntry         string   `json:"uniprotEntry,omitempty"`
+	UniprotAccession     string   `json:"uniprotAccession,omitempty"`
+	EnsemblTranscriptIds []string `json:"ensemblTranscriptIds,omitempty"`
+	Position             int      `json:"position"`
+	Type                 string   `json:"type,omitempty"`
+	PubmedIds            []string `json:"pubmedIds,omitempty"`
+	Sequence             string   `json:"sequence,omitempty"`
+}
+
+// GNPtms holds one list of modification sites per transcript consequence, in
+// the same order. genome-nexus never sets a license here, so neither does this.
+type GNPtms struct {
+	License    string         `json:"license,omitempty"`
+	Annotation [][]GNPtmEntry `json:"annotation,omitempty"`
 }
 
 // GNIntegerRange represents a start/end integer range.
@@ -183,36 +237,207 @@ type GNIntegerRange struct {
 	End   int64 `json:"end"`
 }
 
+// MarshalJSON writes an end VEP could not place as null rather than zero.
+// Protein positions count from one, so zero means "not known", and that is
+// how genome-nexus reports it: a deletion reaching in from the 5'UTR has no
+// start residue and its position reads {"start":null,"end":1}, which the
+// annotation pipeline renders ?-1/136.
+func (r GNIntegerRange) MarshalJSON() ([]byte, error) {
+	type wire struct {
+		Start *int64 `json:"start"`
+		End   *int64 `json:"end"`
+	}
+	w := wire{}
+	if r.Start != 0 {
+		w.Start = &r.Start
+	}
+	if r.End != 0 {
+		w.End = &r.End
+	}
+	return json.Marshal(w)
+}
+
 // GNTranscriptConsequence represents a transcript consequence from genome-nexus.
+// GNTranscriptConsequence is one transcript's view of a variant, in the shape
+// genome-nexus serves. The field set is its TranscriptConsequence model: VEP
+// reports cDNA and CDS positions, impact and intron number too, but
+// genome-nexus does not carry them through, so they are absent here as well.
 type GNTranscriptConsequence struct {
-	TranscriptID        string   `json:"transcript_id"`
-	GeneSymbol          string   `json:"gene_symbol"`
-	GeneID              string   `json:"gene_id"`
-	HGNCId              string   `json:"hgnc_id,omitempty"`
-	ProteinID           string   `json:"protein_id,omitempty"`
-	ConsequenceTerms    []string `json:"consequence_terms"`
-	Impact              string   `json:"impact"`
-	VariantAllele       string   `json:"variant_allele"`
-	AminoAcids          string   `json:"amino_acids"`
-	Codons              string   `json:"codons"`
-	ProteinStart        int64    `json:"protein_start"`
-	ProteinEnd          int64    `json:"protein_end"`
-	CDSStart            int64    `json:"cds_start"`
-	CDSEnd              int64    `json:"cds_end"`
-	CDNAStart           int64    `json:"cdna_start"`
-	CDNAEnd             int64    `json:"cdna_end"`
-	HGVSp               string   `json:"hgvsp"`
-	HGVSc               string   `json:"hgvsc"`
-	Exon                string   `json:"exon"`
-	Intron              string   `json:"intron"`
-	Biotype             string   `json:"biotype"`
+	TranscriptID     string   `json:"transcript_id"`
+	GeneSymbol       string   `json:"gene_symbol"`
+	GeneID           string   `json:"gene_id"`
+	HGNCId           string   `json:"hgnc_id,omitempty"`
+	ProteinID        string   `json:"protein_id,omitempty"`
+	ConsequenceTerms []string `json:"consequence_terms"`
+	VariantAllele    string   `json:"variant_allele"`
+
+	// Impact orders the consequences so the frontend's [0] is the one worth
+	// reading. genome-nexus does not report it, so neither do we.
+	Impact string `json:"-"`
+
+	AminoAcids string `json:"amino_acids,omitempty"`
+	Codons     string `json:"codons,omitempty"`
+	// ProteinStart and ProteinEnd stay on the struct whether or not they
+	// reach the wire: the summary builds a protein change out of them even
+	// for a splice variant, which is the one place a position is known
+	// without codons to translate. MarshalJSON decides what is reported.
+	ProteinStart        int64    `json:"protein_start,omitempty"`
+	ProteinEnd          int64    `json:"protein_end,omitempty"`
+	HGVSp               string   `json:"hgvsp,omitempty"`
+	HGVSc               string   `json:"hgvsc,omitempty"`
+	HGVSg               string   `json:"hgvsg,omitempty"`
+	Exon                string   `json:"exon,omitempty"`
+	Biotype             string   `json:"biotype,omitempty"`
 	RefseqTranscriptIds []string `json:"refseq_transcript_ids,omitempty"`
 	HGVSOffset          int      `json:"hgvs_offset,omitempty"`
-	Canonical           string   `json:"canonical"`
-	SIFTScore           *float64 `json:"sift_score"`
-	SIFTPrediction      string   `json:"sift_prediction"`
-	PolyPhenScore       *float64 `json:"polyphen_score"`
-	PolyPhenPrediction  string   `json:"polyphen_prediction"`
+	Canonical           string   `json:"canonical,omitempty"`
+	SIFTScore           *float64 `json:"sift_score,omitempty"`
+	SIFTPrediction      string   `json:"sift_prediction,omitempty"`
+	PolyPhenScore       *float64 `json:"polyphen_score,omitempty"`
+	PolyPhenPrediction  string   `json:"polyphen_prediction,omitempty"`
+
+	AlphaMissense *GNAlphaMissense `json:"alphaMissense,omitempty"`
+}
+
+// MarshalJSON reports a transcript consequence the way VEP does.
+//
+// VEP gives a protein position exactly where it has codons to translate: a
+// variant that only disrupts a splice site sits in an intron, so there is no
+// residue to name and the field is absent. Measured against
+// vep111.genomenexus.org over 44,084 shared transcripts, reporting a position
+// regardless disagreed on 727 of them and this rule on 73.
+//
+// The position is still computed and kept, because genome-nexus's own
+// resolvers read it back to name a protein change for exactly those splice
+// variants. Only the wire is affected.
+func (tc GNTranscriptConsequence) MarshalJSON() ([]byte, error) {
+	type wire GNTranscriptConsequence
+	w := wire(tc)
+	// A change spanning a splice boundary, or ending in an incomplete
+	// terminal codon, can leave the annotator without a protein position at
+	// all. The HGVS name says which end is coding and where it sits, so the
+	// residue comes from there.
+	startCoding, endCoding := codingEndsOfHGVSc(tc.HGVSc)
+	first, last := codonsOfHGVSc(tc.HGVSc, tc.HGVSOffset)
+	if startCoding && w.ProteinStart == 0 {
+		w.ProteinStart = first
+	}
+	if endCoding && w.ProteinEnd == 0 {
+		w.ProteinEnd = last
+	}
+
+	// With no HGVSc there is nothing to read the coding ends off, so the
+	// rules below have no evidence either way and the annotator's own answer
+	// stands. It gives one where it knows the span ran off the end of the
+	// transcript, which is the one case that reaches here nameable and
+	// unnamed: TP53 ENST00000604348 17:7578478-7578491del is protein
+	// position 140 to VEP, with no c. name to derive it from.
+	if tc.Codons == "" && tc.HGVSc != "" {
+		switch {
+		case !startCoding && !endCoding:
+			// Wholly outside the coding sequence: no residue to name.
+			w.ProteinStart, w.ProteinEnd = 0, 0
+		case !startCoding:
+			// Reaches in from an intron or a UTR. Only where it lands is
+			// nameable, and VEP reports that as the end alone.
+			w.ProteinStart = 0
+		case !endCoding:
+			// Reaches out of the coding sequence. The range stops where it
+			// left, so VEP reports the same residue at both ends.
+			w.ProteinEnd = w.ProteinStart
+		default:
+			// Both ends coding and still no codons: a splice site at a coding
+			// base, which changes no codon, so VEP names no residue.
+			//
+			// genome-nexus does name one -- its summary reads 987 back out of
+			// the p.X987_splice it built -- but that is the summary's own
+			// work, and it still reports nothing here. The position stays on
+			// the struct for the summary to derive from.
+			w.ProteinStart, w.ProteinEnd = 0, 0
+		}
+	}
+	return json.Marshal(w)
+}
+
+// hgvscRange picks the one or two coordinates out of an HGVS c. or n. name,
+// before the edit that follows them.
+var hgvscRange = regexp.MustCompile(`^[cn]\.([*\-]?\d+(?:[+-]\d+)?)(?:_([*\-]?\d+(?:[+-]\d+)?))?`)
+
+// codonsOfHGVSc gives the residues the two coordinates of a coding HGVS c.
+// name fall in. c.211 is the first base of codon 71, c.213 the last.
+//
+// Either may be zero: an intronic or UTR coordinate names no residue, and a
+// name with one coordinate reports it as both.
+func codonsOfHGVSc(hgvsc string, hgvsOffset int) (first, last int64) {
+	name := hgvsc
+	if i := strings.LastIndex(name, ":"); i >= 0 {
+		name = name[i+1:]
+	}
+	if strings.HasPrefix(name, "n.") {
+		return 0, 0
+	}
+	m := hgvscRange.FindStringSubmatch(name)
+	if m == nil {
+		return 0, 0
+	}
+	// The name is 3'-shifted; VEP names the residue from where the change
+	// sits before shifting, so the shift comes back off first. The offset is
+	// signed by genomic direction, which on a reverse-strand transcript runs
+	// the other way from the transcript, so only its size matters here.
+	shift := int64(hgvsOffset)
+	if shift < 0 {
+		shift = -shift
+	}
+	codon := func(coord string) int64 {
+		pos, err := strconv.ParseInt(coord, 10, 64)
+		if err != nil || pos < 1 {
+			return 0
+		}
+		if pos -= shift; pos < 1 {
+			return 0
+		}
+		return (pos + 2) / 3
+	}
+	first = codon(m[1])
+	if m[2] == "" {
+		return first, first
+	}
+	return first, codon(m[2])
+}
+
+// codingEndsOfHGVSc reports whether each end of a change lies in the coding
+// sequence, reading it off the name rather than recomputing it.
+//
+// A variant crossing a splice site has one end in an intron and one in an
+// exon, and VEP names a residue only for the end that has one. Which end that
+// is cannot be told from the codons, because a change spanning the boundary
+// has none at all.
+func codingEndsOfHGVSc(hgvsc string) (start, end bool) {
+	name := hgvsc
+	if i := strings.LastIndex(name, ":"); i >= 0 {
+		name = name[i+1:]
+	}
+	// An "n." name belongs to a transcript with no coding sequence at all, so
+	// neither end of it names a residue.
+	if strings.HasPrefix(name, "n.") {
+		return false, false
+	}
+	m := hgvscRange.FindStringSubmatch(name)
+	if m == nil {
+		return false, false
+	}
+	coding := func(coord string) bool {
+		if coord == "" || strings.HasPrefix(coord, "*") || strings.HasPrefix(coord, "-") {
+			return false // a UTR position, not a coding one
+		}
+		// A "+n" or "-n" offset after the position puts it in an intron.
+		return !strings.ContainsAny(coord[1:], "+-")
+	}
+	first := coding(m[1])
+	if m[2] == "" {
+		return first, first
+	}
+	return first, coding(m[2])
 }
 
 // ParseGNAnnotation parses a JSON line into a GNAnnotation.

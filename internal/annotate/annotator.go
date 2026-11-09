@@ -9,6 +9,8 @@ import (
 
 	"go.uber.org/zap"
 
+	"strings"
+
 	"github.com/inodb/vibe-vep/internal/cache"
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
@@ -31,6 +33,7 @@ type Annotator struct {
 	canonicalOnly bool
 	distance      int64
 	logger        *zap.Logger
+	reference     Reference
 }
 
 // NewAnnotator creates a new annotator with the given cache.
@@ -56,6 +59,13 @@ func (a *Annotator) SetDistance(distance int64) {
 		distance = 0
 	}
 	a.distance = distance
+}
+
+// SetReference supplies the reference genome the HGVS shifts fall back to
+// where the transcript cache holds no sequence. Without one they stop at the
+// edge of what the cache holds, which is how they have always behaved.
+func (a *Annotator) SetReference(ref Reference) {
+	a.reference = ref
 }
 
 // SetLogger sets the logger for warning and info messages.
@@ -93,7 +103,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 		}
 
 		result := PredictConsequence(v, t)
-		result.HGVSc = FormatHGVSc(v, t, result)
+		result.HGVSc = FormatHGVSc(v, t, result, a.reference)
 		// FormatHGVSc can discover that the variant shifts out of the exon,
 		// which is only knowable once the shift is done; the protein call is
 		// withdrawn here rather than re-derived.
@@ -111,11 +121,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 		addStartRetainedWhenTheStartReforms(v, t, result)
 		nameStartLostSpan(t, result)
 
-		// Append biotype-specific modifier terms per VEP convention
-		consequence := result.Consequence
-		if t.Biotype == "nonsense_mediated_decay" {
-			consequence += ",NMD_transcript_variant"
-		}
+		consequence := withTranscriptModifier(result.Consequence, t)
 
 		ann := &Annotation{
 			VariantID:          FormatVariantID(v.Chrom, v.Pos, v.Ref, v.Alt),
@@ -123,6 +129,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 			GeneName:           t.GeneName,
 			GeneID:             t.GeneID,
 			ProteinID:          t.ProteinID,
+			ProteinIDVersion:   t.ProteinIDVersion,
 			HGNCId:             t.HGNCId,
 			EntrezGeneID:       t.EntrezGeneID,
 			RefSeqIDs:          t.RefSeqIDs,
@@ -146,6 +153,7 @@ func (a *Annotator) Annotate(v *vcf.Variant) ([]*Annotation, error) {
 			HGVSOffset:         signedHGVSOffset(result.HGVSOffset, t),
 			ProteinStart:       result.ProteinStart,
 			ProteinEnd:         result.ProteinEnd,
+			ProteinLength:      t.ProteinLength,
 			PeptideMD5:         peptideMD5(t.CDSSequence),
 		}
 
@@ -272,4 +280,49 @@ func peptideMD5(cds string) string {
 	}
 	h := md5.Sum(buf[:n])
 	return hex.EncodeToString(h[:])
+}
+
+// withTranscriptModifier appends the modifier term VEP adds to say what kind
+// of transcript a consequence was called against.
+//
+// There are two, and they are exclusive: a transcript marked for
+// nonsense-mediated decay gets NMD_transcript_variant, and one with no coding
+// sequence at all gets non_coding_transcript_variant.
+//
+// Neither is added when the variant falls outside the transcript, because
+// upstream_gene_variant and downstream_gene_variant describe a position
+// relative to a gene rather than anything happening inside a transcript.
+// Nor is non_coding_transcript_variant added alongside
+// non_coding_transcript_exon_variant or mature_miRNA_variant, each of which
+// already says the variant is in a transcript that codes for nothing. In a
+// VEP111 MSK-IMPACT MAF the pair mature_miRNA_variant,
+// non_coding_transcript_variant does not occur once, in any column.
+func withTranscriptModifier(consequence string, t *cache.Transcript) string {
+	terms := strings.Split(consequence, ",")
+	for _, term := range terms {
+		switch term {
+		case ConsequenceUpstreamGene,
+			ConsequenceDownstreamGene,
+			ConsequenceIntergenicVariant:
+			return consequence
+		}
+	}
+
+	if t.Biotype == "nonsense_mediated_decay" {
+		return consequence + ",NMD_transcript_variant"
+	}
+	if t.IsProteinCoding() {
+		return consequence
+	}
+	for _, term := range terms {
+		if term == ConsequenceNonCodingExon || term == ConsequenceMatureMiRNA {
+			return consequence
+		}
+	}
+	if consequence == "" {
+		// Nothing else to say about the variant, so the modifier stands
+		// alone. Concatenating would leave a leading comma.
+		return "non_coding_transcript_variant"
+	}
+	return consequence + ",non_coding_transcript_variant"
 }

@@ -15,8 +15,15 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/inodb/vibe-vep/internal/annotate"
+	"github.com/inodb/vibe-vep/internal/cache"
+	"github.com/inodb/vibe-vep/internal/datasource/ensembltranscript"
+	"github.com/inodb/vibe-vep/internal/datasource/genomeref"
+	"github.com/inodb/vibe-vep/internal/datasource/hotspots"
+	"github.com/inodb/vibe-vep/internal/datasource/mutationassessor"
+	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
 	"github.com/inodb/vibe-vep/internal/datasource/pfam"
 	"github.com/inodb/vibe-vep/internal/datasource/ptm"
+	"github.com/inodb/vibe-vep/internal/datasource/revue"
 	"github.com/inodb/vibe-vep/internal/datasource/uniprot"
 	"github.com/inodb/vibe-vep/internal/server"
 	"github.com/spf13/cobra"
@@ -169,6 +176,30 @@ func runServe(logger *zap.Logger, cfg runServeConfig) error {
 			srv.SetPtmStore(normalized, ptmStore)
 		}
 
+		// Load the cancer hotspots table if available.
+		if hotspotsStore := loadHotspotsStore(logger, normalized); hotspotsStore != nil {
+			srv.SetHotspotsStore(normalized, hotspotsStore)
+		}
+
+		// Load the Ensembl transcript records if the index was built.
+		if txStore := loadEnsemblTranscriptStore(logger, normalized); txStore != nil {
+			srv.SetEnsemblTranscriptStore(normalized, txStore)
+		}
+
+		// Load Mutation Assessor predictions if the index was built.
+		if maStore := loadMutationAssessorStore(logger, normalized); maStore != nil {
+			srv.SetMutationAssessorStore(normalized, maStore)
+		}
+
+		// Load the reference genome, building it if prepare has not. Without
+		// it hgvsg names a change where the query put it rather than where
+		// HGVS requires, and the HGVS shifts stop at the edge of what the
+		// transcript cache holds.
+		if genome := loadGenomeReference(logger, normalized); genome != nil {
+			srv.SetGenomeReference(normalized, genome)
+			ann.SetReference(genome)
+		}
+
 		// Load UniProt mapping if available.
 		if uniprotStore := loadUniprotStore(logger, normalized); uniprotStore != nil {
 			srv.SetUniprotStore(normalized, uniprotStore)
@@ -179,6 +210,14 @@ func runServe(logger *zap.Logger, cfg runServeConfig) error {
 			zap.Int("transcripts", cr.cache.TranscriptCount()),
 			zap.Int("sources", len(cr.sources)),
 			zap.Duration("elapsed", time.Since(start)))
+	}
+
+	if cancer, curated := loadCancerGenes(logger, assemblyNames); len(cancer) > 0 {
+		srv.SetCancerGenes(cancer, curated)
+	}
+	loadOverrideTranscripts(logger, srv, assemblyNames)
+	if store := loadRevue(logger, assemblyNames); store != nil {
+		srv.SetRevue(store)
 	}
 
 	// Ensure cleanup on shutdown.
@@ -313,5 +352,263 @@ func loadUniprotStore(logger *zap.Logger, assembly string) *uniprot.Store {
 		zap.Int("mappings", store.Count()),
 		zap.Duration("elapsed", time.Since(start)))
 
+	return store
+}
+
+// loadCancerGenes loads the OncoKB cancer gene list, which decides which of
+// two overlapping genes a variant is reported against. It is looked for where
+// the config points, then beside the downloaded reference data, then in the
+// working directory, so a checkout can serve without extra configuration.
+func loadCancerGenes(logger *zap.Logger, assemblies []string) (cancer, curated map[string]bool) {
+	var candidates []string
+	if p := viper.GetString("oncokb.cancer-gene-list"); p != "" {
+		candidates = append(candidates, p)
+	}
+	for _, name := range assemblies {
+		normalized, err := normalizeAssembly(strings.TrimSpace(name))
+		if err != nil {
+			continue
+		}
+		if rawDir := RawDir(normalized); rawDir != "" {
+			candidates = append(candidates, filepath.Join(rawDir, CancerGeneListFileName))
+		}
+	}
+	// The cancer gene list says nothing about an assembly, so it may also sit
+	// beside the per-assembly directories rather than inside one.
+	if dataDir := DataDir(); dataDir != "" {
+		candidates = append(candidates, filepath.Join(dataDir, CancerGeneListFileName))
+	}
+	candidates = append(candidates, CancerGeneListFileName)
+
+	for _, path := range candidates {
+		cgl, err := oncokb.LoadCancerGeneList(path)
+		if err != nil {
+			continue
+		}
+		cancer, curated = cgl.Genes(), cgl.CuratedGenes()
+		logger.Info("loaded cancer gene list",
+			zap.String("path", path),
+			zap.Int("genes", len(cancer)),
+			zap.Int("curated", len(curated)))
+		return cancer, curated
+	}
+
+	logger.Warn("no cancer gene list found; a variant in two genes that each " +
+		"name a canonical transcript may be reported against the wrong one")
+	return nil, nil
+}
+
+// loadOverrideTranscripts loads every isoform override table the biomart file
+// carries -- MSKCC, UniProt, Ensembl and Genome Nexus -- so a request naming
+// one of them gets that table rather than a silent fallback to another.
+//
+// Each is read as a set of transcript ids across all genes rather than per
+// gene on purpose: a gene the GENCODE release still calls by an older symbol
+// -- WHSC1 where the table says NSD2 -- would otherwise lose its override
+// entirely.
+func loadOverrideTranscripts(logger *zap.Logger, srv *server.Server, assemblies []string) {
+	for _, name := range assemblies {
+		normalized, err := normalizeAssembly(strings.TrimSpace(name))
+		if err != nil {
+			continue
+		}
+		_, _, canonicalPath, _, found := FindGENCODEFiles(normalized)
+		if !found || canonicalPath == "" {
+			continue
+		}
+		bySource, err := cache.LoadCanonicalOverridesBySource(canonicalPath)
+		if err != nil {
+			logger.Warn("could not load isoform overrides", zap.Error(err))
+			continue
+		}
+		counts := make([]zap.Field, 0, len(bySource)+1)
+		counts = append(counts, zap.String("path", canonicalPath))
+		for source, overrides := range bySource {
+			extra := []string(nil)
+			if source == cache.IsoformSourceMSKCC {
+				extra = append(extra, cdkn2aMSKCCSecondCanonical)
+			}
+			srv.SetOverrideTranscripts(source, transcriptSet(overrides, extra...))
+			counts = append(counts, zap.Int(source, len(overrides)))
+		}
+		logger.Info("loaded isoform overrides", counts...)
+
+		if meta, err := cache.LoadGeneMetadata(canonicalPath); err != nil {
+			logger.Warn("could not load gene metadata", zap.Error(err))
+		} else {
+			srv.SetGeneMetadata(meta)
+			logger.Info("loaded gene metadata", zap.Int("genes", len(meta)))
+		}
+
+		if symbols, err := cache.LoadPreviousGeneSymbols(canonicalPath); err != nil {
+			logger.Warn("could not load previous gene symbols", zap.Error(err))
+		} else {
+			srv.SetOfficialGeneSymbols(symbols)
+			logger.Info("loaded previous gene symbols", zap.Int("symbols", len(symbols)))
+		}
+
+		return
+	}
+}
+
+// cdkn2aMSKCCSecondCanonical is the one transcript genome-nexus adds to the
+// MSKCC override set by hand. CDKN2A is transcribed into two proteins from
+// overlapping reading frames, and MSK reports both: the table names p14ARF's
+// ENST00000579755 and this is p16INK4a's.
+const cdkn2aMSKCCSecondCanonical = "ENST00000304494"
+
+// transcriptSet collects the transcript ids an override table names, plus any
+// extras, dropping the version suffix so they compare against VEP's bare ids.
+func transcriptSet(overrides cache.CanonicalOverrides, extra ...string) map[string]bool {
+	set := make(map[string]bool, len(overrides)+len(extra))
+	for _, txID := range overrides {
+		if txID != "" {
+			set[txID] = true
+		}
+	}
+	for _, txID := range extra {
+		set[txID] = true
+	}
+	return set
+}
+
+// loadRevue loads the reVUE catalogue of published protein effects, which
+// replaces a prediction wherever experiment contradicts it.
+func loadRevue(logger *zap.Logger, assemblies []string) *revue.Store {
+	var candidates []string
+	if p := viper.GetString("revue.path"); p != "" {
+		candidates = append(candidates, p)
+	}
+	for _, name := range assemblies {
+		normalized, err := normalizeAssembly(strings.TrimSpace(name))
+		if err != nil {
+			continue
+		}
+		if rawDir := RawDir(normalized); rawDir != "" {
+			candidates = append(candidates, filepath.Join(rawDir, RevueFileName))
+		}
+	}
+	candidates = append(candidates, RevueFileName)
+
+	for _, path := range candidates {
+		store, err := revue.Load(path)
+		if err != nil {
+			continue
+		}
+		logger.Info("loaded reVUE catalogue",
+			zap.String("path", path),
+			zap.Int("effects", store.Count()))
+		return store
+	}
+
+	logger.Debug("no reVUE catalogue found; predicted protein effects stand")
+	return nil
+}
+
+// loadHotspotsStore loads the cancer hotspots table, which the
+// /cancer_hotspots endpoints answer from. The configured path wins; otherwise
+// it is looked for beside the other downloaded reference data.
+func loadHotspotsStore(logger *zap.Logger, assembly string) *hotspots.Store {
+	path := viper.GetString("annotations.hotspots")
+	if path == "" {
+		rawDir := RawDir(assembly)
+		if rawDir == "" {
+			return nil
+		}
+		path = filepath.Join(rawDir, HotspotsFileName)
+	}
+	if _, err := os.Stat(path); err != nil {
+		logger.Debug("cancer hotspots not found, skipping", zap.String("path", path))
+		return nil
+	}
+
+	store, err := hotspots.Load(path)
+	if err != nil {
+		logger.Warn("could not load cancer hotspots", zap.Error(err))
+		return nil
+	}
+	logger.Info("loaded cancer hotspots",
+		zap.String("path", path),
+		zap.Int("transcripts", store.TranscriptCount()),
+		zap.Int("hotspots", store.HotspotCount()))
+	return store
+}
+
+// loadEnsemblTranscriptStore opens the Ensembl transcript index, if one was
+// built. The /ensembl endpoints degrade to the GENCODE cache without it, so a
+// missing index is not an error.
+func loadEnsemblTranscriptStore(logger *zap.Logger, assembly string) *ensembltranscript.Store {
+	rawDir := RawDir(assembly)
+	if rawDir == "" {
+		return nil
+	}
+	path := filepath.Join(filepath.Dir(rawDir), EnsemblTranscriptDBName)
+	store, err := ensembltranscript.Open(path)
+	if err != nil {
+		logger.Debug("ensembl transcript index not available, serving /ensembl from the GENCODE cache",
+			zap.String("path", path), zap.Error(err))
+		return nil
+	}
+	logger.Info("loaded ensembl transcript records",
+		zap.String("path", path), zap.Int("transcripts", store.Count()))
+	return store
+}
+
+// loadMutationAssessorStore opens the Mutation Assessor index, if one was
+// built. The source is optional, so a missing index is not an error.
+func loadMutationAssessorStore(logger *zap.Logger, assembly string) *mutationassessor.Store {
+	cacheDir := DefaultGENCODEPath(assembly)
+	if cacheDir == "" {
+		return nil
+	}
+	dbPath := filepath.Join(cacheDir, MutationAssessorDBName)
+	if !mutationassessor.Ready(dbPath) {
+		logger.Debug("Mutation Assessor index not built, skipping", zap.String("path", dbPath))
+		return nil
+	}
+
+	store, err := mutationassessor.Open(dbPath)
+	if err != nil {
+		logger.Warn("could not open Mutation Assessor index", zap.Error(err))
+		return nil
+	}
+	logger.Info("loaded Mutation Assessor predictions", zap.String("path", dbPath))
+	return store
+}
+
+// loadGenomeReference opens the reference index hgvsg is renormalised
+// against, building it first if the genomic FASTA is here and the index is
+// not. Neither being present is not an error: hgvsg then stays as the query
+// wrote it, which is what every release before this one did.
+func loadGenomeReference(logger *zap.Logger, assembly string) *genomeref.Store {
+	cacheDir := DefaultGENCODEPath(assembly)
+	if cacheDir == "" {
+		return nil
+	}
+	path := filepath.Join(cacheDir, genomeref.FileName)
+
+	store, err := genomeref.Open(path)
+	if err != nil {
+		fasta := findGenomeFASTA(rawDirForCache(cacheDir))
+		if fasta == "" {
+			logger.Info("no genomic FASTA and no reference index: hgvsg will not be renormalised",
+				zap.String("looked for", path))
+			return nil
+		}
+		logger.Info("building reference index (one off, a few minutes)", zap.String("from", fasta))
+		start := time.Now()
+		if err := genomeref.Build(fasta, path, wantedChromosome, cache.StreamGenomeFASTA); err != nil {
+			logger.Warn("could not build the reference index; hgvsg will not be renormalised",
+				zap.Error(err))
+			return nil
+		}
+		logger.Info("built reference index", zap.Duration("elapsed", time.Since(start)))
+		if store, err = genomeref.Open(path); err != nil {
+			logger.Warn("could not open the reference index just built", zap.Error(err))
+			return nil
+		}
+	}
+	logger.Info("loaded reference genome",
+		zap.String("path", path), zap.Int("chromosomes", store.Chromosomes()))
 	return store
 }

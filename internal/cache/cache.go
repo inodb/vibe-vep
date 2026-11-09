@@ -3,6 +3,7 @@ package cache
 
 import (
 	"sort"
+	"strings"
 )
 
 // Cache provides access to VEP transcript data for variant annotation.
@@ -11,6 +12,12 @@ type Cache struct {
 	transcripts map[string][]*Transcript
 	// geneIndex maps gene name to transcripts (built lazily)
 	geneIndex map[string][]*Transcript
+	// geneIDIndex maps Ensembl gene ID (ENSG...) to transcripts
+	geneIDIndex map[string][]*Transcript
+	// proteinIndex maps Ensembl protein ID (ENSP...) to transcripts
+	proteinIndex map[string][]*Transcript
+	// entrezIndex maps Entrez gene ID to transcripts
+	entrezIndex map[string][]*Transcript
 	// trees stores interval trees indexed by chromosome (built by BuildIndex)
 	trees map[string]*IntervalTree
 }
@@ -26,14 +33,22 @@ func New() *Cache {
 func (c *Cache) AddTranscript(t *Transcript) {
 	chrom := t.Chrom
 	c.transcripts[chrom] = append(c.transcripts[chrom], t)
-	// Invalidate gene index so it gets rebuilt on next use
+	// Invalidate the lookup indexes so they get rebuilt on next use
 	c.geneIndex = nil
+	c.geneIDIndex = nil
+	c.proteinIndex = nil
+	c.entrezIndex = nil
 }
 
 // BuildIndex builds interval trees for all chromosomes for O(log n + k) lookup,
 // and pre-computes per-transcript CDS offsets and exonic base counts.
 // Should be called after all transcripts are loaded.
 func (c *Cache) BuildIndex() {
+	// Build the lookup indexes here rather than leaving them to the first
+	// reader: the server answers concurrently, and a lazy build under two
+	// simultaneous requests is a data race.
+	c.buildLookupIndexes()
+
 	c.trees = make(map[string]*IntervalTree, len(c.transcripts))
 	for chrom, txs := range c.transcripts {
 		for _, t := range txs {
@@ -164,19 +179,67 @@ func (c *Cache) FindTranscriptsByChrom(chrom string) []*Transcript {
 // FindTranscriptsByGene returns all transcripts for a given gene name.
 func (c *Cache) FindTranscriptsByGene(geneName string) []*Transcript {
 	if c.geneIndex == nil {
-		c.buildGeneIndex()
+		c.buildLookupIndexes()
 	}
 	return c.geneIndex[geneName]
 }
 
-// buildGeneIndex constructs the gene name → transcripts index.
-func (c *Cache) buildGeneIndex() {
+// FindTranscriptsByGeneID returns all transcripts for an Ensembl gene ID,
+// with or without its version suffix.
+func (c *Cache) FindTranscriptsByGeneID(geneID string) []*Transcript {
+	if c.geneIDIndex == nil {
+		c.buildLookupIndexes()
+	}
+	return c.geneIDIndex[stripIDVersion(geneID)]
+}
+
+// FindTranscriptsByProteinID returns all transcripts for an Ensembl protein
+// ID, with or without its version suffix.
+func (c *Cache) FindTranscriptsByProteinID(proteinID string) []*Transcript {
+	if c.proteinIndex == nil {
+		c.buildLookupIndexes()
+	}
+	return c.proteinIndex[stripIDVersion(proteinID)]
+}
+
+// FindTranscriptsByEntrezID returns all transcripts for an Entrez gene ID.
+func (c *Cache) FindTranscriptsByEntrezID(entrezID string) []*Transcript {
+	if c.entrezIndex == nil {
+		c.buildLookupIndexes()
+	}
+	return c.entrezIndex[entrezID]
+}
+
+// buildLookupIndexes constructs the gene name, gene ID, protein ID and Entrez
+// gene ID indexes in one pass over the transcripts.
+func (c *Cache) buildLookupIndexes() {
 	c.geneIndex = make(map[string][]*Transcript)
+	c.geneIDIndex = make(map[string][]*Transcript)
+	c.proteinIndex = make(map[string][]*Transcript)
+	c.entrezIndex = make(map[string][]*Transcript)
 	for _, transcripts := range c.transcripts {
 		for _, t := range transcripts {
 			if t.GeneName != "" {
 				c.geneIndex[t.GeneName] = append(c.geneIndex[t.GeneName], t)
 			}
+			if id := stripIDVersion(t.GeneID); id != "" {
+				c.geneIDIndex[id] = append(c.geneIDIndex[id], t)
+			}
+			if id := stripIDVersion(t.ProteinID); id != "" {
+				c.proteinIndex[id] = append(c.proteinIndex[id], t)
+			}
+			if t.EntrezGeneID != "" {
+				c.entrezIndex[t.EntrezGeneID] = append(c.entrezIndex[t.EntrezGeneID], t)
+			}
 		}
 	}
+}
+
+// stripIDVersion drops the ".N" suffix Ensembl identifiers carry, so a lookup
+// matches whether or not the caller supplied one.
+func stripIDVersion(id string) string {
+	if i := strings.IndexByte(id, '.'); i >= 0 {
+		return id[:i]
+	}
+	return id
 }

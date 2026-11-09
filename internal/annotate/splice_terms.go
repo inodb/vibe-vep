@@ -19,32 +19,33 @@ const (
 // which is the order VEP emits them in. Only the terms vibe-vep can produce
 // need an entry; anything unknown sorts last but keeps a stable relative order.
 var consequenceRank = map[string]int{
-	ConsequenceSpliceAcceptor:        2,
-	ConsequenceSpliceDonor:           3,
-	ConsequenceStopGained:            4,
-	ConsequenceFrameshiftVariant:     5,
-	ConsequenceStopLost:              6,
-	ConsequenceStartLost:             7,
-	ConsequenceInframeInsertion:      9,
-	ConsequenceInframeDeletion:       10,
-	ConsequenceMissenseVariant:       11,
-	ConsequenceProteinAltering:       12,
-	ConsequenceSpliceDonor5thBase:    13,
-	ConsequenceSpliceRegion:          14,
-	ConsequenceSpliceDonorRegion:     15,
-	ConsequencePolypyrimidineTract:   16,
-	ConsequenceStartRetained:         18,
-	ConsequenceStopRetained:          19,
-	ConsequenceSynonymousVariant:     20,
-	ConsequenceCodingSequenceVariant: 21,
-	ConsequenceMatureMiRNA:           22,
-	Consequence5PrimeUTR:             23,
-	Consequence3PrimeUTR:             24,
-	ConsequenceNonCodingExon:         25,
-	ConsequenceIntronVariant:         26,
-	ConsequenceUpstreamGene:          29,
-	ConsequenceDownstreamGene:        30,
-	ConsequenceIntergenicVariant:     31,
+	ConsequenceSpliceAcceptor:          2,
+	ConsequenceSpliceDonor:             3,
+	ConsequenceStopGained:              4,
+	ConsequenceFrameshiftVariant:       5,
+	ConsequenceStopLost:                6,
+	ConsequenceStartLost:               7,
+	ConsequenceInframeInsertion:        9,
+	ConsequenceInframeDeletion:         10,
+	ConsequenceMissenseVariant:         11,
+	ConsequenceProteinAltering:         12,
+	ConsequenceSpliceDonor5thBase:      13,
+	ConsequenceSpliceRegion:            14,
+	ConsequenceSpliceDonorRegion:       15,
+	ConsequencePolypyrimidineTract:     16,
+	ConsequenceIncompleteTerminalCodon: 17,
+	ConsequenceStartRetained:           18,
+	ConsequenceStopRetained:            19,
+	ConsequenceSynonymousVariant:       20,
+	ConsequenceCodingSequenceVariant:   21,
+	ConsequenceMatureMiRNA:             22,
+	Consequence5PrimeUTR:               23,
+	Consequence3PrimeUTR:               24,
+	ConsequenceNonCodingExon:           25,
+	ConsequenceIntronVariant:           26,
+	ConsequenceUpstreamGene:            29,
+	ConsequenceDownstreamGene:          30,
+	ConsequenceIntergenicVariant:       31,
 }
 
 // MoreSevereTerm reports whether consequence term a ranks above b in the
@@ -149,9 +150,22 @@ func spanSpliceTerms(v *vcf.Variant, t *cache.Transcript) []string {
 	var terms []string
 	for pos := v.Pos; pos <= spanEnd; pos++ {
 		if !t.Contains(pos) {
-			// Outside the transcript there is nothing to name. Without this
-			// the nearest-exon lookup below answers with a large offset and
-			// the span picks up an intron_variant it has not earned.
+			// Past the end of the transcript there is no exon or intron to
+			// name -- the nearest-exon lookup would answer with a large
+			// offset and the span would pick up an intron_variant it has not
+			// earned -- but there is still an end, and VEP names the UTR
+			// that lies at it.
+			//
+			// That matters where the annotation stops at the coding
+			// sequence: a cds_end_NF transcript has no 3'UTR to run into, and
+			// one whose start codon sits on its first base has no 5'UTR, so
+			// the only bases to carry the term are the ones past the edge.
+			// TP53 ENST00000604348 ends at its last coding base, and VEP
+			// reports 17:7578478-7578491del as coding_sequence_variant,
+			// 3_prime_UTR_variant. Where a real UTR exists the deletion has
+			// already crossed it and earned the term anyway, so naming the
+			// outside bases costs nothing there.
+			terms = append(terms, utrTermAt(pos, t))
 			continue
 		}
 		if t.FindExon(pos) == nil {
@@ -167,9 +181,36 @@ func spanSpliceTerms(v *vcf.Variant, t *cache.Transcript) []string {
 			terms = append(terms, ConsequenceCodingSequenceVariant)
 		} else if term := utrTermAt(pos, t); term != "" {
 			terms = append(terms, term)
+		} else if !t.IsProteinCoding() {
+			// A non-coding transcript has neither a CDS nor a UTR, but the
+			// base is in an exon all the same and VEP names it: a deletion
+			// reaching in from the intron is splice_acceptor_variant,
+			// non_coding_transcript_exon_variant, not the bare site with
+			// non_coding_transcript_variant stuck on the end.
+			terms = append(terms, nonCodingExonTerm(t))
 		}
 	}
 	return terms
+}
+
+// insertionIsWithinTheExon reports whether both bases an insertion sits
+// between are exonic. Anything that covers bases of its own is judged by
+// those, so only an insertion is asked.
+func insertionIsWithinTheExon(v *vcf.Variant, t *cache.Transcript) bool {
+	if len(v.Ref) > 0 {
+		return true
+	}
+	return t.FindExon(v.Pos) != nil && t.FindExon(v.Pos+1) != nil
+}
+
+// nonCodingExonTerm names an exonic base on a transcript that codes for
+// nothing. VEP reports the mature miRNA product where there is one and the
+// transcript exon otherwise, never both.
+func nonCodingExonTerm(t *cache.Transcript) string {
+	if t.Biotype == "miRNA" {
+		return ConsequenceMatureMiRNA
+	}
+	return ConsequenceNonCodingExon
 }
 
 // utrTermAt names the UTR an exonic non-coding position falls in.
@@ -299,13 +340,6 @@ func joinConsequenceTerms(terms []string) string {
 		// only with splice, intron and UTR terms -- never with a term that
 		// names the protein change.
 		if hasNamedCoding && t == ConsequenceCodingSequenceVariant {
-			continue
-		}
-		// A span long enough to cover both UTRs still gets one UTR term:
-		// in a VEP111 MSK-IMPACT MAF the two never appear together. The 5'
-		// one wins, as it does for a deletion running from the 5'UTR through
-		// the whole CDS.
-		if seen[Consequence5PrimeUTR] && t == Consequence3PrimeUTR {
 			continue
 		}
 		out = append(out, t)

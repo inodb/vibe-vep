@@ -42,6 +42,23 @@ func insertedPeptide(aas string) string {
 // FormatHGVSp formats the HGVS protein notation for a consequence result.
 // Returns an empty string for non-coding consequences.
 //
+// containsTerm reports whether a comma-separated consequence holds the term,
+// without splitting it. FormatHGVSp runs on the hot path and the allocation
+// budget is asserted by TestAllocRegression_PredictConsequence.
+func containsTerm(consequence, term string) bool {
+	for len(consequence) > 0 {
+		i := strings.IndexByte(consequence, ',')
+		if i < 0 {
+			return consequence == term
+		}
+		if consequence[:i] == term {
+			return true
+		}
+		consequence = consequence[i+1:]
+	}
+	return false
+}
+
 // Uses a stack-allocated buffer for common short cases to minimize allocations.
 func FormatHGVSp(result *ConsequenceResult) string {
 	// Get the primary consequence (first term before comma)
@@ -53,7 +70,14 @@ func FormatHGVSp(result *ConsequenceResult) string {
 	// start_lost is always p.Met1? regardless of position; handle before the
 	// ProteinPosition guard to be robust against early-return code paths that
 	// may not set ProteinPosition.
-	if conseq == ConsequenceStartLost {
+	//
+	// The term is looked for anywhere in the list, not just at the front. A
+	// change that both destroys the initiator and shifts the frame is
+	// frameshift_variant,start_lost, and reading only the first term spelled
+	// out a frameshift from a start codon that no longer starts anything --
+	// p.Met1AsnfsTer8 where VEP, and HGVS, say p.Met1?, because which AUG
+	// takes over downstream is exactly what is not known. 161 of them.
+	if conseq == ConsequenceStartLost || containsTerm(result.Consequence, ConsequenceStartLost) {
 		// VEP writes p.Met1? for the great majority (516 of 613 start_lost rows
 		// in a VEP111 MSK-IMPACT MAF) but names the affected residue when the
 		// change lands past the start codon: c.7del is p.V3?, c.4del is p.A2?.
